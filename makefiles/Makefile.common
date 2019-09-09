@@ -1,0 +1,277 @@
+#########################################################################
+# COMMON PROTOLIB MAKEFILE STUFF
+#
+
+SHELL=/bin/sh
+
+.SUFFIXES: .cpp $(.SUFFIXES)
+
+COMMON = ../src/common
+EXAMPLES = ../examples
+UNIX = ../src/unix
+NS = ../src/sim/ns
+MANET = ../src/manet
+JAVA =  ../src/java
+
+INCLUDES = $(TCL_INCL_PATH) $(SYSTEM_INCLUDES) -I../include -I/usr/include/libxml2
+
+CFLAGS = -g -DPROTO_DEBUG -DUNIX -D_FILE_OFFSET_BITS=64 -O $(SYSTEM_CFLAGS) -fPIC $(SYSTEM_HAVES) $(INCLUDES) 
+
+LDFLAGS = $(SYSTEM_LDFLAGS)
+
+LIBS = $(SYSTEM_LIBS) -lm -lxml2 -lpthread 
+
+TARGETS = libprotokit.a libprotokit
+
+# Rule for C++ .cpp extension
+.cpp.o:
+	$(CC) -c $(CFLAGS) -o $*.o $*.cpp
+
+KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase64.cpp \
+          $(COMMON)/protoBitmask.cpp $(COMMON)/protoCap.cpp \
+          $(COMMON)/protoChannel.cpp $(COMMON)/protoDebug.cpp \
+          $(COMMON)/protoDispatcher.cpp $(COMMON)/protoPipe.cpp \
+          $(COMMON)/protoPkt.cpp $(COMMON)/protoPktARP.cpp \
+          $(COMMON)/protoPktETH.cpp $(COMMON)/protoPktIP.cpp \
+          $(COMMON)/protoPktRTP.cpp $(COMMON)/protoSocket.cpp \
+          $(COMMON)/protoRouteMgr.cpp $(COMMON)/protoRouteTable.cpp \
+          $(COMMON)/protoTime.cpp $(COMMON)/protoTimer.cpp \
+          $(COMMON)/protoTree.cpp $(COMMON)/protoList.cpp $(COMMON)/protoQueue.cpp \
+          $(COMMON)/protoVif.cpp $(COMMON)/protoCap.cpp  \
+          $(COMMON)/protoSerial.cpp $(COMMON)/protoLFSR.cpp \
+          $(COMMON)/protoNet.cpp $(COMMON)/protoFile.cpp \
+          $(SYSTEM_SRC)
+
+KIT_OBJ = $(KIT_SRC:.cpp=.o)
+
+libprotokit.a:    $(KIT_OBJ)
+	rm -f $@ 
+	$(AR) rcv $@ $(KIT_OBJ)
+	$(RANLIB) $@
+	mkdir -p ../lib
+	cp $@ ../lib/$@
+
+# Build libprotokit as a shared library (i.e., libprotokit.so, libprotokit.dylib, etc)
+libprotokit.$(SYSTEM_SOEXT): $(KIT_OBJ)
+	$(CC) $(SYSTEM_SOFLAGS) $(KIT_OBJ) -o libprotokit.$(SYSTEM_SOEXT) $(LIBS)
+	mkdir -p ../lib
+	cp $@ ../lib/$@
+
+# This builds the Protolib JNI stub libary for Java interfaces
+#  (currently this consists of an interface to the ProtoPipe class)
+LIBPROTO = ../lib/libprotokit.a
+JNI_SRC = $(JAVA)/protoPipeJni.cpp 
+JNI_OBJ = $(JNI_SRC:.cpp=.o)
+
+libprotolibjni.$(SYSTEM_JNIEXT): $(JNI_OBJ) libprotokit.a
+	$(CC) $(SYSTEM_JNIFLAGS) $(SYSTEM_FRAMEORK) $(JNI_OBJ) $(LIBPROTO) \
+	$(LIBS) $(LDFLAGS) -o $@
+	mkdir -p ../lib
+	cp $@ ../lib/$@
+
+        
+# Simple example command-line application using socket & timer
+
+EXAMPLE_SRC = $(EXAMPLES)/protoExample.cpp
+EXAMPLE_OBJ = $(EXAMPLE_SRC:.cpp=.o)
+
+protoExample:    $(EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+# Simple example using our ProtoFile file I/O class to async listen to a file
+FILE_EXAMPLE_SRC = $(EXAMPLES)/protoFileExample.cpp
+FILE_EXAMPLE_OBJ = $(FILE_EXAMPLE_SRC:.cpp=.o)
+
+protoFileExample:    $(FILE_EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(FILE_EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+
+# Simple example using our ProtoVif "virtual interface" class
+
+VIF_EXAMPLE_SRC = $(EXAMPLES)/vifExample.cpp $(COMMON)/protoVif.cpp $(SYSTEM_SRC_EX) 
+VIF_EXAMPLE_OBJ = $(VIF_EXAMPLE_SRC:.cpp=.o)
+
+vifExample:    $(VIF_EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(VIF_EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+# Uses ProtoVif "virtual interface" class to create a virtual LAN
+
+LAN_EXAMPLE_SRC = $(EXAMPLES)/vifLan.cpp $(COMMON)/protoVif.cpp $(SYSTEM_SRC_EX) 
+LAN_EXAMPLE_OBJ = $(LAN_EXAMPLE_SRC:.cpp=.o)
+
+vifLan:    $(LAN_EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(LAN_EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+TING_SRC = $(EXAMPLES)/ting.cpp
+TING_OBJ = $(TING_SRC:.cpp=.o)
+
+ting:    $(TING_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(TING_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a   
+	mkdir -p ../bin
+	cp $@ ../bin/$@  
+            
+TIMER_TEST_SRC = $(EXAMPLES)/timerTest.cpp
+TIMER_TEST_OBJ = $(TIMER_TEST_SRC:.cpp=.o)
+
+timerTest:    $(TIMER_TEST_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(TIMER_TEST_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a   
+	mkdir -p ../bin
+	cp $@ ../bin/$@  
+    
+THREAD_SRC = $(EXAMPLES)/threadExample.cpp
+THREAD_OBJ = $(THREAD_SRC:.cpp=.o)
+
+threadExample:    $(THREAD_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(THREAD_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+SOCK2PIPE_SRC = $(EXAMPLES)/sock2PipeExample.cpp
+SOCK2PIPE_OBJ = $(SOCK2PIPE_SRC:.cpp=.o)
+
+sock2Pipe:    $(SOCK2PIPE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(SOCK2PIPE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+PIPE2SOCK_SRC = $(EXAMPLES)/pipe2SockExample.cpp
+PIPE2SOCK_OBJ = $(PIPE2SOCK_SRC:.cpp=.o)
+
+pipe2Sock:    $(PIPE2SOCK_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(PIPE2SOCK_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+MSG2MSG_SRC = $(EXAMPLES)/msg2MsgExample.cpp
+MSG2MSG_OBJ = $(MSG2MSG_SRC:.cpp=.o)
+
+msg2Msg:    $(MSG2MSG_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(MSG2MSG_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+PIPE_SRC = $(EXAMPLES)/pipeExample.cpp
+PIPE_OBJ = $(PIPE_SRC:.cpp=.o)
+
+pipeExample:    $(PIPE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(PIPE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+NET_SRC = $(EXAMPLES)/netExample.cpp
+NET_OBJ = $(NET_SRC:.cpp=.o)
+
+netExample:    $(NET_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(NET_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+
+CAP_SRC = $(EXAMPLES)/protoCapExample.cpp $(SYSTEM_SRC_EX)
+CAP_OBJ = $(CAP_SRC:.cpp=.o)
+protoCapExample:    $(CAP_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(CAP_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+        
+DETOUR_SRC = $(EXAMPLES)/detourExample.cpp $(SYSTEM_SRC_EX)
+DETOUR_OBJ = $(DETOUR_SRC:.cpp=.o)
+detourExample:    $(DETOUR_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(DETOUR_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+
+SERIAL_EXAMPLE_SRC = $(EXAMPLES)/serialExample.cpp $(COMMON)/protoSerial.cpp $(SYSTEM_SRC_EX)
+SERIAL_EXAMPLE_OBJ = $(SERIAL_EXAMPLE_SRC:.cpp=.o)
+
+serialExample:    $(SERIAL_EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(SERIAL_EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+LFSR_EXAMPLE_SRC = $(EXAMPLES)/lfsrExample.cpp
+LFSR_EXAMPLE_OBJ = $(LFSR_EXAMPLE_SRC:.cpp=.o)
+
+lfsrExample:    $(LFSR_EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(LFSR_EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+        
+BASE64_EXAMPLE_SRC = $(EXAMPLES)/base64Example.cpp
+BASE64_EXAMPLE_OBJ = $(BASE64_EXAMPLE_SRC:.cpp=.o)
+
+base64Example:    $(BASE64_EXAMPLE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(BASE64_EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+QUEUE_SRC = $(EXAMPLES)/queueExample.cpp
+QUEUE_OBJ = $(QUEUE_SRC:.cpp=.o)
+queueExample:    $(QUEUE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(QUEUE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+AVERAGE_SRC = $(EXAMPLES)/averageExample.cpp $(COMMON)/protoAverage.cpp
+AVERAGE_OBJ = $(AVERAGE_SRC:.cpp=.o)
+averageExample:    $(AVERAGE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(AVERAGE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+            
+GRAPH_SRC = $(EXAMPLES)/graphExample.cpp $(MANET)/manetGraph.cpp  \
+          $(COMMON)/protoGraph.cpp $(COMMON)/protoSpace.cpp
+GRAPH_OBJ = $(GRAPH_SRC:.cpp=.o)
+graphExample:    $(GRAPH_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(GRAPH_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+
+GRAPHXML_SRC = $(MANET)/manetGraphML.cpp $(EXAMPLES)/graphXMLExample.cpp $(MANET)/manetGraph.cpp  \
+          $(COMMON)/protoGraph.cpp $(COMMON)/protoSpace.cpp
+GRAPHXML_OBJ = $(GRAPHXML_SRC:.cpp=.o)
+graphXMLExample:    $(GRAPHXML_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(GRAPHXML_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+# GraphRider (gr) tool
+GR_SRC = $(EXAMPLES)/graphRider.cpp $(MANET)/manetGraph.cpp  \
+          $(COMMON)/protoGraph.cpp $(COMMON)/protoSpace.cpp
+GR_OBJ = $(GR_SRC:.cpp=.o)
+
+gr:    $(GR_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(GR_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+                
+MSG_SRC = $(EXAMPLES)/msgExample.cpp $(MANET)/manetMsg.cpp
+MSG_OBJ = $(MSG_SRC:.cpp=.o)
+
+msgExample:    $(MSG_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(MSG_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+        
+clean:	
+	rm -f *.o $(COMMON)/*.o $(MANET)/*.o $(NS)/*.o ../src/*/*.o ../examples/*.o \
+        *.a *.$(SYSTEM_SOEXT) ../lib/*.a ../lib/*.../bin/* $(SYSTEM_SOEXT) \
+        protoApp protoExample threadExample msg2Msg pipe2Sock sock2Pipe pipeExample protoCapExample vifExample \
+        graphExample graphXMLExample serialExample lfsrExample gr ../bin/*
+    
+
+# DO NOT DELETE THIS LINE -- mkdep uses it.
+# DO NOT PUT ANYTHING AFTER THIS LINE, IT WILL GO AWAY.
+
+
+

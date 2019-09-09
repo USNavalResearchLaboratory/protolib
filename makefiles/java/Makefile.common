@@ -1,0 +1,48 @@
+#########################################################################
+# COMMON PROTOLIB-JNI MAKEFILE STUFF
+#
+
+SHELL=/bin/sh
+
+.SUFFIXES: .cpp $(.SUFFIXES)
+
+PROTOLIB = ../../../protolib
+
+INCLUDES = $(TCL_INCL_PATH) $(SYSTEM_INCLUDES) -I$(PROTOLIB)/common
+
+CFLAGS = -g -DPROTO_DEBUG -DUNIX -D_FILE_OFFSET_BITS=64 -O -Wall -Wcast-align \
+-pedantic -Wno-long-long -fPIC $(SYSTEM_HAVES) $(INCLUDES)
+
+LDFLAGS = $(SYSTEM_LDFLAGS) -L$(PROTOLIB)/unix
+
+LIBS = $(SYSTEM_LIBS) -lm -lpthread
+
+# Rule for C++ .cpp extension
+.cpp.o:
+	$(CC) -c $(CFLAGS) -o $*.o $*.cpp
+	
+all: libProtokitJni
+
+# "protolib-jni" links to the static Protokit library
+LIBPROTO = $(PROTOLIB)/unix/libProtokit.a
+$(PROTOLIB)/unix/libProtokit.a: 
+	cd $(PROTOLIB)/unix; $(MAKE) -f Makefile.$(SYSTEM) libProtokit.a
+	
+JNI_SRC = protoPipeJni.cpp 
+
+JNI_OBJ = $(JNI_SRC:.cpp=.o)
+
+libProtokitJni: $(JNI_OBJ) $(LIBPROTO)
+	$(CC) $(SYSTEM_SOFLAGS) $(SYSTEM_FRAMEORK) $(JNI_OBJ) $(LIBPROTO) \
+	$(LIBS) $(LDFLAGS) -o ../../$@.$(SYSTEM_SOEXT)
+                                
+clean:	
+	rm -f *.o *.$(SYSTEM_SOEXT);
+	cd $(PROTOLIB)/unix; $(MAKE) -f Makefile.$(SYSTEM) clean
+    
+
+# DO NOT DELETE THIS LINE -- mkdep uses it.
+# DO NOT PUT ANYTHING AFTER THIS LINE, IT WILL GO AWAY.
+
+
+

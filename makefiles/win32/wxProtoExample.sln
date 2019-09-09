@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 8.00
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Protokit", "..\win32\Protokit.vcproj", "{119198B2-0933-49BB-A039-334A26A6FBBF}"
+	ProjectSection(ProjectDependencies) = postProject
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wxProtoExample", "wxProtoExample.vcproj", "{9A218E62-5FB2-471E-AEF6-DB991733290E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{119198B2-0933-49BB-A039-334A26A6FBBF} = {119198B2-0933-49BB-A039-334A26A6FBBF}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfiguration) = preSolution
+		Debug = Debug
+		Release = Release
+	EndGlobalSection
+	GlobalSection(ProjectConfiguration) = postSolution
+		{119198B2-0933-49BB-A039-334A26A6FBBF}.Debug.ActiveCfg = Debug|Win32
+		{119198B2-0933-49BB-A039-334A26A6FBBF}.Debug.Build.0 = Debug|Win32
+		{119198B2-0933-49BB-A039-334A26A6FBBF}.Release.ActiveCfg = Release|Win32
+		{119198B2-0933-49BB-A039-334A26A6FBBF}.Release.Build.0 = Release|Win32
+		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Debug.ActiveCfg = Debug|Win32
+		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Debug.Build.0 = Debug|Win32
+		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Release.ActiveCfg = Release|Win32
+		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Release.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+	EndGlobalSection
+	GlobalSection(ExtensibilityAddIns) = postSolution
+	EndGlobalSection
+EndGlobal

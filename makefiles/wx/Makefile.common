@@ -1,0 +1,43 @@
+#########################################################################
+# wxProtoExample COMMON MAKEFILE STUFF
+#
+
+SHELL=/bin/sh
+
+.SUFFIXES: .cpp $(.SUFFIXES)
+
+PROTOLIB = ../..
+
+FLAGS = $(SYSTEM_FLAGS) $(WX_FLAGS)
+
+INCLUDES =  $(SYSTEM_INCLUDES) $(WX_INCLUDES) -I$(PROTOLIB)/include
+
+CFLAGS = -g -DPROTO_DEBUG -DUNIX -Wall -O -fPIC $(FLAGS) $(INCLUDES) $(SYSTEM_HAVES)
+
+LIBS = $(WX_LIBS) $(SYSTEM_LIBS) -lm
+
+TARGETS = wxProtoExample
+
+# Rule for C++ .cpp extension
+.cpp.o:
+	$(CC) -c $(CFLAGS) -o $*.o $*.cpp
+    
+# wxProtoExample depends upon the NRL Protean Group's "Protokit" development library
+LIBPROTO = $(PROTOLIB)/unix/libProtokit.a
+$(PROTOLIB)/unix/libProtokit.a: 
+	cd $(PROTOLIB)/unix; $(MAKE) -f Makefile.$(SYSTEM) libProtokit.a
+         
+EXAMPLE_SRC = $(PROTOLIB)/examples/wxProtoExample.cpp $(PROTOLIB)/src/wx/wxProtoApp.cpp 
+          
+EXAMPLE_OBJ = $(EXAMPLE_SRC:.cpp=.o)
+
+wxProtoExample: $(EXAMPLE_OBJ) $(LIBPROTO)
+	$(CC) -o $@ $(EXAMPLE_OBJ) $(LIBPROTO) $(LIBS)
+	$(SYSTEM_REZ) $@
+    
+clean: 
+	rm -f *.o ../src//common/*.o ../unix/*.o ../unix/*.a wxProtoExample
+
+# DO NOT DELETE THIS LINE -- mkdep uses it.
+# DO NOT PUT ANYTHING AFTER THIS LINE, IT WILL GO AWAY.
+

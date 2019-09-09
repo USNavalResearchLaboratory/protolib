@@ -1,0 +1,60 @@
+
+This file provides information on changes to Protolib code indexed by the
+version number found in the "common/protoVersion.h" file.  Serious version
+tracking was not maintained for Protolib for a long time since it was 
+typically included in full source form in the projects for which it was
+used and those projects were assumed to maintain configuration control for
+themselves and the Protolib code they used.  Protolib has matured into a
+more substantial code base and used by multiple projects, so the time has come
+to provide some additional description of significant changes made.  
+Additionally, the developers will try to provide more timely releases of 
+the Protolib source tree outside of the SVN repository.
+
+
+
+
+Version 2.1b1
+=============
+  - Added "ProtoTime" class that is used by ProtoTimer, etc to
+    provide a basis for time references, manipulations, etc.  The
+    scope of ProtoTime will likely be expanded in our quest to 
+    eventually provide a standards means to access precision
+    time facilities as they come available to different operating
+    system environments.
+    
+   - The "ManetMsg" implementation of the "draft-ietf-manet-packetbb"
+     specification was updated to Draft Version 13.
+     (Thanks to Ulrich Herberg for this!)
+     
+   - The ns-2 ProtoSocket(TCP) adaption was fixed to be consistent
+     with the real-world behavior of the ProtoSocket(TCP).
+     
+   - Initial support for Doxygen-based documentation of the Protolib
+     code base was integrated.
+     
+   - Fixed WIN32 ProtoDispatcher::BoostPriority() by using 
+     THREAD_SET_INFORMATION access level (more portable)
+     Thanks to Renee Carignan!
+
+Version 2.0b4
+=============
+  - This was the last version annotation _before_ this tracking file
+    was established.  The "2.x" indicates the refactoring of the code
+    after the original miscellaneous collection of C++ classes
+    that became the foundation for the Protolib "toolkit".
+    (aka "Protokit").  With 2.0, the code was written to be far
+    more consistent in design and conventions.
+    
+    The philosophy of the code is to provide a suite of C++ classes
+    where each can be used fairly independently if desired, but also
+    to provide a framework for the suite of classes to be used for
+    experimental protocol implementations, applications.  For example,
+    individual classes like "ProtoSocket", "ProtoTimer", etc can be
+    used somewhat independently and/or adapted into other codes or
+    be used with the provided ProtoDispatcher/ ProtoApp "framework"
+    to build simple applications.  In some cases (e.g., wxProtoApp),
+    code is provided to allow Protolib components/implementations to
+    be integrated as part other application code.  Similarly, the
+    ProtoSimAgent provides a means to adapt Protolib code into 
+    discrete event network simulation environments with a relatively
+    small amount of care on the programmers' part.

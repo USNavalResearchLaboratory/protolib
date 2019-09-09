@@ -1,0 +1,25 @@
+#
+# MacOS-X wxWindows Makefile definitions
+#
+
+# 1) Where to find the wxWidgets files
+WX_FLAGS = `/usr/local/bin/wx-config --cxxflags`
+WX_LIBS = `/usr/local/bin/wx-config --libs`
+
+
+# 2) System specific additional libraries, include paths, etc
+#    (Where to find X11 libraries, etc)
+#
+SYSTEM_FLAGS = 
+SYSTEM_INCLUDES = -I/Developer/Headers/FlatCarbon 
+SYSTEM_LIBS = -framework Carbon -framework System -lz -lresolv
+SYSTEM_REZ = `/usr/local/bin/wx-config --rezflags`
+
+SYSTEM_HAVES = -DHAVE_ASSERT -DHAVE_GETLOGIN -DHAVE_FLOCK -DHAVE_DIRFD
+
+SYSTEM = macosx
+CC = c++
+RANLIB = ranlib
+AR = ar
+
+include Makefile.common

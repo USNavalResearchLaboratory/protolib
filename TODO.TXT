@@ -1,0 +1,22 @@
+Protolib is a work in progress.  Its features reflect the current (and past) 
+needs of our research group.  This list is a list of things we might add in 
+the future:
+
+0) Documentation, documentation, documentation!!!  Code documentation and
+   "Developers' Guide" materials.
+   
+1) ProtoDisptacher use of "epoll()" (Linux), "kqueue()" (BSD), and "/dev/poll"
+   (Solaris) for enhanced performance over the current use of "select()".  We 
+   may also explore use of "pselect()" further if it makes sense.
+
+2) Generalize the Mutex stuff used in ProtoDispatcher for general purpose
+   thread synchronization purposes ...
+
+3) Make code truly UNICODE compliant ... In particular, any functions which 
+   take/return strings (currently "char*") should instead use "tchar" 
+   types/functions as appropriate.
+   
+
+Brian Adamson
+<adamson@itd.nrl.navy.mil>
+9 June 2005

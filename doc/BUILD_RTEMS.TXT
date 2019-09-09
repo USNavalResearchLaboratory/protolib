@@ -1,0 +1,80 @@
+#
+#  README,v 1.2 2002/10/07 19:44:18 joel Exp
+#
+
+Building and Installing MDP & PROTOLIB for RTEMS
+=====================================
+
+1.  Build and install RTEMS for your BSP with POSIX and networking
+    enabled.   The following is a prototypical command sequence that
+    would be used to do this for the mips-rtems target and jmr3904 BSP.
+
+    mkdir b-rtems
+    cd b-rtems
+    ..../rtems-XXX/configure --target=mips-rtems --enable-rtemsbsp=jmr3904 \
+     --enable-posix --enable-networking --prefix=/opt/rtems
+   make
+   make install
+
+   Once this is done, return to this directory and proceed with the
+   MDP build.
+
+2. Set the RTEMS_MAKEFILE_PATH to point to the above BSP.
+
+   export RTEMS_MAKEFILE_PATH=/opt/rtems/mips-rtems/jmr3904
+
+3.  To build the MDP and ProtoLib libraries, perform commands similar to 
+    the following:
+
+    export RTEMS_MAKEFILE_PATH=/opt/rtems/mips-rtems/jmr3904
+    cd mdp
+    make -f Makefile.rtems libs_only
+
+    At this point you should have libProto.a and libMdp.a.  Copy them to
+    the appropriate BSP specific install point by hand.
+
+
+Integrating NTP Executables Into Your Application
+================================================= 
+No RTEMS specific steps are required to use the MDP library.
+
+Port Background
+===============
+The RTEMS port is derived from the UNIX source base.  The 
+MDP package includes example applications that cannot be
+built for RTEMS as they depend upon X11 and Tk.  Thus the
+port includes only the MDP communications protocol.
+
+The RTEMS port assumes that Protolib and MDP will be built for
+a particular BSP which has been previously built and 
+installed.  Two RTEMS specific sub-Makefiles have been added
+to the unix/ subdirectory of each package.  
+  
+  + Makefile.rtems
+  + Makefile.rtems-sub
+
+Makefile.rtems acts as the normal MDP/Protolib adapter.
+Makefile.rtems-sub acts as a query facility to obtain
+information from the RTEMS Application Makefile
+infrastructure.  By using this approach, the MDP/Protolib
+libraries should be able to be compiled for any RTEMS BSP.
+
+Protolib/MDP Assembly Instructions
+==================================
+The RTEMS MDP/Protolib tarball was assembled from separate
+MDP and Protolib tarballs which were combined to provide
+a unified build process.  These instructions are based
+upon the following versions:
+
+  src-mdp-1.9a5.tgz
+  src-protolib-1.0a3d.tgz
+
+1.  Make a working directory and "cd" into that directory.
+2.  untar mdp and protolib
+3.  If mdp/protolib exists and is a symbolic link, then remove it.
+4.  mv protolib under mdp   (mv protolib-1.0 mdp)
+    These results in the following directory structure.
+
+    ./mdp
+    ./mdp/protolib
+

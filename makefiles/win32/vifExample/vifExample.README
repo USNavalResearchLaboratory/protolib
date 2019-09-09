@@ -1,0 +1,55 @@
+To build vifExample download the openVpn and winPcap code.  You will need both the source and binary wpcap distributions.
+
+Update the project include path to point to the location of these projects.
+
+Note that there is currently an issue with winpcap and visual studio 2008 - a temporary solution is 
+advised below:
+
+
+1. rename ntddnis.h file in
+
+C:\cygwin\home\nrl\WpdPack\Include
+
+2.  
+[Winpcap-bugs] "vsnprintf" - build error - fix/update suggestion
+James Rhodes james_rhodes at ciqual.com
+Mon Feb 9 08:42:04 PST 2009
+
+    * Previous message: [Winpcap-bugs] "vsnprintf" - build error in winpcap ver. 4.0.2 built with MS Visual Studio C++
+    * Next message: [Winpcap-bugs] "vsnprintf" - build error - fix/update suggestion
+    * Messages sorted by: [ date ] [ thread ] [ subject ] [ author ]
+
+Hi,
+
+Regarding irritating change to the MS compiler above...
+
+FWIW I believe that the correct approach for a formal change to cope 
+with this would be along the following lines (once the winpcap project 
+starts using/supporting MS VS C++ 2008 - though the change can be made 
+at any time)
+
+pcap-stdinc.h:
+=======================
+#if _MSC_VER < 1500
+#define vsnprintf _vsnprintf
+#endif
+=======================
+compiler version 1500 comes with "MS VS C++ 2008"
+other versions against release (non-exhaustive)
+  2005 is  1400
+  2003 is  1310
+  2002 is  1300
+  6.0  is  1200
+  4.2  is  1020
+
+(This file is only included in a WIN32 windows build (see pcap.h) so 
+_MSC_VER should be defined in that case, however one could add 
+'defined(_MSC_VER) &&' for belt-and-braces protection)
+
+I'll add this note to the issue-ticket that I raised on the libpcap 
+project. Though clearly fixing/changing it is clearly (to me) within the 
+remit of winpcap project.
+
+cheers,
+    James.
+

@@ -1,0 +1,103 @@
+Generating doxygen output on Windows:
+
+1. Make sure the doc/doxygen/Doxyfile configuration file points to the correct location
+   of graphwiz's "dot" exectuable for your system. (DOT_PATH variable)
+2. Load the doxygen configuration file (doc/doxygen/Doxyfile) into the 
+   doxygen wizard.
+3. Start, output will be put in /doc/doxygen/html.
+
+Generating doxygen output on Linux:
+
+1. Make sure the doc/doxygen/Doxyfile file points to the correct location of
+   graphwiz's "dot" exectuable for your system.  (DOT_PATH variable)
+2. Run "doxygen doxyfile", output will be put in /doc/doxygen/html
+3. Rumor has it that there is a doxygen wizard (gui) available for linux.
+
+-------------------------------------------------------------------------
+Supplemental Documentation
+
+Supplemental documentation (e.g. Introduction, Summarized class list by
+category etc. are stored in the doc/doxygen/mainpages directory.
+
+How to document classes:
+
+/**
+ * @class ClassName
+ * 
+ * @brief Enter a brief description of the
+ * class, the first sentence (deliminated by a period)
+ * will be included in the brief description.
+ *
+ * Anything after the first sentence, and included
+ * in the "@class" block will be part of the
+ * detailed description.
+ *
+ * The "@brief" description will be used to
+ * describe the class on the class list.
+ *
+ */
+
+How to document functions:
+--------------------------
+
+Keep the Doxygen function documentation with the function definition, e.g. in 
+either the .h or the .cpp file.
+
+Placing "/**" before the comments will cause Doxygen to generate a link
+to the function documentation.  
+
+/**
+ *
+ * @brief Description of the function.  Will appear before function
+ * definition.  Don't really need "@brief" as JAVADOC_AUTOBRIEF is 
+ * turned on.
+ *
+ * @param Defailed parameter text, if needed.  Will appear in
+ * separate parameter secion.
+ *
+ * @retval Detailed text about return value, if needed.
+ *
+ */
+void someFunc() {}
+
+Placing "///" before the comments will cause Doxygen to include the 
+associated text next to the function name in the function listing only.
+ 
+ 
+Other Notes:
+
+1.  Sometimes the html directory has to be cleared out and the entire
+doxygen output regenerated if the graphics get screwed up.
+
+2.  Need "dot" from graphwiz.  In some doxygen implementations it is
+included.
+
+3.  Can generate called/call graphs.  To enable or disable call graphs
+for each function, toggle CALL_GRAPH and CALLER_GRAPH variables in the
+config file.  To enable for specific functions when CALL_GRAPH is set
+to no, use the @callgraph/@callergraph commands.
+
+4. @sa "See also" alias.
+   @note "Note" alias
+   @exception 
+   @class
+   @param
+   @return
+   @retval
+
+  ProtoGraph::~Vertice has an example of function text and a @note.
+
+5.  Can turn off documentation of inherited functions and properties.
+
+8.  We are generating documentation from all src files included under
+the doc tree.  This can be changed to include/exclude specific directories.
+
+Modify INPUT in config file to add additional code/directories, e.g.
+
+INPUT = ../common
+
+#Add protolib to the doxygen output
+#INPUT += ../../protolib/common 
+
+#To add files
+#INPUT += ../../protolib/common/protoApp.h ../../protolib/common/protoApp.cpp
