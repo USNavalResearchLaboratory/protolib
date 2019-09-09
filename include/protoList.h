@@ -95,6 +95,9 @@ class ProtoList : private ProtoIterable
         // This inserts "theItem" _before_ the "nextItem"
         void Insert(Item& theItem, Item& nextItem);
         
+        // This inserts "theItem" _before_ the "nextItem"
+        void InsertAfter(Item& theItem, Item& prevItem);
+        
         void Remove(Item& item);
         
         void Empty();   // empties list without deleting items
@@ -169,6 +172,8 @@ class ProtoList : private ProtoIterable
                     item = cursor;
                     return true; // note list membership not validated
                 }
+                Item* GetCursor() const
+                    {return item;}
                 
                 void Reverse();
                 bool IsReversed() const

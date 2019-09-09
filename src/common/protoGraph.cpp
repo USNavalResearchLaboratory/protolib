@@ -5,7 +5,7 @@
 */
 #include "protoGraph.h"
 #include "protoDebug.h"
-#include <manetGraph.h>  // for debug
+#include "manetGraph.h" // for debug
 
 ProtoGraph::VerticeQueue::VerticeQueue()
 {
@@ -752,7 +752,7 @@ ProtoGraph::Vertice* ProtoGraph::SimpleTraversal::GetNextVertice(unsigned int* l
                 if (depth_first)
                 {
                     queue_pending.Prepend(*nextVertice);
-                    // (TBD) level tracking for Depth-first search
+                    // (TBD) implement level tracking for Depth-first search
                 }
                 else
                 {
@@ -775,8 +775,6 @@ ProtoGraph::Vertice* ProtoGraph::SimpleTraversal::GetNextVertice(unsigned int* l
     }
     return currentVertice;
 }  // end ProtoGraph::SimpleTraversal::GetNextVertice()
-
-
 
 // begin "class ProtoGraph" implementation
 ProtoGraph::ProtoGraph()

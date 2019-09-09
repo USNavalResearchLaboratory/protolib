@@ -683,6 +683,29 @@ unsigned int ProtoAddress::SetCommonTail(const ProtoAddress& theAddr)
     return GetLength();
 }  // end ProtoAddress::SetCommonTail()
 
+
+bool ProtoAddress::PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixLen) const
+{
+    // Compare address "type" and "prefixLen" bits of address
+    if (!IsValid() && !theAddr.IsValid()) return true;
+    if (type == theAddr.type)
+    {
+        const char* ptr1 = GetRawHostAddress();
+        const char* ptr2 = theAddr.GetRawHostAddress();
+        size_t nbyte = prefixLen >> 3;
+        if ((0 == nbyte) || (0 == memcmp(ptr1, ptr2, nbyte)))
+        {
+            UINT8 nbit = prefixLen & 0x07;
+            if (0 == nbit) return true;
+            char mask = 0xff << (8 - nbit);
+            if ((mask & ptr1[nbyte]) == (mask & ptr2[nbyte]))
+                return true;
+        }
+    }
+    return false;
+}  // end ProtoAddress::PrefixIsEqual()
+
+
 UINT8 ProtoAddress::GetPrefixLength() const
 {
     UINT8* ptr = NULL;
@@ -971,7 +994,6 @@ void ProtoAddress::GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr)
         Invalidate();
         return;
     }
-    
     SetRawHostAddress(ETH, (char*)ethMcastAddr, 6);
 }  // end ProtoAddress::GetEthernetMulticastAddress()
 
@@ -1294,7 +1316,8 @@ bool ProtoAddress::ResolveFromString(const char* text)
         return false;
 #endif // if/else WIN32/UNIX
     }
-#endif  // HAVE_IPV6 
+#endif  // HAVE_IPV6
+#if defined(WIN32) || !defined(HAVE_IPV6)
     // Use this approach as a backup for NT-4 or if !HAVE_IPV6
     // 1) is it a "dotted decimal" address?
     struct sockaddr_in* addrPtr = (struct sockaddr_in*)&addr;
@@ -1336,7 +1359,9 @@ bool ProtoAddress::ResolveFromString(const char* text)
         PLOG(PL_ERROR, "ProtoAddress::ResolveFromString gethostbyname() returned unsupported address family!\n");
         return false;
     }
+#endif // WIN32 || !HAVE_IPV6
 #endif // !SIMULATE
+    
 }  // end ProtoAddress::ResolveFromString()
 #ifdef USE_GETHOSTBYADDR
 bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const

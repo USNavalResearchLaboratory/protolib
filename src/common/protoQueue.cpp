@@ -149,6 +149,48 @@ bool ProtoSimpleQueue::Prepend(ProtoQueue::Item& theItem)
     return true;
 }  // end ProtoSimpleQueue::Prepend()
 
+bool ProtoSimpleQueue::Insert(ProtoQueue::Item& theItem, ProtoQueue::Item& nextItem)
+{
+    Container* theContainer = GetContainerFromPool();
+    if (NULL == theContainer) theContainer = CreateContainer();
+    if (NULL == theContainer) return false;
+    Associate(theItem, *theContainer);
+    Container* nextContainer = static_cast<Container*>(nextItem.GetContainer(*this));
+    if (NULL == nextContainer)
+    {
+        PLOG(PL_ERROR, "ProtoSimpleQueue::Insert() error: nextItem not in this queue?!\n");
+        Disassociate(theItem, *theContainer);
+        if (NULL != container_pool)
+            container_pool->Put(*theContainer);
+        else
+            delete theContainer;
+        return false;
+    }    
+    item_list.Insert(*theContainer, *nextContainer);
+    return true;
+}  // end ProtoSimpleQueue::Insert()
+
+bool ProtoSimpleQueue::InsertAfter(ProtoQueue::Item& theItem, ProtoQueue::Item& nextItem)
+{
+    Container* theContainer = GetContainerFromPool();
+    if (NULL == theContainer) theContainer = CreateContainer();
+    if (NULL == theContainer) return false;
+    Associate(theItem, *theContainer);
+    Container* nextContainer = static_cast<Container*>(nextItem.GetContainer(*this));
+    if (NULL == nextContainer)
+    {
+        PLOG(PL_ERROR, "ProtoSimpleQueue::Insert() error: nextItem not in this queue?!\n");
+        Disassociate(theItem, *theContainer);
+        if (NULL != container_pool)
+            container_pool->Put(*theContainer);
+        else
+            delete theContainer;
+        return false;
+    }    
+    item_list.InsertAfter(*theContainer, *nextContainer);
+    return true;
+}  // end ProtoSimpleQueue::Insert()
+
 void ProtoSimpleQueue::Remove(Item& theItem)
 {
     Container* theContainer = static_cast<Container*>(ProtoQueue::GetContainer(theItem));

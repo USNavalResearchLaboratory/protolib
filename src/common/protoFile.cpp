@@ -190,10 +190,16 @@ void ProtoFile::Unlock()
 {
 #ifndef WIN32
 #ifdef HAVE_FLOCK
-    flock(descriptor, LOCK_UN);
+    if (0 != flock(descriptor, LOCK_UN))
+    {
+        PLOG(PL_ERROR, "ProtoFile::Unlock() flock() error: %s\n", GetErrorString());
+    }
 #else
 #ifdef HAVE_LOCKF
-    lockf(descriptor, F_ULOCK, 0);
+    if (0 != lockf(descriptor, F_ULOCK, 0))
+    {
+        PLOG(PL_ERROR, "ProtoFile::Unlock() lockf() error: %s\n", GetErrorString());
+    }
 #endif // HAVE_LOCKF
 #endif // if/elseHAVE_FLOCK
     fchmod(descriptor, 0640);
@@ -372,7 +378,7 @@ bool ProtoFile::Read(char* buffer, unsigned int& numBytes)
         } 
         else 
         {
-            numBytes = result;
+            numBytes = (unsigned int)result;
             return true;
         }
     }  // end while true
@@ -779,7 +785,7 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
         ProtoFile::Type type = ProtoFile::GetType(fileName);        
         if (ProtoFile::NORMAL == type)
         {
-            int nameLen = strlen(fileName);
+            size_t nameLen = strlen(fileName);
             nameLen = MIN(PATH_MAX, nameLen);
             nameLen -= path_len;
             memmove(fileName, fileName+path_len, nameLen);

@@ -25,16 +25,15 @@ ProtoTime::ProtoTime(const struct timeval& timeVal)
 
 ProtoTime::ProtoTime(double seconds)
 {
-    tval.tv_sec = (unsigned long)seconds;
-    tval.tv_usec = (unsigned long)(1.0e+06 * (seconds - ((double)tval.tv_sec)));
+    tval.tv_sec = (time_t)seconds;
+    tval.tv_usec = (suseconds_t)(1.0e+06 * (seconds - ((double)tval.tv_sec)));
 }
 
 ProtoTime::ProtoTime(unsigned long sec, unsigned long usec)
 {
-    tval.tv_sec = sec;
-    tval.tv_usec = usec;
+    tval.tv_sec = (time_t)sec;
+    tval.tv_usec = (suseconds_t)usec;
 }
-
 
 void ProtoTime::operator+=(const ProtoTime& t)
 {

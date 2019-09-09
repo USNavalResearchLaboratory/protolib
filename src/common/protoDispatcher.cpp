@@ -62,7 +62,7 @@ const ProtoDispatcher::Descriptor ProtoDispatcher::INVALID_DESCRIPTOR = -1;
 
 
 ProtoDispatcher::Stream::Stream(Type theType)
- :  type(theType), flags(0) 
+ :  type(theType) 
 #ifdef WIN32
     ,index(-1), outdex(-1)
 #endif // WIN32
@@ -95,20 +95,13 @@ ProtoDispatcher::TimerStream::~TimerStream()
 #endif // UNIX
 }
 
-ProtoDispatcher::EventStream::EventStream()
- : Stream(EVENT), descriptor(INVALID_DESCRIPTOR)
+ProtoDispatcher::EventStream::EventStream(ProtoEvent& theEvent)
+ : Stream(EVENT), event(&theEvent)
 {
 }
 
 ProtoDispatcher::EventStream::~EventStream()
 {
-#ifdef UNIX
-    if (INVALID_DESCRIPTOR != descriptor)
-    {
-        close(descriptor);    
-        descriptor = INVALID_DESCRIPTOR;
-    }
-#endif // UNIX
 }
 
 ProtoDispatcher::GenericStream::GenericStream(Descriptor theDescriptor)
@@ -118,22 +111,23 @@ ProtoDispatcher::GenericStream::GenericStream(Descriptor theDescriptor)
             
 ProtoDispatcher::ProtoDispatcher()
     : run(false), wait_status(-1), exit_code(0), timer_delay(-1), precise_timing(false),
-      thread_id((ThreadId)(NULL)), priority_boost(false), thread_started(false), thread_signaled(false),
-      thread_master((ThreadId)(NULL)), suspend_count(0), signal_count(0),
-      controller(NULL), 
-      prompt_set(false), prompt_callback(NULL), prompt_client_data(NULL)
-#if defined(WIN32)
+      thread_id((ThreadId)(NULL)), external_thread(false), priority_boost(false), 
+      thread_started(false), thread_signaled(false), thread_master((ThreadId)(NULL)), 
+      suspend_count(0), signal_count(0), controller(NULL), 
+      prompt_set(false), prompt_callback(NULL), prompt_client_data(NULL),
+      break_stream(break_event)
+#ifdef WIN32
       ,stream_handles_array(NULL), stream_ptrs_array(NULL),
       stream_array_size(0), stream_count(0), msg_window(NULL),
-	  actual_thread_handle(NULL)
-    //#ifdef USE_TIMERFD - from merge not sure we need?
-    //  ,timer_fd(8)
-    //#endif
-
+	  actual_thread_handle(NULL) 
 #ifdef USE_WAITABLE_TIMER
 	  ,timer_active(false)
 #endif // USE_WAITABLE_TIMER
-#elif defined(USE_SELECT)
+#else // UNIX
+#ifdef USE_TIMERFD
+      ,timer_fd(-1)
+#endif  // USE_TIMERFD
+#if defined(USE_SELECT)
       // no special initialization required
 #elif defined(USE_KQUEUE)
       ,kevent_queue(-1)
@@ -141,11 +135,9 @@ ProtoDispatcher::ProtoDispatcher()
       ,epoll_fd(-1)
 #else
 #error "undefined async i/o mechanism"  // to make sure we implement something
-#endif  // !WIN32 && !USE_SELECT && !USE_KQUEUE
+#endif  // if/else USE_SELECT / USE_KQUEUE / USE_EPOLL
+#endif // if/else WIN32/UNIX
 {    
-#if !defined(USE_EVENTFD) && (defined(USE_SELECT) || defined(USE_EPOLL))
-    break_pipe_fd[0] = break_pipe_fd[1] = INVALID_DESCRIPTOR;
-#endif // UNIX
 }
 
 ProtoDispatcher::~ProtoDispatcher()
@@ -175,8 +167,11 @@ void ProtoDispatcher::Destroy()
                 ReleaseGenericStream(static_cast<GenericStream&>(*stream));
                 break;
             case Stream::TIMER:
+                // No timer streams are put in the stream_table (yet)
+               
+                break;
             case Stream::EVENT:
-                // No timer or event streams are put in the stream_table (yet)
+                ReleaseEventStream(static_cast<EventStream&>(*stream));
                 break;
         }
     }
@@ -208,7 +203,7 @@ bool ProtoDispatcher::UpdateChannelNotification(ProtoChannel&   theChannel,
     if (NULL != channelStream)
     {
         
-        if ((channelStream->GetFlags() == notifyFlags) && (0 != notifyFlags))
+        if ((channelStream->GetNotifyFlags() == notifyFlags) && (0 != notifyFlags))
         {
             // no notification change needed, but maybe input/output ready change below
             ASSERT(0 != notifyFlags); 
@@ -268,7 +263,7 @@ bool ProtoDispatcher::UpdateChannelNotification(ProtoChannel&   theChannel,
         }
         else  // 0 == notifyFlags
         {
-            if (channelStream->HasFlags())
+            if (channelStream->HasNotifyFlags())
             {
                 if (!UpdateStreamNotification(*channelStream, DISABLE_ALL))
                 {
@@ -320,14 +315,64 @@ bool ProtoDispatcher::UpdateChannelNotification(ProtoChannel&   theChannel,
     }  
 }  // end ProtoDispatcher::UpdateChannelNotification()
 
+bool ProtoDispatcher::UpdateEventNotification(ProtoEvent& theEvent, 
+                                              int         notifyFlags)
+{
+    SignalThread();   // TBD- check result?
+    EventStream* eventStream = GetEventStream(theEvent);
+    if (NULL != eventStream)
+    {
+        if (eventStream->GetNotifyFlags() == notifyFlags)
+        {
+            if (0 == notifyFlags)
+            {
+                ReleaseEventStream(*eventStream);
+                UnsignalThread();
+                return true;
+            }
+        }
+        else if (0 != notifyFlags)
+        {
+            // ProtoEvents only have NOTIFY_INPUT 
+            ASSERT(!eventStream->NotifyFlagIsSet(EventStream::NOTIFY_INPUT));
+            if (!UpdateStreamNotification(*eventStream, ENABLE_INPUT))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateEventNotification() error: unable to ENABLE_INPUT!\n");
+                UnsignalThread();
+                return false;
+            }
+        }
+        else // 0 == notifyFlags
+        {
+            if (!UpdateStreamNotification(*eventStream, DISABLE_INPUT))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateEventNotification() error: unable to DISABLE_INPUT!\n");
+                UnsignalThread();
+                return false;
+            }
+            ASSERT(0 == eventStream->GetNotifyFlags());
+            ReleaseEventStream(*eventStream);
+        }
+    }
+    else
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::UpdateEventNotification() new EventStream error: %s\n",
+                GetErrorString());
+        UnsignalThread();
+        return false;   
+    }  // end if/else (NULL != eventStream)
+    UnsignalThread();
+    return true; 
+}  // end ProtoDispatcher::UpdateEventNotification()
+
 bool ProtoDispatcher::UpdateSocketNotification(ProtoSocket& theSocket, 
                                                int          notifyFlags)
 {
-	SignalThread();  // TBD - check result?
+    SignalThread();  // TBD - check result?
     SocketStream* socketStream = GetSocketStream(theSocket);
     if (NULL != socketStream)
     {
-        if (socketStream->GetFlags() == notifyFlags)
+        if (socketStream->GetNotifyFlags() == notifyFlags)
         {
             // nothing to do up here, notification unchanged  
             // (but for WIN32, socket "readiness" may have changed)
@@ -375,7 +420,7 @@ bool ProtoDispatcher::UpdateSocketNotification(ProtoSocket& theSocket,
                 UnsignalThread();
                 return false;
             }
-			socketStream->SetFlags(notifyFlags);
+			socketStream->SetNotifyFlags(notifyFlags);
 #else // UNIX    
             // Determine what notification changes are needed for this stream and make them
             if (0 != (notifyFlags & ProtoSocket::NOTIFY_INPUT)) 
@@ -431,7 +476,7 @@ bool ProtoDispatcher::UpdateSocketNotification(ProtoSocket& theSocket,
         }
         else  // 0 == notifyFlags
         {
-            ASSERT(socketStream->HasFlags());
+            ASSERT(socketStream->HasNotifyFlags());
 #ifdef WIN32
             if (0 != WSAEventSelect(theSocket.GetHandle(), theSocket.GetInputEventHandle(), 0))
                  PLOG(PL_WARN, "ProtoDispatcher::UpdateSocketNotification() WSAEventSelect(0) warning: %s\n",
@@ -496,7 +541,7 @@ ProtoDispatcher::SocketStream* ProtoDispatcher::GetSocketStream(ProtoSocket& the
         socketStream = socket_stream_pool.Get();
         if (NULL != socketStream)
         {
-            socketStream->ClearFlags();
+            socketStream->ClearNotifyFlags();
             socketStream->SetSocket(theSocket);
         }
         else
@@ -531,11 +576,11 @@ void ProtoDispatcher::ReleaseSocketStream(SocketStream& socketStream)
         socketStream.SetOutdex(-1);
     }
 #endif // WIN32
-    if (socketStream.HasFlags())
+    if (socketStream.HasNotifyFlags())
     {
         if (!UpdateStreamNotification(socketStream, DISABLE_ALL))
             PLOG(PL_ERROR, "ProtoDispatcher::ReleaseSocketStream() error: UpdateStreamNotification(DISABLE_ALL) failure!\n");
-        socketStream.ClearFlags();
+        socketStream.ClearNotifyFlags();
     }
     stream_table.Remove(socketStream);
 	socket_stream_pool.Put(socketStream);
@@ -556,7 +601,7 @@ ProtoDispatcher::ChannelStream* ProtoDispatcher::GetChannelStream(ProtoChannel& 
         channelStream = channel_stream_pool.Get();
         if (NULL != channelStream)
         {
-            channelStream->ClearFlags();
+            channelStream->ClearNotifyFlags();
             channelStream->SetChannel(theChannel);
         }
         else
@@ -592,9 +637,64 @@ void ProtoDispatcher::ReleaseChannelStream(ChannelStream& channelStream)
     }
 #endif // WIN32
     stream_table.Remove(channelStream);
-    channelStream.ClearFlags();
+    channelStream.ClearNotifyFlags();
     channel_stream_pool.Put(channelStream);
 }  // end ProtoDispatcher::ReleaseChannelStream()
+
+ProtoDispatcher::EventStream* ProtoDispatcher::GetEventStream(ProtoEvent& theEvent)
+{
+    // First, search our list of active events
+    ProtoEvent* eventPtr = &theEvent;
+    EventStream* eventStream = 
+        static_cast<EventStream*>(stream_table.Find((const char*)&eventPtr, sizeof(ProtoEvent*) << 3));
+    if (NULL == eventStream)
+    {
+        // Get one from the pool or create a new one
+        eventStream = event_stream_pool.Get();
+        if (NULL != eventStream)
+        {
+            eventStream->ClearNotifyFlags();
+            eventStream->SetEvent(theEvent);
+        }
+        else
+        {
+            if (NULL == (eventStream = new EventStream(theEvent)))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::GetEventStream() new EventStream error: %s\n", GetErrorString());
+                return NULL;   
+            }
+        }
+        // Insert into "active"  stream table
+        stream_table.Insert(*eventStream);
+    }
+    return eventStream;
+}  // end ProtoDispatcher::GetEventStream()
+
+void ProtoDispatcher::ReleaseEventStream(EventStream& eventStream)
+{
+/*
+#ifdef WIN32
+    if (ready_stream_list.Contains(eventStream)) 
+        ready_stream_list.Remove(eventStream);
+    // Makes sure the event input/output event HANDLE is removed from array
+    // (This removes it from list passed to MsgWaitForMultipleObjectsEx() call)
+    if (eventStream.GetIndex() >= 0)
+    {
+        Win32RemoveStream(eventStream.GetIndex());
+        eventStream.SetIndex(-1);
+    }
+    if (eventStream.GetOutdex() >= 0)
+    {
+        Win32RemoveStream(eventStream.GetOutdex());
+        eventStream.SetOutdex(-1);
+    }
+#endif // WIN32
+*/
+    stream_table.Remove(eventStream);
+    eventStream.ClearNotifyFlags();
+    event_stream_pool.Put(eventStream);
+}  // end ProtoDispatcher::ReleaseEventStream()
+
 
 bool ProtoDispatcher::InstallGenericInput(ProtoDispatcher::Descriptor descriptor, 
                                           ProtoDispatcher::Callback*  callback, 
@@ -609,13 +709,13 @@ bool ProtoDispatcher::InstallGenericInput(ProtoDispatcher::Descriptor descriptor
             if (!UpdateStreamNotification(*stream, ENABLE_INPUT))
             {
                 PLOG(PL_ERROR, "ProtoDispatcher::InstallGenericInput() error: unable to ENABLE_INPUT!\n");
-                if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+                if (!stream->HasNotifyFlags()) ReleaseGenericStream(*stream);
                 UnsignalThread();
                 return false;
             }
         }
     }
-    stream->SetFlag(Stream::INPUT);
+    stream->SetNotifyFlag(Stream::NOTIFY_INPUT);
     stream->SetCallback(callback, clientData);
     UnsignalThread();
     return true;;  
@@ -631,9 +731,9 @@ void ProtoDispatcher::RemoveGenericInput(Descriptor descriptor)
         {
             if (!UpdateStreamNotification(*stream, DISABLE_INPUT))
                 PLOG(PL_ERROR, "ProtoDispatcher::RemoveGenericInput() error: UpdateStreamNotification(DISABLE_INPUT) failure!\n"); 
-            stream->UnsetFlag(Stream::INPUT);
+            stream->UnsetNotifyFlag(Stream::NOTIFY_INPUT);
         }
-        if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+        if (!stream->HasNotifyFlags()) ReleaseGenericStream(*stream);
     }   
     UnsignalThread(); 
 }  // end ProtoDispatcher::RemoveGenericInput()
@@ -651,13 +751,13 @@ bool ProtoDispatcher::InstallGenericOutput(ProtoDispatcher::Descriptor descripto
             if (!UpdateStreamNotification(*stream, ENABLE_OUTPUT))
             {
                 PLOG(PL_ERROR, "ProtoDispatcher::InstallGenericOutput() error: unable to ENABLE_OUTPUT!\n");
-                if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+                if (!stream->HasNotifyFlags()) ReleaseGenericStream(*stream);
                 UnsignalThread();
                 return false;
             }
         }
     }
-    stream->SetFlag(Stream::OUTPUT);
+    stream->SetNotifyFlag(Stream::NOTIFY_OUTPUT);
     stream->SetCallback(callback, clientData);
     UnsignalThread();
     return true;  
@@ -673,9 +773,9 @@ void ProtoDispatcher::RemoveGenericOutput(Descriptor descriptor)
         {
             if (!UpdateStreamNotification(*stream, DISABLE_OUTPUT))
                 PLOG(PL_ERROR, "ProtoDispatcher::RemoveGenericOutput() error: UpdateStreamNotification(DISABLE_OUTPUT) failure!\n"); 
-            stream->UnsetFlag(Stream::OUTPUT);
+            stream->UnsetNotifyFlag(Stream::NOTIFY_OUTPUT);
         }
-        if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+        if (!stream->HasNotifyFlags()) ReleaseGenericStream(*stream);
     }   
     UnsignalThread();
 }  // end ProtoDispatcher::RemoveGenericOutput()
@@ -690,7 +790,7 @@ ProtoDispatcher::GenericStream* ProtoDispatcher::GetGenericStream(Descriptor des
         genericStream = generic_stream_pool.Get();
         if (NULL != genericStream)
         {
-            genericStream->ClearFlags();
+            genericStream->ClearNotifyFlags();
             genericStream->SetDescriptor(descriptor);
         }
         else
@@ -727,7 +827,7 @@ void ProtoDispatcher::ReleaseGenericStream(GenericStream& genericStream)
         if (!UpdateStreamNotification(genericStream, DISABLE_OUTPUT))
                 PLOG(PL_ERROR, "ProtoDispatcher::ReleaseGenericStream() error: UpdateStreamNotification(DISABLE_OUTPUT) failure!\n"); 
     }
-    genericStream.ClearFlags();
+    genericStream.ClearNotifyFlags();
     stream_table.Remove(genericStream);
     generic_stream_table.Remove(genericStream);
     generic_stream_pool.Put(genericStream);
@@ -783,7 +883,7 @@ bool ProtoDispatcher::BoostPriority()
     // (TBD) Do something differently if "pthread sched param"?
     if (0 != setpriority(PRIO_PROCESS, getpid(), -20))
     {
-        PLOG(PL_ERROR, "PrototDispatcher::BoostPriority() error: setpriority() error: %s\n", GetErrorString());
+        PLOG(PL_ERROR, "ProtoDispatcher::BoostPriority() error: setpriority() error: %s\n", GetErrorString());
         return false;
     }
 #endif // HAVE_SCHED
@@ -965,7 +1065,8 @@ void* ProtoDispatcher::DoThreadStart(void* param)
 
 
 bool ProtoDispatcher::StartThread(bool                         priorityBoost,
-                                  ProtoDispatcher::Controller* theController)
+                                  ProtoDispatcher::Controller* theController,
+                                  ThreadId                     threadId)
 {
     if (IsThreaded())
     {
@@ -982,28 +1083,43 @@ bool ProtoDispatcher::StartThread(bool                         priorityBoost,
     Init(suspend_mutex);
     Init(signal_mutex);
     Lock(suspend_mutex);
+    
+    if ((ThreadId)NULL == threadId)
+    {
 #ifdef WIN32
     // Note: For WinCE, we need to use CreateThread() instead of _beginthreadex()
 #ifdef _WIN32_WCE
-    if (!(actual_thread_handle = CreateThread(NULL, 0, DoThreadStart, this, 0, &thread_id)))
+        if (!(actual_thread_handle = CreateThread(NULL, 0, DoThreadStart, this, 0, &thread_id)))
 #else
-    if (!(actual_thread_handle = (HANDLE)_beginthreadex(NULL, 0, DoThreadStart, this, 0, (unsigned*)&thread_id)))
+        if (!(actual_thread_handle = (HANDLE)_beginthreadex(NULL, 0, DoThreadStart, this, 0, (unsigned*)&thread_id)))
 #endif // if/else _WIN32_WCE
 #else
-    if (0 != pthread_create(&thread_id, NULL, DoThreadStart, this))    
+        if (0 != pthread_create(&thread_id, NULL, DoThreadStart, this))    
 #endif // if/else WIN32/UNIX
-    {
-        PLOG(PL_ERROR, "ProtoDispatcher::StartThread() create thread error: %s\n", GetErrorString());
-        RemoveBreak();
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::StartThread() create thread error: %s\n", GetErrorString());
+            RemoveBreak();
+            Unlock(suspend_mutex);  // will be relocked by DoThreadStart()
+            thread_id = (ThreadId)NULL;
+            controller = NULL;
+            return false;
+        }
+        external_thread = false;
         Unlock(suspend_mutex);
-        thread_id = (ThreadId)NULL;
-        controller = NULL;
-        return false;
     }
-    Unlock(suspend_mutex);
+    else
+    {
+        // Starting within externally created thread
+        ASSERT(threadId == GetCurrentThread());
+        thread_id = threadId;  // externally created thread
+        external_thread = true;
+        // So must exec DoThreadStart() steps here
+        thread_started = true;
+        exit_status = Run();
+        Unlock(suspend_mutex);
+    }
     return true;
 }  // end ProtoDispatcher::StartThread()
-
 
 /**
  * This wakes up the thread, makes a call to the installed prompt_callback
@@ -1146,17 +1262,21 @@ void ProtoDispatcher::DestroyThread()
     if (IsThreaded())
     { 
         controller = NULL;
+        if (!external_thread)
+        {
 #ifdef WIN32
-        if (!IsMyself()) WaitForSingleObject(actual_thread_handle, INFINITE);
-        thread_started = false;
+            if (!IsMyself()) WaitForSingleObject(actual_thread_handle, INFINITE);
 #ifdef _WIN32_WCE
-        CloseHandle(actual_thread_handle);
-        actual_thread_handle = NULL;
+            CloseHandle(actual_thread_handle);
+            actual_thread_handle = NULL;
 #endif // _WIN32_WCE
 #else
-        if (!IsMyself()) pthread_join(thread_id, NULL);
+            if (!IsMyself()) pthread_join(thread_id, NULL);
 #endif // if/else WIN32/UNIX
+        }
+        thread_started = false;
         thread_id = (ThreadId)NULL;
+        external_thread = false;
         RemoveBreak();
         Destroy(suspend_mutex);
         Destroy(signal_mutex);
@@ -1182,23 +1302,23 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
     switch (cmd)
     {
         case ENABLE_INPUT:
-            stream.SetFlag(Stream::INPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_INPUT);
             break;
         case DISABLE_INPUT:
-            stream.UnsetFlag(Stream::INPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_INPUT);
             if (INVALID_DESCRIPTOR != stream.GetInputHandle())
                 FD_CLR(stream.GetInputHandle(), &input_set);
             break;
         case ENABLE_OUTPUT:
-            stream.SetFlag(Stream::OUTPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;
         case DISABLE_OUTPUT:
-            stream.UnsetFlag(Stream::OUTPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_OUTPUT);
             if (INVALID_DESCRIPTOR != stream.GetOutputHandle())
                 FD_CLR(stream.GetOutputHandle(), &output_set);
             break;
         case DISABLE_ALL:
-            stream.ClearFlags();
+            stream.ClearNotifyFlags();
             if (INVALID_DESCRIPTOR != stream.GetInputHandle())
                 FD_CLR(stream.GetInputHandle(), &input_set);
             if (INVALID_DESCRIPTOR != stream.GetOutputHandle())
@@ -1222,7 +1342,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(ENABLE_INPUT) KeventChange() error!\n");
                 return false;
             }
-            stream.SetFlag(Stream::INPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_INPUT);
             break;  
                 
         case DISABLE_INPUT:
@@ -1231,7 +1351,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) KeventChange() error!\n");
                 return false;
             }
-            stream.UnsetFlag(Stream::INPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_INPUT);
             break;
             
         case ENABLE_OUTPUT:
@@ -1240,7 +1360,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) KeventChange() error!\n");
                 return false;
             }
-            stream.SetFlag(Stream::OUTPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;
             
         case DISABLE_OUTPUT:
@@ -1249,7 +1369,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) KeventChange() error!\n");
                 return false;
             }
-            stream.UnsetFlag(Stream::OUTPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;
             
         case DISABLE_ALL:
@@ -1263,7 +1383,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_WARN, "ProtoDispatcher::UpdateStreamNotification(DISABLE_ALL) KeventChange(EVFILT_WRITE) error!\n");
                 //return false;
             }
-            stream.ClearFlags();
+            stream.ClearNotifyFlags();
             // TBD - support exceptions ??
             break;
     }
@@ -1335,7 +1455,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(ENABLE_INPUT) error: EpollChange() failed!\n");
                 return false;
             }
-            stream.SetFlag(Stream::INPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_INPUT);
             break;
                 
         case DISABLE_INPUT:
@@ -1347,7 +1467,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) error: EpollChange() failed!\n");
                 return false;
             }
-            stream.UnsetFlag(Stream::INPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_INPUT);
             break;
             
         case ENABLE_OUTPUT:
@@ -1359,7 +1479,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(ENABLE_OUTPUT) error: EpollChange() failed!\n");
                 return false;
             }
-            stream.SetFlag(Stream::OUTPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;
             
         case DISABLE_OUTPUT:
@@ -1371,7 +1491,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_OUTPUT) error: EpollChange() failed!\n");
                 return false;
             }
-            stream.UnsetFlag(Stream::OUTPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;
             
         case DISABLE_ALL:
@@ -1403,7 +1523,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                     }
                 }
             }
-            stream.ClearFlags();
+            stream.ClearNotifyFlags();
             // TBD - support exceptions ??
             break;
     }
@@ -1478,96 +1598,42 @@ bool ProtoDispatcher::EpollChange(int fd, int events, int op, void* udata)
 
 bool ProtoDispatcher::InstallBreak()
 { 
-#if defined(USE_SELECT) || defined(USE_EPOLL)
-#ifdef USE_EVENTFD
-    // Create eventfd() descriptor
-    int efd = eventfd(0, 0);  // TBD - should we set the flag "EFD_NONBLOCK"???
-    if (-1 == efd)
+#ifndef USE_KQUEUE
+    // ProtoEvent uses eventfd(), kevent(), or pipe under the hood for us
+    if (!break_event.Open())
     {
-        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() eventfd() error: %s\n", GetErrorString());
+        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() break_event.Open() error: %s\n", GetErrorString());
         return false;
     }
-    break_stream.SetDescriptor(efd);
 #ifdef USE_EPOLL
-    if (!EpollChange(efd, EPOLLIN, EPOLL_CTL_ADD, &break_stream))
+    if (!EpollChange(break_event.GetDescriptor(), EPOLLIN, EPOLL_CTL_ADD, &break_stream))
     {
         PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: EpollChange() failed!\n");
-        close(efd);
-        break_stream.SetDescriptor(INVALID_DESCRIPTOR);
+        break_event.Close();
         return false;
     }
 #endif // USE_EPOLL    
-#else
-    // Create a "self pipe" for thread awakening purposes
-    if (0 != pipe(break_pipe_fd))
-    {
-        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() pipe() error: %s\n",
-                GetErrorString());
-        return false;
-    }
-    // make reading non-blocking
-    if(-1 == fcntl(break_pipe_fd[0], F_SETFL, fcntl(break_pipe_fd[0], F_GETFL, 0)  | O_NONBLOCK))
-    {
-        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() fcntl(F_SETFL(O_NONBLOCK)) error: %s\n", GetErrorString());
-        return false;
-    }
-    break_stream.SetDescriptor(break_pipe_fd[0]);
-#ifdef USE_EPOLL
-    if (!EpollChange(break_pipe_fd[0], EPOLLIN, EPOLL_CTL_ADD, &break_stream))
-    {
-        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: EpollChange() failed!\n");
-        close(break_pipe_fd[0]);
-        close(break_pipe_fd[1]);
-        break_pipe_fd[0] = break_pipe_fd[1] = INVALID_DESCRIPTOR;
-        return false;
-    }
-#endif // USE_EPOLL    
-#endif // if/else USE_EVENTFD    
-#elif defined(USE_KQUEUE)
-    if (!KeventChange(1, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, NULL))
+#else   
+    // TBD - use ProtoEvent here, too
+    if (!KeventChange(1, EVFILT_USER, EV_ADD | EV_CLEAR, NULL))
     {
         PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() KeventChange(EVFILT_USER) error: %s\n", GetErrorString());
         return false;
     }
-#else
-#error "undefined async i/o mechanism"  // to make sure we implement something
-#endif // !USE_SELECT && !USE_KQUEUE
+#endif // if/else !KQUEUE
     return true;
 }  // end ProtoDispatcher::InstallBreak()
 
 bool ProtoDispatcher::SetBreak()
 {      
-#if defined(USE_SELECT) || defined(USE_EPOLL)
-#ifdef USE_EVENTFD
-    uint64_t value = 1;
-    if (write(break_stream.GetDescriptor(), &value, sizeof(uint64_t)) < 0)
+#ifndef USE_KQUEUE
+    if (!break_event.Set())
     {
-        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() write(eventfd) error: %s\n", GetErrorString());
+        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() break_event.Set() error: %s\n", GetErrorString());
         return false;
     }
 #else
-    while (1)
-    {
-        char byte = 0;
-        int result = write(break_pipe_fd[1], &byte, 1);
-        if (1 == result)
-        {
-            break;
-        }
-        else if (0 == result)
-        {
-            PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() warning: write() returned zero\n");
-            continue;
-        }
-        else
-        {
-            if (EINTR == errno) continue;  // (TBD) also for EAGAIN ???
-            PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() write(break_pipe) error: %s\n", GetErrorString());
-            return false;
-        }
-    }
-#endif  // end if/else USE_EVENTFD
-#elif defined(USE_KQUEUE)
+    // TBD - use ProtoEvent here, too
     struct kevent kev;
     EV_SET(&kev, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0, NULL);
     if (-1 == kevent(kevent_queue, &kev, 1, NULL, 0, NULL))
@@ -1575,15 +1641,13 @@ bool ProtoDispatcher::SetBreak()
         PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() kevent() error: %s\n", GetErrorString());
         return false;
     }
-#else
-#error "undefined async i/o mechanism"  // to make sure we implement something 
-#endif // !USE_SELECT && !USE_KQUEUE
+#endif // if/else !KQUEUE
     return true;
 }  // end ProtoDispatcher::SetBreak()
 
 void ProtoDispatcher::RemoveBreak()
 {
-#if defined(USE_SELECT) || defined(USE_EPOLL)
+#ifndef USE_KQUEUE
     if (INVALID_DESCRIPTOR != break_stream.GetDescriptor())
     {
 #ifdef USE_EPOLL
@@ -1592,24 +1656,15 @@ void ProtoDispatcher::RemoveBreak()
             PLOG(PL_ERROR, "ProtoDispatcher::RemoveBreak() error: EpollChange() failed!\n");
         }
 #endif // USE_EPOLL
-        // Close down the break_stream pipe or eventfd
-        close(break_stream.GetDescriptor());
-        break_stream.SetDescriptor(INVALID_DESCRIPTOR);
-#ifndef USE_EVENTFD
-        // We're using the break_pipe, so close() the extra descriptor
-        close(break_pipe_fd[1]);
-        break_pipe_fd[0] = break_pipe_fd[1] = INVALID_DESCRIPTOR;       
-#endif
+        // Close down the break_stream ProtoEvent
+        break_event.Close();
     }
-    
-#elif defined(USE_KQUEUE)
+#else // USE_KQUEUE
     struct kevent kev;
     EV_SET(&kev, 1, EVFILT_USER, EV_DELETE, 0, 0, NULL);
     if (-1 == kevent(kevent_queue, &kev, 1, NULL, 0, NULL))
         PLOG(PL_ERROR, "ProtoDispatcher::RemoveBreak() kevent() error: %s\n", GetErrorString());
-#else
-#error "undefined async i/o mechanism"  // to make sure we implement something 
-#endif
+#endif // if/else !KQUEUE
 }  // end ProtoDispatcher::RemoveBreak()
 
 
@@ -1641,8 +1696,6 @@ void ProtoDispatcher::Wait()
 #endif // if/else USE_TIMESPEC
     //double timerDelay = ProtoTimerMgr::GetTimeRemaining();
     double timerDelay = timer_delay;
-    //TRACE("Wait() timerDelay:%lf\n", timerDelay);
-
     if (timerDelay < 0.0)
     {
 #ifdef USE_TIMERFD
@@ -1707,18 +1760,11 @@ void ProtoDispatcher::Wait()
     
 #if defined(USE_SELECT)  
     // Monitor "break_pipe" if we are a threaded dispatcher
-    // TBD - change this to use "eventfd()" on Linux
     if (IsThreaded())
     {
-#ifdef USE_EVENTFD
-        FD_SET(break_stream.GetDescriptor(), &input_set);  
-        if (break_stream.GetDescriptor() > maxDescriptor)
-            maxDescriptor = break_stream.GetDescriptor();
-#else
-        FD_SET(break_pipe_fd[0], &input_set);  
-        if (break_pipe_fd[0] > maxDescriptor)
-            maxDescriptor = break_pipe_fd[0];
-#endif // if/else USE_EVENTFD
+        FD_SET(break_event.GetDescriptor(), &input_set);  
+        if (break_event.GetDescriptor() > maxDescriptor)
+            maxDescriptor = break_event.GetDescriptor();
     }
     
     // Iterate through and add streams to our FD_SETs
@@ -1862,30 +1908,26 @@ void ProtoDispatcher::Dispatch()
                             static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
                         break;
                     }
-                    
                     case Stream::TIMER:
+                        break;
                     case Stream::EVENT:
                     {
-                        // No timer or event stream is put in the stream_table
+                        EventStream* eventStream = static_cast<EventStream*>(stream);
+                        if (FD_ISSET(eventStream->GetDescriptor(), &input_set))
+                        {
+                            ProtoEvent& theEvent = eventStream->GetEvent();
+                            if (theEvent.GetAutoReset()) theEvent.Reset();
+                            theEvent.OnNotify(); 
+                        }
                         break;
                     }
-                }  // end switch (stream->GetType())
+                }  // end switch stream->GetType())
             }
-            if (break_stream.GetDescriptor() != INVALID_DESCRIPTOR && 
-                FD_ISSET(break_stream.GetDescriptor(), &input_set))
+            if ((INVALID_DESCRIPTOR != break_stream.GetDescriptor()) && 
+                 FD_ISSET(break_stream.GetDescriptor(), &input_set))
             {
-                // We were signaled so reset our break_pipe or eventfd
-#ifdef USE_EVENTFD
-                // Reset "signal" by reading eventfd count
-                uint64_t counter = 0;
-                if (read(break_stream.GetDescriptor(), &counter, sizeof(counter)) < 0)
-                    PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() read(event_fd) error: %s\n", GetErrorString());
-            
-#else
-                // Reset "signal" by emptying break_pipe
-                char byte[32];
-                while (read(break_pipe_fd[0], byte, 32) > 0);
-#endif // if/else USE_EVENTFD
+                // We were signaled so reset our break_event
+                break_event.Reset();  // break_event is auto reset
             }
 #ifdef USE_TIMERFD
             // TBD - should we put this code up at the top as the first check
@@ -1902,8 +1944,7 @@ void ProtoDispatcher::Dispatch()
             break;
     }  // end switch(wait_status) [USE_SELECT]
     
-#elif defined(USE_EPOLL)
-    
+#elif defined(USE_EPOLL)   
     switch(wait_status)
     {
         case -1:
@@ -2016,16 +2057,14 @@ void ProtoDispatcher::Dispatch()
                         }
                         case Stream::EVENT:
                         {
-#ifdef USE_EVENTFD
-                            uint64_t counter = 0;
-                            if (read(static_cast<EventStream*>(stream)->GetDescriptor(), &counter, sizeof(counter)) < 0)
-                                PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() read(event_fd) error: %s\n", GetErrorString());
-#else
-                            // Reset "signal" by emptying pipe
-                            char byte[32];
-                            while (read(break_pipe_fd[0], byte, 32) > 0);
-#endif // if/else USE_EVENTFD        
-                            break;
+                            if (0 != (EPOLLIN & evp->events))
+                            {
+                                EventStream* eventStream = static_cast<EventStream*>(stream);
+                                ProtoEvent& event = eventStream->GetEvent();
+                                if (event.GetAutoReset()) event.Reset();
+                                event.OnNotify();  
+                            }
+                            break; 
                         }
                     }  // end switch(stream->GetType()) [USE_EPOLL]
                 }
@@ -2087,8 +2126,13 @@ void ProtoDispatcher::Dispatch()
                                 static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
                                 break;
                             case Stream::TIMER:
-                            case Stream::EVENT:
                                 // No Stream::TIMER or Stream::EVENT is used eith EVFILT_READ for now
+                                break;
+                            case Stream::EVENT:
+                                EventStream* eventStream = static_cast<EventStream*>(stream);
+                                ProtoEvent& theEvent = eventStream->GetEvent();
+                                if (theEvent.GetAutoReset()) theEvent.Reset();
+                                theEvent.OnNotify();  
                                 break;
                         }
                         break;
@@ -2145,33 +2189,28 @@ void ProtoDispatcher::Dispatch()
 
 bool ProtoDispatcher::InstallBreak()
 {
-	ASSERT(INVALID_DESCRIPTOR == break_stream.GetDescriptor());
-    // The break_event used to break the MsgWaitForMultipleObjectsEx() call
-    // This needs to be manual reset?
-	HANDLE brk = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (INVALID_HANDLE_VALUE == brk)
+    ASSERT(INVALID_DESCRIPTOR == break_event.GetDescriptor());
+    if (!break_event.Open())
     {
         PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() CreateEvent() error\n");
         return false;
     }
-	break_stream.SetDescriptor(brk);
-	int index = Win32AddStream(break_stream, brk);
+	int index = Win32AddStream(break_stream, break_event.GetDescriptor());
 	if (index < 0)
 	{
-		PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: add break_stream failed!\n");
-        CloseHandle(brk);
-		break_stream.SetDescriptor(INVALID_DESCRIPTOR);
-        return false;
-    }
+	    PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: add break_stream failed!\n");
+	    break_event.Close();
+	    return false;
+	}
 	break_stream.SetIndex(index);
     return true;
 }  // end ProtoDispatcher::InstallBreak()
 
 bool ProtoDispatcher::SetBreak()
 {
-	if (0 == SetEvent(break_stream.GetDescriptor()))
+    if (!break_event.Set())
     {
-        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() SetEvent(break_event) error: %s\n", GetErrorString());
+        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() break_event.Set() error: %s\n", GetErrorString());
         return false;
     }
     return true;
@@ -2183,8 +2222,7 @@ void ProtoDispatcher::RemoveBreak()
     {
 		Win32RemoveStream(break_stream.GetIndex());
 		break_stream.SetIndex(-1);
-		CloseHandle(break_stream.GetDescriptor());
-		break_stream.SetDescriptor(INVALID_DESCRIPTOR);
+        break_event.Close();
     }
 }  // end ProtoDispatcher::RemoveBreak()
 
@@ -2274,7 +2312,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 return false;
             }
             stream.SetIndex(index);
-            stream.SetFlag(Stream::INPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_INPUT);
             break;          
         }
         case DISABLE_INPUT:
@@ -2282,7 +2320,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
 			ASSERT(stream.GetIndex() >= 0);
             Win32RemoveStream(stream.GetIndex());
             stream.SetIndex(-1);
-            stream.UnsetFlag(Stream::INPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_INPUT);
             break;
         }
 		case ENABLE_OUTPUT:
@@ -2295,7 +2333,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 return false;
             }
             stream.SetOutdex(outdex);
-            stream.SetFlag(Stream::OUTPUT);
+            stream.SetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;          
         }
         case DISABLE_OUTPUT:
@@ -2303,7 +2341,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
             ASSERT(stream.GetOutdex() >= 0);
             Win32RemoveStream(stream.GetOutdex());
             stream.SetOutdex(-1);
-            stream.UnsetFlag(Stream::OUTPUT);
+            stream.UnsetNotifyFlag(Stream::NOTIFY_OUTPUT);
             break;
         }
         case DISABLE_ALL:
@@ -2318,7 +2356,7 @@ bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationComma
                 Win32RemoveStream(stream.GetOutdex());
                 stream.SetIndex(-1);
             }  
-            stream.ClearFlags();
+            stream.ClearNotifyFlags();
             break;
         }
     }
@@ -2391,7 +2429,6 @@ void ProtoDispatcher::Wait()
     double timerDelay = timer_delay;
 	// Don't wait if we have "ready" streams pending
 	if (!ready_stream_list.IsEmpty()) timerDelay = 0.0;
-
 
 #ifdef USE_WAITABLE_TIMER
 	DWORD msec = INFINITE;
@@ -2606,17 +2643,20 @@ void ProtoDispatcher::Dispatch()
 					case Stream::TIMER:
 					{
 #ifdef USE_WAITABLE_TIMER
-						// Our one and only "timer_stream"
-						ResetEvent(timer_stream.GetDescriptor());
-						timer_active = false;
+					    // Our one and only "timer_stream"
+					    ResetEvent(timer_stream.GetDescriptor());
+					    timer_active = false;
 #endif // USE_WAITABLE_TIMER
-						break;
+					    break;
 					}
 					case Stream::EVENT:
 					{
-						// our one and only "break" event
-						ResetEvent(break_stream.GetDescriptor());
-						break;
+					    EventStream* eventStream = static_cast<EventStream*>(stream);
+                        ProtoEvent& event = eventStream->GetEvent();
+                        if (event.GetAutoReset()) event.Reset();
+                        // Note the "break_stream" has no listener, but others might
+                        if (&break_stream != eventStream) event.OnNotify();  
+                        break;
 					}
 					case Stream::GENERIC:
 					{

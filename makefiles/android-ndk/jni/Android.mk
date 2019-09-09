@@ -36,7 +36,9 @@ LOCAL_SRC_FILES := \
 	../../../src/common/protoChannel.cpp \
 	../../../src/common/protoDebug.cpp \
 	../../../src/common/protoDispatcher.cpp \
+	../../../src/common/protoEvent.cpp \
 	../../../src/common/protoGraph.cpp \
+	../../../src/common/protoJson.cpp \
 	../../../src/common/protoList.cpp \
 	../../../src/common/protoNet.cpp \
 	../../../src/common/protoPipe.cpp \

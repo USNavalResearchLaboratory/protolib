@@ -16,7 +16,6 @@ JAVA =  ../src/java
 INCLUDES = $(TCL_INCL_PATH) $(SYSTEM_INCLUDES) -I../include -I/usr/include/libxml2
 
 CFLAGS = -g -DPROTO_DEBUG -DUNIX -D_FILE_OFFSET_BITS=64 -O $(SYSTEM_CFLAGS) $(SYSTEM_HAVES) $(INCLUDES) 
-#CFLAGS = -g -DPROTO_DEBUG -DUNIX -D_FILE_OFFSET_BITS=64 $(SYSTEM_CFLAGS) -fPIC $(SYSTEM_HAVES) $(INCLUDES)
 
 LDFLAGS = $(SYSTEM_LDFLAGS)
 
@@ -29,12 +28,15 @@ TARGETS = libprotokit.a libprotokit
 .cpp.o:
 	$(CC) -c $(CFLAGS) -o $*.o $*.cpp
 
-allExamples: arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample protoCapExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample threadExample timerTest ting vifExample vifLan protoExample
+allExamples: arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample \
+jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample \
+protoCapExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample \
+threadExample timerTest ting vifExample vifLan protoExample eventExample tokenatorExample unitTests
 
 KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase64.cpp \
-          $(COMMON)/protoBitmask.cpp $(COMMON)/protoCap.cpp \
-          $(COMMON)/protoChannel.cpp $(COMMON)/protoCheck.cpp $(COMMON)/protoDebug.cpp \
-          $(COMMON)/protoDispatcher.cpp $(COMMON)/protoPipe.cpp \
+          $(COMMON)/protoBitmask.cpp $(COMMON)/protoCap.cpp $(COMMON)/protoChannel.cpp \
+          $(COMMON)/protoCheck.cpp $(COMMON)/protoDebug.cpp $(COMMON)/protoDispatcher.cpp \
+          $(COMMON)/protoEvent.cpp $(COMMON)/protoPipe.cpp $(COMMON)/protoJson.cpp \
           $(COMMON)/protoPkt.cpp $(COMMON)/protoPktARP.cpp $(COMMON)/protoPktETH.cpp \
           $(COMMON)/protoPktIGMP.cpp $(COMMON)/protoPktIP.cpp $(COMMON)/protoPktTCP.cpp \
           $(COMMON)/protoPktRIP.cpp $(COMMON)/protoPktRTP.cpp $(COMMON)/protoSocket.cpp \
@@ -83,6 +85,17 @@ protoExample:    $(EXAMPLE_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(EXAMPLE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a 
 	mkdir -p ../bin
 	cp $@ ../bin/$@
+
+# Runs a few unit tests
+
+UNITTESTS_SRC = $(EXAMPLES)/unitTests.cpp $(EXAMPLES)/testFuncs.cpp $(MANET)/manetMsg.cpp
+UNITTESTS_OBJ = $(UNITTESTS_SRC:.cpp=.o)
+
+unitTests:    $(UNITTESTS_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(UNITTESTS_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a 
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
 
 # Simple example command-line tcp client or server application
 
@@ -157,6 +170,14 @@ timerTest:    $(TIMER_TEST_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@  
     
+TIMER_SCALE_SRC = $(EXAMPLES)/timerScaling.cpp
+TIMER_SCALE_OBJ = $(TIMER_SCALE_SRC:.cpp=.o)
+
+timerScale:    $(TIMER_SCALE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(TIMER_SCALE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a   
+	mkdir -p ../bin
+	cp $@ ../bin/$@  
+    
 THREAD_SRC = $(EXAMPLES)/threadExample.cpp
 THREAD_OBJ = $(THREAD_SRC:.cpp=.o)
 
@@ -164,6 +185,22 @@ threadExample:    $(THREAD_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(THREAD_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
+
+EVENT_SRC = $(EXAMPLES)/eventExample.cpp
+EVENT_OBJ = $(EVENT_SRC:.cpp=.o)
+
+eventExample:    $(EVENT_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(EVENT_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+TK_SRC = $(EXAMPLES)/tokenatorExample.cpp
+TK_OBJ = $(TK_SRC:.cpp=.o)
+
+tokenatorExample:    $(TK_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(TK_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@    
     
 SOCK2PIPE_SRC = $(EXAMPLES)/sock2PipeExample.cpp
 SOCK2PIPE_OBJ = $(SOCK2PIPE_SRC:.cpp=.o)
@@ -181,7 +218,7 @@ pipe2SockExample:    $(PIPE2SOCK_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
 
-MSG2MSG_SRC = $(EXAMPLES)/msg2MsgExample.cpp
+MSG2MSG_SRC = $(EXAMPLES)/msg2MsgExample.cpp 
 MSG2MSG_OBJ = $(MSG2MSG_SRC:.cpp=.o)
 
 msg2MsgExample:    $(MSG2MSG_OBJ) libprotokit.a
@@ -202,6 +239,14 @@ PIPE_OBJ = $(PIPE_SRC:.cpp=.o)
 
 pipeExample:    $(PIPE_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(PIPE_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+    
+JOIN_SRC = $(EXAMPLES)/join.cpp $(SYSTEM_SRC_EX)
+JOIN_OBJ = $(JOIN_SRC:.cpp=.o)
+
+join:    $(JOIN_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(JOIN_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
 
@@ -275,7 +320,7 @@ graphExample:    $(GRAPH_OBJ) libprotokit.a
 	cp $@ ../bin/$@
 
 GRAPH_RIDER_SRC = $(EXAMPLES)/graphRider.cpp $(COMMON)/protoGraph.cpp \
-		$(MANET)/manetGraph.cpp
+		$(MANET)/manetGraph.cpp $(MANET)/manetGraphML.cpp
 GRAPH_RIDER_OBJ = $(GRAPH_RIDER_SRC:.cpp=.o)
 graphRider:    $(GRAPH_RIDER_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(GRAPH_RIDER_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
@@ -301,7 +346,7 @@ gr:    $(GR_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
                 
-MSG_SRC = $(EXAMPLES)/msgExample.cpp $(MANET)/manetMsg.cpp
+MSG_SRC = $(EXAMPLES)/msgExample.cpp $(EXAMPLES)/testFuncs.cpp $(MANET)/manetMsg.cpp 
 MSG_OBJ = $(MSG_SRC:.cpp=.o)
 
 msgExample:    $(MSG_OBJ) libprotokit.a
@@ -309,7 +354,7 @@ msgExample:    $(MSG_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
     
-JSON_SRC = $(EXAMPLES)/jsonExample.cpp $(COMMON)/protoJson.cpp
+JSON_SRC = $(EXAMPLES)/jsonExample.cpp 
 JSON_OBJ = $(JSON_SRC:.cpp=.o)
 
 jsonExample:    $(JSON_OBJ) libprotokit.a

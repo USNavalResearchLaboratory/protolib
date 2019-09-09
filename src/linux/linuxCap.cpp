@@ -188,7 +188,7 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     struct sockaddr_ll pktAddr;
     socklen_t addrLen = sizeof(pktAddr);
     int result = recvfrom(descriptor, buffer, (size_t)numBytes, 0, 
-                          (struct sockaddr*)&pktAddr, &addrLen);
+                          (struct sockaddr*)&pktAddr, &addrLen);    
     if (result < 0)
     {
         numBytes = 0;
@@ -210,7 +210,7 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
             if (pktAddr.sll_pkttype == PACKET_OUTGOING)
                 *direction = OUTBOUND;
             else 
-                *direction = INBOUND;
+                *direction = INBOUND; 
         }
         numBytes = result; 
         return true;   

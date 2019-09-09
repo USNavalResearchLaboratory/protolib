@@ -663,7 +663,7 @@ ProtoTree::Item* ProtoTree::FindPrefixSubtree(const char*  prefix,
         do 
         { 
             p = x;
-            x = Bit(prefix, prefixSize, x->bit, keyEndian) ? x->right : x->left;  
+            x = Bit(prefix, prefixSize, x->bit, keyEndian) ? x->right : x->left; 
         } while ((x->parent == p) && (x->bit < prefixSize));
         if (PrefixIsEqual(x->GetKey(), x->GetKeysize(), prefix, prefixSize, keyEndian)) 
             return x;
@@ -1035,7 +1035,6 @@ ProtoTree::Item* ProtoTree::Iterator::PeekPrevItem()
 
 ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
 {
-    
     if (NULL != next)
     {
         ProtoTree* tree = static_cast<ProtoTree*>(iterable);
@@ -1733,6 +1732,7 @@ void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned
         list_iterator.SetCursor(match);
     }
 }  // end ProtoSortedTree::Iterator::Reset()
+
                 
 ProtoSortedTree::Iterator::TempItem::TempItem(const char* theKey, unsigned int theKeysize, ProtoTree::Endian keyEndian)
  : key(theKey), keysize(theKeysize), key_endian(keyEndian)

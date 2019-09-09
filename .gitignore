@@ -1,0 +1,45 @@
+# main build
+bin/
+lib/
+
+# build executables
+makefiles/arposer
+makefiles/averageExample
+makefiles/base64Example
+makefiles/detourExample
+makefiles/eventExample
+makefiles/graphExample
+makefiles/graphRider
+makefiles/graphXMLExample
+makefiles/jsonExample
+makefiles/lfsrExample
+makefiles/msg2MsgExample
+makefiles/msgExample
+makefiles/netExample
+makefiles/pcmd
+makefiles/pipe2SockExample
+makefiles/pipeExample
+makefiles/protoCapExample
+makefiles/protoExample
+makefiles/protoFileExample
+makefiles/queueExample
+makefiles/riposer
+makefiles/serialExample
+makefiles/simpleTcpExample
+makefiles/sock2PipeExample
+makefiles/threadExample
+makefiles/timerTest
+makefiles/ting
+makefiles/tokenatorExample
+makefiles/unitTests
+makefiles/vifExample
+makefiles/vifLan
+
+# OS generated files #
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

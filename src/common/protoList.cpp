@@ -45,7 +45,11 @@ void ProtoIterable::RemoveIterator(Iterator& iterator)
     iterator.iterable = NULL;
 }  // end ProtoIterable::RemoveIterator()
 
-// This should be called _before_ theAction is executed by the iterable
+// This should be called before or after theAction is executed by the iterable
+// depending on the data structure.  For example, APPEND/PREPEND list actions
+// use the head/tail state to update list iterators properly so these need
+// to call UpdateIterator _before_ apppend/prepend while other types may
+// require post-action data structure state.
 void ProtoIterable::UpdateIterators(Item* theItem, Iterator::Action theAction) const
 {
     Iterator* nextIterator = iterator_list_head;
@@ -110,8 +114,6 @@ void ProtoList::Append(Item& item)
     tail = &item;
 }  // end ProtoList::Append()
 
-
-
 void ProtoList::Insert(Item& theItem, Item& nextItem)
 {
     theItem.plist_next = &nextItem;
@@ -123,6 +125,18 @@ void ProtoList::Insert(Item& theItem, Item& nextItem)
     nextItem.plist_prev = &theItem;
     UpdateIterators(&theItem, Iterator::INSERT);
 }  // end ProtoList::Insert()
+
+void ProtoList::InsertAfter(Item& theItem, Item& prevItem)
+{
+    theItem.plist_prev = &prevItem;
+    theItem.plist_next = prevItem.plist_next;
+    if (&prevItem == tail)
+        tail = &theItem;
+    else
+        prevItem.plist_next->plist_prev = &theItem;
+    prevItem.plist_next = &theItem;
+    UpdateIterators(&theItem, Iterator::INSERT);
+}  // end ProtoList::ProtoList::InsertAfter()
 
 void ProtoList::Remove(Item& item)
 {

@@ -3,6 +3,13 @@
 
 #include "protoDefs.h"
 
+#ifdef WIN32
+#include <winsock2.h>
+typedef long suseconds_t;
+#else  // UNIX
+#include <arpa/inet.h>  // for htonl()
+#endif  // if/else WIN32
+
 /**
  * @class ProtoTime
  *
@@ -90,8 +97,73 @@ class ProtoTime
         
         // Computes (t1 - t2)
         static double Delta(const ProtoTime& t1, const ProtoTime& t2);
-        double operator-(const ProtoTime& t)
+        double operator-(const ProtoTime& t) const
             {return Delta(*this, t);} 
+        
+        class Key
+        {
+            public:
+                Key() {Invalidate();}
+                void SetValue(const ProtoTime& theTime)
+                {
+                    key.tv_sec = htont(theTime.tval.tv_sec);
+                    key.tv_usec = htontu(theTime.tval.tv_usec);
+                }   
+                void Invalidate()
+                {
+                    key.tv_sec = 0;
+                    key.tv_usec = 1000000;
+                }
+                bool IsValid() const
+                    {return (1000000 != key.tv_usec);}
+                
+                const char* GetKey() const
+                    {return (const char*)&key;}
+                unsigned int GetKeysize() const
+                    {return ((sizeof(time_t) + sizeof(suseconds_t)) << 3);}
+
+            private:
+                // These helper methods convert the tv_sec and tv_usec
+                // fields to network byte order (Big Endian) to provide
+                // a key suitable for ProtoTree use. (e.g., with ProtoSortedTree,
+                // the key can be used to build time-sorted lists.  ProtoTimerMgr
+                // uses this for managing timeouts.
+                static time_t htont(time_t t)
+                {
+                    if (8 == sizeof(time_t))
+                    {
+                        UINT32* t1 = (UINT32*)&t;
+                        time_t result;
+                        UINT32* t2 = (UINT32*)&result;
+                        t2[0] = htonl(t1[1]);
+                        t2[1] = htonl(t1[0]);
+                        return result;
+                    }
+                    else // if (4 = sizeof(time_t))
+                    {
+                        return ((time_t)htonl((UINT32)t));
+                    }  
+                }  // end ProtoTime::Key::htont()
+                static suseconds_t htontu(suseconds_t t)
+                {
+                    if (8 == sizeof(suseconds_t))
+                    {
+                        UINT32* t1 = (UINT32*)&t;
+                        suseconds_t result;
+                        UINT32* t2 = (UINT32*)&result;
+                        t2[0] = htonl(t1[1]);
+                        t2[1] = htonl(t1[0]);
+                        return result;
+                    }
+                    else // if (4 = sizeof(suseconds_t))
+                    {
+                        return ((suseconds_t)htonl((UINT32)t));
+                    }  
+                }  // end htontu()
+
+                struct timeval key;  // network byte ordered version 
+               
+        };  // end class ProtoTime::Key
     
     private:
         // (TBD) for now we use struct timeval for convenience, but in future

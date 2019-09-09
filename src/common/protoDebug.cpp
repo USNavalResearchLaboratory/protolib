@@ -161,8 +161,6 @@ void CloseDebugPipe()
 }  // end CloseDebugPipe()
 
 
-
-
 #if defined(WIN32) && !defined(SIMULATE)
 
 static unsigned int console_reference_count = 0;
@@ -291,7 +289,6 @@ DWORD ProtoDebugWindow::Run()
         myName = moduleName;
     }
 
-    
     cl.lpszClassName = myName;
 
     if (!RegisterClass(&cl))
@@ -511,8 +508,9 @@ static ProtoDebugWindow debug_window;
 
 /**
  * @brief Display string if statement's debug level is large enough
+          This call is DEPRECATED!
  */
-void DMSG(unsigned int level, const char *format, ...)
+void ProtoDMSG(unsigned int level, const char *format, ...)
 {	
     if (level <= DebugLevel())
     {
@@ -543,20 +541,20 @@ void DMSG(unsigned int level, const char *format, ...)
         }
         va_end(args);   
     }
-}  // end DMSG();
+}  // end ProtoDMSG();
 
 
 /**
  * @brief Provides a basic logging facility for Protlib that uses the typical logging levels
  * to allow different levels for logging and run-time debugging of protolib applications.  
  */
-void PLOG(ProtoDebugLevel level, const char *format, ...)
+void ProtoLog(ProtoDebugLevel level, const char* format, ...)
 {
     if (((unsigned int)level <= DebugLevel()) || (PL_ALWAYS == level)) 
     {
         va_list args;
         va_start(args, format);
-        const char * header = "";
+        const char* header = "";
 		switch(level) 
         {  // Print out the Logging Type before the message
             case PL_FATAL: header = "Proto Fatal: ";
@@ -617,7 +615,6 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
             strcpy(buffer, header);
             unsigned int count = (unsigned int)vsnprintf(buffer + headerLen, 8191-headerLen, format, args) + 1;
             count += headerLen;
-
 #endif
 #endif  // if/else _WIN32_WCE
             if (count > 8192) count = 8192;
@@ -670,7 +667,7 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
             if (vfprintf(debugLog, format, args) < 0)
             {
                 // perror() seems more resilient for some reason (at least on Mac OSX)
-                perror("");
+                perror(""); // flushes any partial printout from failed vfprintf()
                 char buffer[8192];
                 buffer[8191] = '\0';
                 strcpy(buffer, header);
@@ -688,7 +685,7 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
         va_end(args);   
     }
 
-} // End PLOG
+} // end ProtoLog()
 
 // LP 11-01-05 - replaced
 // #ifdef WIN32
@@ -700,24 +697,95 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
  */
 void OpenDebugWindow()
 {
-    // Open a console window and redirect stderr and stdout to it
+	// Open a console window and redirect stderr and stdout to it
     if (0 == console_reference_count)
     {
 #ifndef _WIN32_WCE
+		int fdStd;
+		HANDLE hStd;
+		CONSOLE_SCREEN_BUFFER_INFO coninfo;
+		/* ensure references to current console are flushed and closed
+		* before freeing the console. To get things set up in case we're
+		* not a console application, first re-open the std streams to
+		* NUL with no buffering, and close invalid file descriptors
+		* 0, 1, and 2. The std streams will be redirected to the console
+		* once it's created. */
+
+		if (_get_osfhandle(0) < 0)
+			_close(0);
+		freopen("//./NUL", "r", stdin);
+		setvbuf(stdin, NULL, _IONBF, 0);
+		if (_get_osfhandle(1) < 0)
+			_close(1);
+		freopen("//./NUL", "w", stdout);
+		setvbuf(stdout, NULL, _IONBF, 0);
+		if (_get_osfhandle(2) < 0)
+			_close(2);
+		freopen("//./NUL", "w", stderr);
+		setvbuf(stderr, NULL, _IONBF, 0);
+
+		FreeConsole();
+
+		if (!AllocConsole()) {
+			//ERROR_WINDOW("Cannot allocate windows console!");
+			return;
+		}
+		//SetConsoleTitle("My Nice Console");
+
+		// set the screen buffer to be big enough to let us scroll text
+		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &coninfo);
+		coninfo.dwSize.Y = 1024;
+		//coninfo.dwSize.X = 100;
+		SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), coninfo.dwSize);
+
+		// redirect unbuffered STDIN to the console
+		hStd = GetStdHandle(STD_INPUT_HANDLE);
+		fdStd = _open_osfhandle((intptr_t)hStd, _O_TEXT);
+		_dup2(fdStd, fileno(stdin));
+		SetStdHandle(STD_INPUT_HANDLE, (HANDLE)_get_osfhandle(fileno(stdin)));
+		_close(fdStd);
+
+		// redirect unbuffered STDOUT to the console
+		hStd = GetStdHandle(STD_OUTPUT_HANDLE);
+		fdStd = _open_osfhandle((intptr_t)hStd, _O_TEXT);
+		_dup2(fdStd, fileno(stdout));
+		SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(fileno(stdout)));
+		_close(fdStd);
+
+		// redirect unbuffered STDERR to the console
+		hStd = GetStdHandle(STD_ERROR_HANDLE);
+		fdStd = _open_osfhandle((intptr_t)hStd, _O_TEXT);
+		_dup2(fdStd, fileno(stderr));
+		SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(fileno(stderr)));
+		_close(fdStd);
+
+		// Set Con Attributes
+		//SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+		//	FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+		SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE),
+			ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
+		//SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE),
+		//	ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
+		/*
         AllocConsole();
-        int hCrt = _open_osfhandle((long) GetStdHandle(STD_OUTPUT_HANDLE), _O_TEXT);
-        FILE* hf = _fdopen(hCrt, "w" );
-        *stdout = *hf;
+        //int hCrt = _open_osfhandle((long) GetStdHandle(STD_OUTPUT_HANDLE), _O_TEXT);
+        //FILE* hf = _fdopen(hCrt, "w" );
+        // *stdout = *hf;
+		FILE* hf; 
+		freopen_s(&hf, "CONOUT$", "w", stdout);
         int i = setvbuf(stdout, NULL, _IONBF, 0 );
         
-        hCrt = _open_osfhandle((long) GetStdHandle(STD_INPUT_HANDLE), _O_TEXT);
-        hf = _fdopen(hCrt, "r" );
-        *stdin = *hf;
+        //hCrt = _open_osfhandle((long) GetStdHandle(STD_INPUT_HANDLE), _O_TEXT);
+        //hf = _fdopen(hCrt, "r" );
+        // *stdin = *hf;
+		freopen_s(&hf, "CONIN$", "r", stdin);
 
-        hCrt = _open_osfhandle((long) GetStdHandle(STD_ERROR_HANDLE), _O_TEXT);
-        hf = _fdopen(hCrt, "w" );
-        *stderr = *hf;
+        //hCrt = _open_osfhandle((long) GetStdHandle(STD_ERROR_HANDLE), _O_TEXT);
+		//hf = _fdopen(hCrt, "w" );
+        // *stderr = *hf;
+		freopen_s(&hf, "CONERR$", "w", stderr);
         i = setvbuf(stderr, NULL, _IONBF, 0);
+		*/
 #endif // if !_WIN32_CE
     }
 #ifdef _WIN32_WCE

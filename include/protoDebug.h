@@ -17,6 +17,8 @@
 */
 #ifndef _PROTO_DEBUG
 #define _PROTO_DEBUG
+         
+#include "protoDefs.h"
 
 #ifdef WIN32
 #include <winsock2.h>
@@ -28,7 +30,6 @@
 enum ProtoDebugLevel {PL_FATAL, PL_ERROR, PL_WARN, PL_INFO, PL_DEBUG, PL_TRACE, PL_DETAIL, PL_MAX, PL_ALWAYS}; 
 
 #if defined(PROTO_DEBUG) || defined(PROTO_MSG)
-
 void SetDebugLevel(unsigned int level);
 unsigned int GetDebugLevel();
 
@@ -36,8 +37,8 @@ bool OpenDebugLog(const char *path);       // log debug messages to the file nam
 void CloseDebugLog();
 bool OpenDebugPipe(const char* pipeName);  // log debug messages to a datagram ProtoPipe (PLOG only)
 void CloseDebugPipe();
-void DMSG(unsigned int level, const char *format, ...);
-void PLOG(ProtoDebugLevel level, const char *format, ...);
+void ProtoDMSG(unsigned int level, const char *format, ...);
+void ProtoLog(ProtoDebugLevel level, const char *format, ...);
 #ifdef WIN32
 void OpenDebugWindow();
 void PopupDebugWindow();
@@ -50,17 +51,23 @@ inline bool OpenDebugLog(const char *path) {return true;}
 inline void CloseDebugLog() {}
 inline bool OpenDebugPipe(const char* pipeName) {return true;}
 inline void CloseDebugPipe() {}
-inline void DMSG(unsigned int level, const char *format, ...) {}
-inline void PLOG(ProtoDebugLevel level, const char *format, ...) {}
+inline void ProtoDMSG(unsigned int level, const char *format, ...) {}
+inline void ProtoLog(ProtoDebugLevel level, const char *format, ...) {}
 #ifdef WIN32
 inline void OpenDebugWindow() {}
 inline void PopupDebugWindow() {}
 inline void CloseDebugWindow() {}
 #endif // WIN32
-
 #endif // if/else PROTO_DEBUG || PROTO_MSG
 
-#if PROTO_DEBUG || PROTO_MSG
+// printf()-like debug logging routines (Note DMSG() is  deprecated)
+// Call the PLOG() macro for better performance
+inline void ProtoNoop() {}
+#define PLOG(X, ...) (((X <= ::GetDebugLevel()) || (X == PL_ALWAYS)) ? \
+                            ProtoLog(X, ##__VA_ARGS__) : ProtoNoop())
+#define DMSG(X, ...) (X <= ::GetDebugLevel() ? ProtoDMSG(X, ##__VA_ARGS__) : ProtoNoop())
+
+#if defined(PROTO_DEBUG) || defined(PROTO_MSG)
 
 // The following prototype and "SetAssertFunction()" allows the behavior of the PROTO_ASSERT macro
 // to be overridden.  The default behavior is just a call to the "assert()" system call (or ABORT() if no "assert()" call is available)

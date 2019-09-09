@@ -9,24 +9,84 @@
 // the relay set selection.
 
 #include "manetGraph.h"
+#include "manetGraphML.h"
 #include "protoSpace.h"  // we use this for its bounding box iteration
 #include <protoDebug.h>
 #include <protoDefs.h>
+#include <protoString.h> // for ProtoTokenator
 
 #include <stdio.h>   // for sprintf()
 #include <stdlib.h>  // for rand(), srand()
 #include <ctype.h>   // for "isprint()"
 #include <math.h>    // for "sqrt()"
 
+//#include <chrono>
+
+
+class Node;  // predeclared so it can be passed to templated CdsInterface definition below
+
+class CdsInterface;   // predeclared so it can be passed to templated CdsLink definition below
+           
+
+// Define a ManetLink type that uses the "SimpleCostDouble" as its cost metric
+class CdsLink : public NetGraph::LinkTemplate<NetGraph::SimpleCostDouble, CdsInterface>, public ProtoQueue::Item 
+{
+    public:
+        class SimpleList : public ProtoSimpleQueueTemplate<CdsLink> {};
+};
+
+class CdsInterface : public NetGraph::InterfaceTemplate<NetGraph::SimpleCostDouble, CdsInterface, CdsLink, Node> 
+{
+    public:
+        CdsInterface(Node& theNode) 
+          : NetGraph::InterfaceTemplate<NetGraph::SimpleCostDouble, CdsInterface, CdsLink, Node>(theNode),
+            rtr_priority(0), relay_status(false), visited(false)
+        {
+        }    
+        CdsInterface(Node& theNode, const ProtoAddress& addr) 
+          : NetGraph::InterfaceTemplate<NetGraph::SimpleCostDouble, CdsInterface, CdsLink, Node>(theNode, addr),
+            rtr_priority(0), relay_status(false), visited(false)
+        {
+        }    
+        virtual ~CdsInterface() {}
+        
+        UINT32 GetNodeId() const;
+        
+        void SetRtrPriority(UINT8 value)
+            {rtr_priority = value;}
+        UINT8 GetRtrPriority() const
+            {return rtr_priority;}
+        
+        unsigned int GetDegree() const; //{return GetAdjacencyCount();}
+
+        void SetRelayStatus(bool state)
+            {relay_status = state;}
+        bool GetRelayStatus() const
+            {return relay_status;}
+
+        void SetVisited(bool state)
+            {visited = state;}
+        bool WasVisited() const
+            {return visited;}
+            
+    private:
+        UINT8        rtr_priority;
+        bool         relay_status;
+        bool         visited;
+};  // end class CdsInterface
+   
+
+class CdsGraph : public NetGraphTemplate<NetGraph::SimpleCostDouble, CdsInterface, CdsLink, Node> {};
+ 
 
 void Usage()
 {
-    fprintf(stderr, "Usage: gr {ns|sdt} <mobilityTraceFile> range <commsRange> [degree]\n");
+    fprintf(stderr, "Usage: gr input <fileName> [degree][link <name>,<priority>]\n");
 }
 
 const unsigned int MAX_LINE = 256;
 
-class Node : public ManetGraph::Node, public ProtoTree::Item
+class Node :public NetGraph::NodeTemplate<CdsInterface>, public ProtoQueue::Item
 {
     public:
         Node();
@@ -34,10 +94,40 @@ class Node : public ManetGraph::Node, public ProtoTree::Item
 
         // _MUST_ call init to create a default interface
         bool Init(UINT32 nodeId, const char* nodeName = NULL);
+        
+        CdsGraph::Interface* AddInterface(const char* ifaceName, unsigned int ifaceId)
+        {
+            ProtoAddress addr;
+            iface_count += 1;
+            if (0 != ifaceId)
+                addr.SetEndIdentifier(ifaceId);
+            else
+                addr.SetEndIdentifier(node_id*1000+iface_count);
+            CdsGraph::Interface* iface = new CdsGraph::Interface(*this, addr);
+            iface->SetRtrPriority(1);
+            if (NULL != iface)
+            {
+                iface->SetName(ifaceName);
+                // Make first added interface the default interface
+                if (AppendInterface(*iface, (1 == iface_count)))
+                    return iface;
+                else
+                    return NULL;
+            }
+            else
+            {
+                PLOG(PL_ERROR, "Node::Init() new CdsGraph::Interface() error: %s\n",
+                     GetErrorString());
+                return NULL;
+            }
+        }       
+        
+        unsigned int GetInterfaceCount() const
+            {return iface_count;}         
 
         unsigned int GetId() const
         {
-            ManetGraph::Interface* iface = GetDefaultInterface();
+            CdsGraph::Interface* iface = GetDefaultInterface();
             if (NULL != iface)
             {
                 return (iface->GetAddress().GetEndIdentifier());
@@ -48,6 +138,10 @@ class Node : public ManetGraph::Node, public ProtoTree::Item
                 return ((unsigned int)-1);
             }
         }
+        
+        // We always give our nodes a default interface
+        const ProtoAddress& GetAddress() const
+            {return GetDefaultInterface()->GetAddress();}
         
         const char* GetName() const
             {return node_name;}
@@ -66,25 +160,75 @@ class Node : public ManetGraph::Node, public ProtoTree::Item
             {visited = state;}
         bool WasVisited() const
             {return visited;}
-
-    private:
-        // ProtoTree::Item overrides so nodes
+        
+        unsigned int GetDegree();  // counts each neighbor only once regardless of redundant links
+        unsigned int GetTotalDegree();  // counts neighbors with redundant links multiple time 
+        
+        
+        class Queue : public ProtoSimpleQueueTemplate<Node> {};
+        
+        class NeighborIterator : public NetGraph::NodeTemplate<CdsInterface>::NeighborIterator
+        {
+            public:
+                NeighborIterator(Node& node) : NetGraph::NodeTemplate<CdsInterface>::NeighborIterator(node) {}
+                virtual ~NeighborIterator() {visited_queue.Empty();}
+                
+                Node* GetNextNeighbor()
+                {
+                    Node* nextNeighbor = NULL;
+                    CdsInterface* nextIface;
+                    while (NULL != (nextIface = GetNextNeighborInterface()))
+                    {
+                        if ((NULL != nextIface) && !visited_queue.Contains(nextIface->GetNode()))
+                        {
+                            nextNeighbor = &(nextIface->GetNode());
+                            visited_queue.Append(*nextNeighbor);
+                            break;
+                        }
+                    }
+                    return nextNeighbor;
+                }
+                
+                void Reset()
+                {
+                    NetGraph::NodeTemplate<CdsInterface>::NeighborIterator::Reset();
+                    visited_queue.Empty();
+                }
+            private:
+                Queue   visited_queue;
+        };  // end class Node::NeighborIterator
+        
+         // ProtoTree::Item overrides so nodes
         // can be cached by name
         const char* GetKey() const
             {return node_name;}   
         unsigned int GetKeysize() const
             {return node_name_bits;} 
-            
+
+    private:
         char*           node_name;
         unsigned int    node_name_bits;
+        unsigned int    node_id;
+        unsigned int    iface_count;
         UINT8           rtr_priority;
         bool            relay_status;
         bool            visited;
 
 };  // end class Node
 
+class NodeTree : public ProtoIndexedQueueTemplate<Node> 
+{
+    private:
+        virtual const char* GetKey(const Item& item) const
+            {return static_cast<const Node&>(item).GetKey();}
+        virtual unsigned int GetKeysize(const Item& item) const
+            {return static_cast<const Node&>(item).GetKeysize();}
+};
+typedef Node::Queue NodeQueue;
+
 Node::Node()
- : node_name(NULL), node_name_bits(0), rtr_priority(0)
+ : node_name(NULL), node_name_bits(0), iface_count(0),
+   rtr_priority(0)
 {
 }
 
@@ -107,21 +251,45 @@ bool Node::Init(UINT32 nodeId, const char* nodeName)
         strcpy(node_name, nodeName);
         node_name_bits = nameLen << 3;
     }
-    
-    ProtoAddress addr;
-    addr.SetEndIdentifier(nodeId);
-    ManetGraph::Interface* iface = new ManetGraph::Interface(*this, addr);
-    if (NULL != iface)
-    {
-        return AppendInterface(*iface);
-    }
-    else
-    {
-        PLOG(PL_ERROR, "Node::Init() new ManetGraph::Interface() error: %s\n",
-             GetErrorString());
-        return false;
-    }
+    node_id = nodeId;
+    return true;
 }  // end Node::Init()
+
+unsigned int Node::GetTotalDegree() 
+{
+    unsigned int count = 0;
+    InterfaceIterator it(*this);
+    CdsInterface* iface;
+    while (NULL != (iface = it.GetNextInterface()))
+        count += iface->GetAdjacencyCount();
+    return count;
+}  // end Node::GetTotalDegree() 
+
+unsigned int Node::GetDegree() 
+{
+    unsigned int count = 0;
+    NeighborIterator nit(*this);
+    Node* neighbor;
+    while (NULL != (neighbor = nit.GetNextNeighbor()))
+    {
+        count += 1;
+    }
+    return count;
+}  // end Node::GetTotalDegree() 
+
+
+UINT32 CdsInterface::GetNodeId() const
+{
+    return GetNode().GetId();
+}  // end CdsInterface::GetNodeId()
+
+unsigned int CdsInterface::GetDegree() const
+{
+    unsigned int result = GetAdjacencyCount();
+    result += GetNode().GetInterfaceCount() - 1;
+    return result;   
+}  // end CdsInterface::GetDegree()         
+            
 
 
 // This class encapsulates most of the functionality of
@@ -141,15 +309,82 @@ class GraphRider
         // from our SDT input file
         double ReadNextEpoch();
         
-        ManetGraph& AccessGraph()
+        CdsGraph& AccessGraph()
             {return graph;}
         
-        static int CalculateFullECDS(ManetGraph&                                   graph, 
-                                     ManetGraph::Interface::SimpleList&            relayList, 
-                                     bool                                          useDegree = false,
-                                     ProtoGraph::Vertice::SortedList::ItemPool*    sortedVerticeItemPool = NULL);
+        NodeTree& AccessNodeTree()
+            {return node_tree;}
         
-        static double CalculateDensity(ManetGraph& graph);
+        static int CalculateFullECDS(NodeTree&                                   nodeTree, 
+                                     CdsGraph&                                   graph,
+                                     bool                                        useDegree = false,
+                                     ProtoGraph::Vertice::SortedList::ItemPool*  sortedVerticeItemPool = NULL);
+        
+        static int CalculateFullMECDS(NodeTree&                                  nodeTree, 
+                                      CdsGraph&                                  graph,
+                                      bool                                       useDegree,
+                                      ProtoGraph::Vertice::SortedList::ItemPool* sortedVerticeItemPool);
+        
+        static double CalculateDensity(CdsGraph& graph);
+        
+        // For coloring links, etc    
+        static const char* COLOR[8];
+        
+        // name indices into our COLOR array
+        enum Color
+        {
+            GREEN,
+            RED,
+            BLUE,
+            PURPLE,
+            ORANGE,
+            PINK,
+            WHITE,
+            GRAY
+        };
+        
+        class LinkType : public ProtoTree::Item
+        {
+            public:
+                LinkType(const char* name)
+                 : rtr_priority(0), link_color(GRAY)
+                {
+                    unsigned int len = strlen(name);
+                    if (len > 31) len = 31;
+                    strncpy(link_name, name, len);
+                    link_name[31] = '\0';
+                    link_name_bits = len << 3;
+                }
+                
+                const char* GetName() const
+                    {return link_name;}
+
+                void SetRtrPriority(UINT8 value)
+                    {rtr_priority = value;}
+                UINT8 GetRtrPriority() const
+                    {return rtr_priority;}
+                
+                void SetColor(Color theColor)
+                    {link_color = theColor;}
+                const char* GetColorName() const
+                    {return COLOR[link_color];}
+            
+            private:
+                const char* GetKey() const {return link_name;}
+                unsigned int GetKeysize() const {return link_name_bits;}
+                
+                char         link_name[32];
+                unsigned int link_name_bits;
+                unsigned int rtr_priority;
+                Color        link_color;
+                
+        };  // end class GraphRider::LinkType
+        
+        class LinkTypeTable : public ProtoTreeTemplate<LinkType> {};
+        
+        LinkType* AddLinkType(const char* name);
+        LinkType* GetLinkType(const char* name)
+            {return link_table.FindString(name);}
         
     private:
         // "FastReader" is handy class I use for doing
@@ -184,25 +419,76 @@ class GraphRider
                 char*        saveptr;
                 unsigned int savecount;
         };  // end class GraphRider::FastReader
-        
+       
         // member variables
         FastReader                                  fast_reader;
-        ManetGraph                                  graph;  
-        ProtoTree                                   node_tree;
+        CdsGraph                                    graph;  
+        NodeTree                                    node_tree;
         UINT32                                      node_id_index;
+        unsigned int                                iface_id_index;
+        LinkTypeTable                               link_table;
+        unsigned int                                link_color_index;
         double                                      next_epoch_time; 
         unsigned int                                input_line_num;
                         
 };  // end class GraphRider
 
 GraphRider::GraphRider()
- : node_id_index(0), next_epoch_time(0.0), input_line_num(0)
+ : node_id_index(0), iface_id_index(0), link_color_index(0), next_epoch_time(0.0), input_line_num(0)
 {
 }
 
 GraphRider::~GraphRider()
 {
+    link_table.Destroy();
 }
+
+const char* GraphRider::COLOR[8] =
+{
+    "green",
+    "red",
+    "blue",
+    "orange",
+    "pink",
+    "purple",
+    "gray",
+    "white",
+};
+    
+static bool IsNumber(const char* name)
+{
+    for (int i = 0 ; i < strlen(name); i++)
+    {
+        if (!isdigit(name[i])) return false;
+    }
+    return true;
+}  // end IsNumber() 
+    
+GraphRider::LinkType* GraphRider::AddLinkType(const char* name)
+{
+    LinkType* linkType = new LinkType(name);
+    if (NULL == linkType)
+    {
+        PLOG(PL_ERROR, "GraphRider::AddLinkType() new LinkType error: %s\n", GetErrorString());
+        return NULL;
+    }
+    if (IsNumber(name))
+    {
+        if (atoi(name))
+            linkType->SetColor((Color)7);
+        else
+            linkType->SetColor((Color)6);
+        //TRACE("Mapping link type %s to color %s\n", name, COLOR[7]);
+    }
+    else
+    {
+        linkType->SetColor((Color)link_color_index);
+        TRACE("Mapping link type %s to color %s\n", name, COLOR[link_color_index]);
+        link_color_index = (link_color_index + 1) % 8;
+    }
+    link_table.Insert(*linkType);
+    return linkType;
+}  // end GraphRider::AddLinkType()
 
 // returns the start time (in seconds) of the "epoch"
 double GraphRider::ReadNextEpoch()
@@ -256,33 +542,7 @@ double GraphRider::ReadNextEpoch()
             if (NULL == node)
             {
                 // It's a new node
-                // Find numeric portion of "nodeName", if applicable, to use as an identifier
-                unsigned int nodeId;
-                bool nameHasNumber = (1 == sscanf(nameString, "%u", &nodeId));
-                //ASSERT(nameHasNumber);
-                char nodeNamePrefix[32];
-                if (!nameHasNumber)
-                    nameHasNumber = (2 == sscanf(nameString, "%[^0-9]%u", nodeNamePrefix, &nodeId));
-                if (nameHasNumber)
-                {
-                    // Make sure it doesn't collide with existing node
-                    ProtoAddress addr;
-                    addr.SetEndIdentifier((UINT32)nodeId);
-                    //  If collision, assign a unique identifier from our space
-                    if (NULL != graph.FindInterface(addr))
-                        nodeId = node_id_index++; 
-                }
-                else
-                {
-                    //  Assign an identifier from our space
-                    //ASSERT(0);
-                    nodeId = node_id_index++; 
-                }
-                // Adjust "node_id_index" if necessary to guarantee uniqueness
-                // of assigned identifiers used when there is no embedded id
-                if (nodeId >= node_id_index) 
-                    node_id_index = nodeId + 1;
-
+                unsigned int nodeId = node_id_index++;
                 // Create and insert new node into the "graph" and "node_tree"
                 Node* node = new Node();
                 if (!node->Init(nodeId, nameString))
@@ -296,38 +556,74 @@ double GraphRider::ReadNextEpoch()
         }
         else
         {
+            ProtoTokenator tk(buffer, ' ', true);
+            const char* cmd = tk.GetNextItem();
+            if (NULL == cmd) continue;
             bool link; 
-            if (1 == sscanf(buffer, "link %s", nameString))
+            if (0 == strcmp(cmd, "link"))
                 link = true;
-            else if (1 == sscanf(buffer, "unlink %s", nameString))
+            else if (0 == strcmp(cmd, "unlink"))
                 link = false;
             else
                 continue;
-            char* nodeName1 = nameString;
-            char* nodeName2 = strchr(nameString, ',');
-            if (NULL == nodeName2)
+            const char* value = tk.GetNextItem();  // this should be the link or unlink command comma-delimited value
+            if (NULL == value)
             {
                 PLOG(PL_ERROR, "gr error: malformed \"%s\" command in input file at line %lu!\n", 
                                link ? "link" : "unlink", input_line_num);
                 return -1.0;
+            } 
+            ProtoTokenator tk2(value, ',', true);
+            const char* src = tk2.GetNextItem(true);  // detach to keep it
+            const char* dst = tk2.GetNextItem();  
+            if ((NULL == src) || (NULL == dst))
+            {
+                PLOG(PL_ERROR, "gr error: malformed \"%s\" command in input file at line %lu!\n", 
+                               link ? "link" : "unlink", input_line_num);
+                if (NULL != src) delete[] src;
+                return -1.0;
             }
-            *nodeName2++ = '\0';
-            char* endPtr = strchr(nodeName2, ',');
-            if (NULL != endPtr) *endPtr = '\0';
-            Node* node1 = static_cast<Node*>(node_tree.Find(nodeName1, (strlen(nodeName1)+1) << 3));
-            Node* node2 = static_cast<Node*>(node_tree.Find(nodeName2, (strlen(nodeName2)+1) << 3));
+            Node* node1 = static_cast<Node*>(node_tree.Find(src, (strlen(src)+1) << 3));
+            Node* node2 = static_cast<Node*>(node_tree.Find(dst, (strlen(dst)+1) << 3));
+            delete[] src;  // not needed any further
             if ((NULL == node1) || (NULL == node2))
             {
                 PLOG(PL_ERROR, "gr error: unknown nodes in \"%s\" command in input file at line %lu!\n", 
                                link ? "link" : "unlink", input_line_num);
                 return -1.0;
             }
-            ManetGraph::Interface* iface1 = node1->GetDefaultInterface();
-            ManetGraph::Interface* iface2 = node2->GetDefaultInterface();
+            const char* linkName = tk2.GetNextItem();
+            CdsGraph::Interface* iface1;
+            CdsGraph::Interface* iface2;
+            if (NULL == linkName) linkName = "default";
+            
+            LinkType* linkType = GetLinkType(linkName);
+            if ((NULL == linkType) && (NULL == (linkType = AddLinkType(linkName))))
+            {
+                PLOG(PL_ERROR, "gr error: unable to add link type\n");
+                return -1.0;
+            }            
+            iface1 = node1->FindInterfaceByName(linkName);
+            if (NULL == iface1) 
+                iface1 = node1->AddInterface(linkName, ++iface_id_index);
+            iface2 = node2->FindInterfaceByName(linkName);
+            if (NULL == iface2) 
+                iface2 = node2->AddInterface(linkName, ++iface_id_index);
+            if ((NULL == iface1) || (NULL == iface2))
+            {
+                PLOG(PL_ERROR, "gr new interface error: %s\n", GetErrorString());
+                return -1.0;
+            }
+            else if (NULL != linkType)
+            {
+                iface1->SetRtrPriority(linkType->GetRtrPriority());
+                iface2->SetRtrPriority(linkType->GetRtrPriority());
+            }
             // TBD - check to see if graph actually was changed?
             if (link)
             {
-                ManetGraph::SimpleCostDouble cost(1.0);
+                CdsGraph::SimpleCostDouble cost(1.0);
+                TRACE("gr: connecting %s/%s->%s/%s\n", node1->GetName(), linkName, node2->GetName(), linkName);
                 if (!graph.Connect(*iface1, *iface2, cost, true))
                     PLOG(PL_ERROR, "gr error: unable to connect interfaces in graph\n");
             }
@@ -335,215 +631,466 @@ double GraphRider::ReadNextEpoch()
             {
                 graph.Disconnect(*iface1, *iface2, true);
             }
+            node1->GetDegree();
+            node2->GetDegree();
         }
     }  // end while reading()
     return (gotLine ? lastTime : -1.0);
 }  // end ReadNextEpoch()
 
-// "relayList" is filled with the selected relays
-int GraphRider::CalculateFullECDS(ManetGraph&                                   graph, 
-                                  ManetGraph::Interface::SimpleList&            relayList, 
-                                  bool                                          useDegree,
-                                  ProtoGraph::Vertice::SortedList::ItemPool*    sortedVerticeItemPool)
+static int ComparePriority(unsigned int priority1, unsigned int degree1, const ProtoAddress& addr1,      
+                           unsigned int priority2, unsigned int degree2, const ProtoAddress& addr2)     
 {
+    // returns 1 if p1 > p2, -1 if p1 < p2, and 0 if equal
+    if (priority1 > priority2)
+        return 1;
+    else if (priority1 < priority2)
+        return -1;
+    else if (degree1 > degree2)
+        return 1;
+    else if (degree1 < degree2)
+        return -1;
+    else if (addr1 > addr2)
+        return 1;
+    else if (addr1 < addr2)
+        return -1;
+     else  // equal
+     {
+        return 0;
+     }
+}  // end  ComparePriority()
+       
+int GraphRider::CalculateFullMECDS(NodeTree&                                   nodeTree, 
+                                    CdsGraph&                                  graph,
+                                    bool                                       useDegree,
+                                    ProtoGraph::Vertice::SortedList::ItemPool* sortedVerticeItemPool)
+{
+    bool collapseNodes = false;
+    unsigned int K = 2;
+        ;
+    
     // Now that we have a fully updated "graph", perform Relay Set Selection
     // algorithm for each node in graph
-    int numberOfRelays=0;
-    ManetGraph::InterfaceIterator it(graph);
-    ManetGraph::Interface* iface;
-    while (NULL != (iface = it.GetNextInterface()))
+    int numberOfRelays = 0;
+    NodeTree::Iterator noderator(nodeTree);
+    Node* node;
+    while (NULL != (node = noderator.GetNextItem()))
     {
-        Node& node = static_cast<Node&>(iface->GetNode());
-        UINT8 priority = useDegree ? iface->GetAdjacencyCount() : node.GetRtrPriority();
         
-        TRACE("ECDS check for node %s priority:%d:%d...\n", node.GetName(), priority, node.GetId());
-        
-        // E-CDS Steps 1,2
-        if (iface->GetAdjacencyCount() < 2)
+        CdsInterface* ifacex = node->GetDefaultInterface();
+        ASSERT(NULL != ifacex);
+        CdsGraph::SimpleTraversal bfs(graph, *ifacex, true, collapseNodes);
+        unsigned int level;
+        CdsInterface* ifacey;
+        while (NULL != (ifacey = bfs.GetNextInterface(&level)))
         {
-            node.SetRelayStatus(false);
+            TRACE("Test bfs traversal from %s/%s to %s/%s at level %u...\n", 
+                  ifacex->GetNode().GetName(), ifacex->GetName(), 
+                  ifacey->GetNode().GetName(), ifacey->GetName(), level);
+        }
+        
+        node->SetRelayStatus(false);
+        unsigned int degree = node->GetDegree();
+        TRACE("\nMECDS check for node %s priority:%d degree:%d id:%d...\n", 
+              node->GetName(), node->GetRtrPriority(), degree, node->GetId());
+        
+        // First, do the E-CDS algorithm Step 1,2 for the "node" to see 
+        // if it is a leaf node. (This is needed so that the altered
+        // E-CDS Step 1,2 below for each iface works properly)
+        CdsInterface* iface;
+        Node::InterfaceIterator it(*node);
+        if (degree < 2)
+        {
+            // We are a leaf node, so none of our interfaces will be relays
+            while (NULL != (iface = it.GetNextInterface()))
+                iface->SetRelayStatus(false);
             continue;
-        }
-
-        // E-CDS Step 3,4,5, & 6
-        // TBD - use an "unvisitedList" that first caches all 1-hop neighbors and later removes them
-        //       as they are visited?  This would eliminate the need for the "SetVisited()" method ...
-        //       This would be a little more elegant, but a little more CPU/memory ...???
-        ManetGraph::AdjacencyIterator iteratorN1(*iface);
-        ManetGraph::Interface* ifaceN1Max = NULL;
-        bool isRelay = true;  // this will be set to "false" if a test fails
-        ManetGraph::Interface* ifaceN1;
-        while (NULL != (ifaceN1 = iteratorN1.GetNextAdjacency()))
-        {
-            Node& nodeN1 = static_cast<Node&>(ifaceN1->GetNode());
-            nodeN1.SetVisited(false);  // init for later path search
-            // Save n1_max needed for E-CDS Step 6
-            UINT8 priorityN1 = useDegree ? ifaceN1->GetAdjacencyCount() : nodeN1.GetRtrPriority();
-            if (NULL == ifaceN1Max)
-            {
-                ifaceN1Max = ifaceN1;
-            }
-            else
-            {
-                Node& nodeN1Max = static_cast<Node&>(ifaceN1Max->GetNode());
-                UINT8 priorityN1Max = useDegree ? ifaceN1Max->GetAdjacencyCount() : nodeN1Max.GetRtrPriority();
-                if ((priorityN1 > priorityN1Max) ||
-                    ((priorityN1 == priorityN1Max) &&
-                     (nodeN1.GetId() > nodeN1Max.GetId())))
-                {
-                    ifaceN1Max = ifaceN1;
-                }
-            }
-
-            if ((priorityN1 > priority) ||
-                ((priorityN1 == priority) &&
-                 (nodeN1.GetId() > node.GetId())))
-            {
-                isRelay = false;  // failed test of E-CDS Step 4
-            }
-            //if (isRelay) break;
-            //bool saveRelay = isRelay;
-          
-            /*
-            // Check 2-hop neighbors (other neighbors of N1)
-            ManetGraph::AdjacencyIterator iteratorN2(*ifaceN1);
-            ManetGraph::Interface* ifaceN2;
-            while (NULL != (ifaceN2 = iteratorN2.GetNextAdjacency()))
-            {
-                if (ifaceN2 == iface) continue;  // was "iface" itself
-                if (iface->HasEdgeTo(*ifaceN2)) continue;  // was 1-hop neighbor of "iface"
-                Node& nodeN2 = static_cast<Node&>(ifaceN2->GetNode());
-                nodeN2.SetVisited(false);  // init for later path search
-                UINT8 priorityN2 = useDegree ? ifaceN2->GetAdjacencyCount() : nodeN2.GetRtrPriority();
-                
-                
-                //
-                //if (NULL == ifaceN1Max)
-                //{
-                //    ifaceN1Max = ifaceN2;
-                //}
-                //else
-                //{
-                    //Node& nodeN1Max = static_cast<Node&>(ifaceN1Max->GetNode());
-                    //UINT8 priorityN1Max = useDegree ? ifaceN1Max->GetAdjacencyCount() : nodeN1Max.GetRtrPriority();
-                    //if ((priorityN2 > priorityN1Max) ||
-                   //     ((priorityN2 == priorityN1Max) &&
-                  //       (nodeN2.GetId() > nodeN1Max.GetId())))
-                //    {
-               //         ifaceN1Max = ifaceN2;
-               //     }
-               // }
-                
-                
-                
-                
-                if ((priorityN2 > priority) ||
-                    ((priorityN2 == priority) &&
-                     (nodeN2.GetId() > node.GetId())))
-                {
-                    isRelay = false;  // failed test of E-CDS Step 4
-                }
-            }  // end while (NULL != ifaceN2)
-            */
-            //if (saveRelay) isRelay = true;
-        }  // end (while (NULL != ifaceN1)
-        if (isRelay)
-        {
-            // Passed test of E-CDS Step 4
-            node.SetRelayStatus(true);
-            numberOfRelays++;
-            relayList.Append(*iface);
-            TRACE("   Adding node %s to relay list\n", node.GetName());
-            continue;
-        }
+        } 
+        if (!useDegree) degree = 0;
         
-        //TRACE("   doing path search for node %s ...\n", node.GetName());
-
-        // E-CDS Step 7,8 - init path search 'Q'
+        // E-CDS Steps 3-9 are "compressed" for a "node" because, by definition, it has
+        // a larger router priority than any of its interfaces.  So, we defer marking
+        // the node as a relay.  If _any_ of its interfaces are selected as relay, then
+        // the node gets marked as a relay, too.  So, we init the node's relay
+        // status to "false", knowing it will be marked as needed later.
         
-        // TBD - implement path length limit on path search (and eventually "k-depth" relay set selection)
-        ASSERT(NULL != ifaceN1Max);
-        ManetGraph::Interface::SortedList Q(sortedVerticeItemPool);
-        if (!Q.Append(*ifaceN1Max))
+        // Now do E-CDS for each of the candidate relay node's interfaces separately
+        it.Reset();
+        while (NULL != (iface = it.GetNextInterface()))
         {
-            PLOG(PL_ERROR, "gr: error adding 'ifaceN1Max' to 'Q'\n");
-            return -1;
-        }
-        static_cast<Node&>(ifaceN1Max->GetNode()).SetVisited(true);
-        // E-CDS Step 8 - perform path search
-        ManetGraph::Interface* x;
-        while (NULL != (x = Q.RemoveHead()))
-        {
-            Node& nodeNx = static_cast<Node&>(x->GetNode());
-            UINT8 priorityNx = useDegree ? x->GetAdjacencyCount() : nodeNx.GetRtrPriority();
-            bool xIsInN1 = x->HasEdgeTo(*iface); // true if 'x' is 1-hop neighbor of "n0"?
-            ManetGraph::AdjacencyIterator iteratorX(*x);
-            ManetGraph::Interface* n;
-            while (NULL != (n = iteratorX.GetNextAdjacency()))
+            TRACE("   MECDS check for iface: %s/%s (%d:%d:%d) ...\n", node->GetName(), iface->GetName(),
+                    iface->GetRtrPriority(), degree, iface->GetAddress().GetEndIdentifier());
+            degree = iface->GetDegree();
+            //degree = iface->GetNode().GetTotalDegree();
+            
+            //TRACE("   MECDS Steps 1-2 iface: %s/%s (%d:%d:%d) ...\n", node->GetName(), iface->GetName(),
+            //        iface->GetRtrPriority(), degree, iface->GetAddress().GetEndIdentifier());
+            
+            // E-CDS Step 1,2
+            if (0 == degree)
             {
-                if (n == iface) continue;  // was n == iface == "n0"
-                bool nIsInN1 = n->HasEdgeTo(*iface); // true if 'n' is 1-hop neighbor of "n0"
-                if (!xIsInN1 && !nIsInN1) continue;  // link not in 2-hop neighborhood of "n0"
-                Node& nodeNn = static_cast<Node&>(n->GetNode());
-                if (!nodeNn.WasVisited())
+                TRACE("   MECDS isabling iface %s/%s degree %d per E-CDS step 2\n", node->GetName(), iface->GetName(), degree);
+                iface->SetRelayStatus(false); // 'leaf' interface
+                continue;
+            }
+            
+            //TRACE("   MECDS Steps 3-6 iface: %s/%s (%d:%d:%d) ...\n", node->GetName(), iface->GetName(),
+            ///        iface->GetRtrPriority(), degree, iface->GetAddress().GetEndIdentifier());
+            
+            if (!useDegree) degree = 0;
+            // E-CDS Step 3, 5, and 6, mark one-hop and two-hop neighbors as unvisited.
+            // (Ee set 3-hop neighbors as visited to mark as out-of-bounds.)
+            iface->SetVisited(false);
+            UINT8 priority = iface->GetRtrPriority();
+            CdsInterface* ifaceN1Max = NULL;
+            UINT8 priorityN1Max = priority;
+            unsigned int degreeN1Max = degree;
+            CdsGraph::SimpleTraversal bfs(graph, *iface, true, collapseNodes);
+            CdsInterface* ifaceN1;
+            unsigned int level;
+            while (NULL != (ifaceN1 = bfs.GetNextInterface(&level)))
+            {
+                //TRACE("      bfs to %s/%s at level %u\n", ifaceN1->GetNode().GetName(), ifaceN1->GetName(), level);
+                if (ifaceN1 == iface) continue;
+                if (level < K)
                 {
-                    // E-CDS Step 8a - mark node as "visited"
-                    nodeNn.SetVisited(true);
-                    // E-CDS Step 8b - check if RtrPri(n) > RtrPri(n0)
-                    UINT8 priorityNn = useDegree ? n->GetAdjacencyCount() : nodeNn.GetRtrPriority();
-                    if (nIsInN1)
-                        TRACE("      visited node %s/%d:%d via node %s/%d:%d\n", nodeNn.GetName(), priorityNn, nodeNn.GetId(), nodeNx.GetName(), priorityNx, nodeNx.GetId());
-                    if ((priorityNn > priority) ||
-                        ((priorityNn == priority) &&
-                         (nodeNn.GetId() > node.GetId())))
+                    ifaceN1->SetVisited(false);
+                    UINT8 priorityN1 = ifaceN1->GetRtrPriority();
+                    unsigned int degreeN1 = useDegree ? ifaceN1->GetDegree() : 0;
+                    //unsigned int degreeN1 = useDegree ? ifaceN1->GetNode().GetTotalDegree() : 0;
+                    if (NULL == ifaceN1Max)
                     {
-                        if (!Q.Append(*n))
+                        priorityN1Max  = priorityN1;
+                        degreeN1Max = degreeN1;
+                        ifaceN1Max = ifaceN1;
+                    }
+                    else 
+                    {
+                        /*TRACE("         compare %s/%s %d:%d:%d to %s/%s %d:%d:%d\n",
+                              ifaceN1->GetNode().GetName(), ifaceN1->GetName(), priorityN1, degreeN1, ifaceN1->GetAddress().GetEndIdentifier(),
+                              ifaceN1Max->GetNode().GetName(), ifaceN1Max->GetName(), priorityN1Max, degreeN1Max, ifaceN1Max->GetAddress().GetEndIdentifier());
+                        */
+                        if (ComparePriority(priorityN1, degreeN1, ifaceN1->GetAddress(),
+                                            priorityN1Max, degreeN1Max, ifaceN1Max->GetAddress()) > 0)
                         {
-                            PLOG(PL_ERROR, "gr: error adding 'n' to 'Q'\n");
-                            return -1;
+                            priorityN1Max  = priorityN1;
+                            degreeN1Max = degreeN1;
+                            ifaceN1Max = ifaceN1;
                         }
                     }
                 }
-            }  // end while (NULL != n)
-        }  // end while (NULL != x)
-        // E-CDS Step 9
-        TRACE("   doing step 9 for node %s ...\n", node.GetName());
-        bool relayStatus = false;
-        iteratorN1.Reset();
-        while (NULL != (ifaceN1 = iteratorN1.GetNextAdjacency()))
-        {
-            if (!static_cast<Node&>(ifaceN1->GetNode()).WasVisited())
+                else if (level < (K+1))
+                {
+                    ifaceN1->SetVisited(false);
+                }
+                else if ((K+1) == level)
+                {
+                    ifaceN1->SetVisited(true);
+                }
+                else
+                {
+                    break; // we're done
+                }
+            }
+            
+            TRACE("      MECDS %s/%s n1_max: %s/%s (%d:%d:%d)\n", node->GetName(), iface->GetName(), ifaceN1Max->GetNode().GetName(), ifaceN1Max->GetName(),
+                         priorityN1Max, degreeN1Max, ifaceN1Max->GetAddress().GetEndIdentifier());
+            // E-CDS Step 4 decision
+            //if (ifaceN1Max == iface)
+            
+            /*TRACE("   MECDS Step 4 compare %s/%s %d:%d:%d to %s/%s %d:%d:%d\n",
+                  iface->GetNode().GetName(), iface->GetName(), priority, degree, iface->GetAddress().GetEndIdentifier(),
+                  ifaceN1Max->GetNode().GetName(), ifaceN1Max->GetName(), degreeN1Max, degree, ifaceN1Max->GetAddress().GetEndIdentifier());
+            */
+            if (ComparePriority(priority, degree, iface->GetAddress(),
+                                priorityN1Max, degreeN1Max, ifaceN1Max->GetAddress()) > 0)
             {
-                relayStatus = true;
+                TRACE("   MECDS ENABLING iface %s/%s degree %d per step 4\n", node->GetName(), iface->GetName(), degree);
+                iface->SetRelayStatus(true);
+                node->SetRelayStatus(true);
+                numberOfRelays += 1;
+                continue;
+            }
+            //TRACE("   MCDS Step 7 (ifaceN1Max: %s/%s)...\n", ifaceN1Max->GetNode().GetName(), ifaceN1Max->GetName());
+            // E-CDS Step 7
+            CdsGraph::Interface::SimpleList Q;
+            Q.Append(*ifaceN1Max);
+            ifaceN1Max->SetVisited(true);
+            // E-CDS Step 8
+            //TRACE("   MCDS Step 8 ...\n");
+            CdsInterface* x;
+            while (NULL != (x = Q.RemoveHead()))
+            {
+                //TRACE("      evaluating %s/%s ...\n", x->GetNode().GetName(), x->GetName());
+                CdsGraph::SimpleTraversal bfs1(graph, *x, true, collapseNodes);
+                CdsInterface* n;
+                unsigned int level;
+                while (NULL != (n = bfs1.GetNextInterface(&level)))
+                {
+                    if (n == x) continue;
+                    //TRACE("        checking %s/%s level %u ...\n", n->GetNode().GetName(), n->GetName(), level);
+                    if (level >= K) break;
+                    if (n == iface) continue;
+                    if (n->WasVisited()) 
+                    {
+                        //TRACE("         already visited %s/%s ...\n", n->GetNode().GetName(), n->GetName());
+                        continue; 
+                    }
+                    
+                    n->SetVisited(true);
+                    UINT8 priorityN = n->GetRtrPriority();
+                    unsigned int degreeN = useDegree ? n->GetDegree() : 0;
+                    //unsigned int degreeN = useDegree ? n->GetNode().GetTotalDegree() : 0;
+                    
+                    /*TRACE("         VISITED %s/%s %d:%d:%d and comparing to %s/%s %d:%d:%d\n",
+                           n->GetNode().GetName(), n->GetName(), priorityN, degreeN, n->GetAddress().GetEndIdentifier(),
+                           iface->GetNode().GetName(), iface->GetName(), priority, degree, iface->GetAddress().GetEndIdentifier());
+                    */
+                    if (ComparePriority(priorityN, degreeN, n->GetAddress(),
+                                        priority, degree, iface->GetAddress()) > 0)
+                    {
+                        Q.Append(*n);
+                    }
+                }
+                
+                /*CdsGraph::AdjacencyIterator adjacerator(*x);
+                CdsInterface* n;
+                while (NULL != (n = adjacerator.GetNextAdjacency()))
+                {
+                    if (n == iface) continue;
+                    if (n->WasVisited()) continue;
+                    n->SetVisited(true);
+                    UINT8 priorityN = n->GetRtrPriority();
+                    unsigned int degreeN = useDegree ? n->GetDegree() : 0;
+                    TRACE("  compare %s/%s %d:%d:%d to %s/%s %d:%d:%d\n",
+                            n->GetNode().GetName(), n->GetName(), priorityN, degreeN, n->GetAddress().GetEndIdentifier(),
+                            iface->GetNode().GetName(), iface->GetName(), priority, degree, iface->GetAddress().GetEndIdentifier());
+                    if (ComparePriority(priorityN, degreeN, n->GetAddress(),
+                                        priority, degree, iface->GetAddress()) > 0)
+                    {
+                        Q.Append(*n);
+                    }
+                }*/
+            }
+            
+            // E-CDS Step 9
+            ///TRACE("   MCDS Step 9 ...\n");
+            bfs.Reset();
+            bool isRelay = false;
+            while (NULL != (ifaceN1 = bfs.GetNextInterface(&level)))
+            {
+                if (ifaceN1 == iface) continue;
+                if (level >= K) break;
+                //if ((ifaceN1->GetDegree() > 0) && !ifaceN1->WasVisited())
+                if (!ifaceN1->WasVisited())
+                {
+                    //TRACE("Interface %s/%s was NOT visited\n", ifaceN1->GetNode().GetName(), ifaceN1->GetName());
+                    TRACE("   MECDS ENABLING iface %s/%s degree %d per step 9\n", node->GetName(), iface->GetName(), degree);
+                    iface->SetRelayStatus(true);
+                    node->SetRelayStatus(true);
+                    numberOfRelays += 1;
+                    isRelay = true;
+                    break;
+                }
+            }
+            if (!isRelay)
+            {
+                TRACE("   MECDS Disabling iface %s/%s degree %d per step 9\n", node->GetName(), iface->GetName(), degree);
+                iface->SetRelayStatus(false);
+            }
+        }  // end while (NULL != iface ...)
+    }  // end while (NULL != node ...)
+    return numberOfRelays;
+}  // end GraphRider::CalculateFullMECDS()
+        
+// "relayList" is filled with the selected relays
+int GraphRider::CalculateFullECDS(NodeTree&                                   nodeTree, 
+                                  CdsGraph&                                   graph,
+                                  bool                                        useDegree,
+                                  ProtoGraph::Vertice::SortedList::ItemPool*  sortedVerticeItemPool)
+{
+    bool collapseNodes = false;
+    // Now that we have a fully updated "graph", perform Relay Set Selection
+    // algorithm for each node in graph
+    int numberOfRelays = 0;
+    NodeTree::Iterator noderator(nodeTree);
+    Node* node;
+    while (NULL != (node = noderator.GetNextItem()))
+    {
+        node->SetVisited(false);
+        UINT8 priority = node->GetRtrPriority();
+        unsigned int degree =  node->GetDegree();
+        TRACE("ECDS check for node %s priority:%d:%d degree:%d...\n", node->GetName(), priority, node->GetId(), degree);
+        // E-CDS Steps 1,2
+        if (degree < 2)
+        {
+            // We are a leaf node
+            TRACE("   ECDS disabling node %s as relay per Step 2\n", node->GetName());
+            node->SetRelayStatus(false);
+            Node::InterfaceIterator it(*node);
+            CdsInterface* iface;
+            while (NULL != (iface = it.GetNextInterface()))
+                iface->SetRelayStatus(false);
+            continue;
+        } 
+        if (!useDegree) degree = 0;
+        
+        
+        //TRACE("   ECDS Steps 3-6 for node %s ...\n", node->GetName());
+        // E-CDS Step 3 is implicit as we already have the info in our graph
+        
+        // E-CDS Steps 4 (Find nodeN1Max) and 5 (mark N1 and N2 as unvisited)
+        Node* nodeN1Max = NULL;
+        UINT8 priorityN1Max = 0;
+        unsigned int degreeN1Max = 0;
+        
+        CdsGraph::SimpleTraversal bfs(graph, *node->GetDefaultInterface(), true, collapseNodes);
+        CdsInterface* ifaceN1;
+        unsigned int level;
+        Node::Queue visited;
+        while (NULL != (ifaceN1 = bfs.GetNextInterface(&level)))
+        {
+            Node& nodeN1 = ifaceN1->GetNode();
+            //TRACE("   to %s/%s at level %u\n", nodeN1.GetName(), ifaceN1->GetName(), level);
+            if (&nodeN1 == node) continue;
+            if (visited.Contains(nodeN1))
+                continue;
+            else
+                visited.Append(nodeN1);
+            if (level < 2)
+            {
+                nodeN1.SetVisited(false);
+                UINT8 priorityN1 = nodeN1.GetRtrPriority();
+                unsigned int degreeN1 = useDegree ? nodeN1.GetDegree() : 0;
+                if (NULL == nodeN1Max)
+                {
+                    priorityN1Max  = priorityN1;
+                    degreeN1Max = degreeN1;
+                    nodeN1Max = &nodeN1;
+                }
+                else 
+                {
+                    /*TRACE("  compare %s/%s %d:%d:%d to %s/%s %d:%d:%d\n",
+                            nodeN1.GetName(), nodeN1.GetDefaultInterface()->GetName(), priorityN1, degreeN1, nodeN1.GetAddress().GetEndIdentifier(),
+                            nodeN1Max->GetName(), nodeN1Max->GetDefaultInterface()->GetName(), priorityN1Max, degreeN1Max, nodeN1Max->GetAddress().GetEndIdentifier());
+                    */
+                    if (ComparePriority(priorityN1, degreeN1, nodeN1.GetAddress(),
+                                        priorityN1Max, degreeN1Max, nodeN1Max->GetAddress()) > 0)
+                    {
+                        priorityN1Max  = priorityN1;
+                        degreeN1Max = degreeN1;
+                        nodeN1Max = &nodeN1;
+                        //TRACE("  update max to %p\n", nodeN1Max);
+                    }
+                }
+            }
+            else if (level < 3)
+            {
+                nodeN1.SetVisited(false);
+            }
+            else if (3 == level)
+            {
+                nodeN1.SetVisited(true);  // Marking 3-hop neighbors as "visited" established order of our 2-hop neighborhood
+            }
+            else
+            {
+                break; // we're done
+            }
+        }  // end while bfs
+        visited.Empty();
+        
+        if (NULL == nodeN1Max)
+            continue;
+        
+        TRACE("   ECDS %s n1_max: %s (%d:%d:%d)\n", node->GetName(), nodeN1Max->GetName(), priorityN1Max, degreeN1Max, nodeN1Max->GetAddress().GetEndIdentifier());
+        
+        
+        if (ComparePriority(priority, degree, node->GetAddress(),
+                            priorityN1Max, degreeN1Max, nodeN1Max->GetAddress()) > 0)
+        {
+            //TRACE("node:%p max:%p\n", node, nodeN1Max);
+            TRACE("   ECDS ENABLING node %s as relay per Step 4 p:%d/%d pmax:%s/%d/%d \n", 
+                  node->GetName(), priority, degree, 
+                  nodeN1Max->GetName(), priorityN1Max, degreeN1Max);
+            node->SetRelayStatus(true);  // // selected per E-CDS Step 4
+            Node::InterfaceIterator it(*node);
+            CdsInterface* iface;
+            while (NULL != (iface = it.GetNextInterface()))
+                iface->SetRelayStatus(true);
+            numberOfRelays++;
+            continue;
+        }
+        // E-CDS Step 7
+        ASSERT(NULL != nodeN1Max);
+        NodeQueue Q;
+        nodeN1Max->SetVisited(true);
+        Q.Append(*nodeN1Max);
+        Node* x;
+        // E-CDS Step 8
+        while (NULL != (x = Q.RemoveHead()))
+        {
+            //bool xIsInN1 = x->IsSymmetricNeighbor(*node); // true if 'x' is 1-hop neighbor of "n0"
+            Node::NeighborIterator nit(*x);
+            Node* n;
+            while (NULL != (n = nit.GetNextNeighbor()))
+            {
+                if (n == node) continue;
+                if (!n->WasVisited())
+                {
+                    n->SetVisited(true);
+                    UINT8 priorityN = n->GetRtrPriority();
+                    unsigned int degreeN = useDegree ? n->GetDegree() : 0;
+                    if (ComparePriority(priorityN, degreeN, n->GetAddress(),
+                                        priority, degree, node->GetAddress()) > 0)
+                    {
+                        Q.Append(*n);
+                    }   
+                }
+            }
+        }   
+        // E-CDS Step 9
+        node->SetRelayStatus(false);
+        Node::NeighborIterator nit(*node);  
+        Node* nodeN1;  
+        bool isRelay = false;  
+        while (NULL != (nodeN1 = nit.GetNextNeighbor()))
+        {
+            if (!nodeN1->WasVisited())
+            {
+                TRACE("   ECDS ENABLING node %s as relay per Step 9\n", node->GetName());
+                isRelay = true;
+                node->SetRelayStatus(true);
+                Node::InterfaceIterator it(*node);
+                CdsInterface* iface;
+                while (NULL != (iface = it.GetNextInterface()))
+                    iface->SetRelayStatus(true);
                 numberOfRelays++;
                 break;
             }
-        }
-        
-        if (relayStatus)
+        }  
+        if (!isRelay)
         {
-            TRACE("   Adding node %s to relay list\n", node.GetName());
-            relayList.Append(*iface);
+            TRACE("   ECDS disabling node %s as relay per Step 9\n", node->GetName());
+            node->SetRelayStatus(false);
+            Node::InterfaceIterator it(*node);
+            CdsInterface* iface;
+            while (NULL != (iface = it.GetNextInterface()))
+                iface->SetRelayStatus(false);
         }
-        else
-        {
-            TRACE("   PATH SEARCH SUCCEEDED. no need to be a relay\n");
-        }
-        node.SetRelayStatus(relayStatus);
-
-    }  // while (NULL != node)  (relay set selection)
+         
+    }  // end while (NULL != node ...)
     return numberOfRelays;
 }  // end GraphRider::CalculateFullECDS()
 
-double GraphRider::CalculateDensity(ManetGraph& graph)
+double GraphRider::CalculateDensity(CdsGraph& graph)
 {
     int neighborCount = 0;
     int nodeCount = 0;
-    ManetGraph::InterfaceIterator it(graph);
-    ManetGraph::Interface* iface;
+    CdsGraph::InterfaceIterator it(graph);
+    CdsGraph::Interface* iface;
     while (NULL != (iface = it.GetNextInterface()))
     {
-        ManetGraph::AdjacencyIterator iteratorN1(*iface);
+        CdsGraph::AdjacencyIterator iteratorN1(*iface);
         nodeCount++;
         while (NULL != (iteratorN1.GetNextAdjacency()))
             neighborCount++;
@@ -763,8 +1310,12 @@ bool GraphRider::FastReader::Seek(int offset)
 int main(int argc, char* argv[])
 {
     GraphRider graphRider;
-    bool gotInput = false;
+    const char* inputFile = NULL;
     bool useDegree = false;
+    bool graphML = false;
+    
+    bool mecds = false;
+    
     // Parse the command line
     int i = 1;
     while (i < argc)
@@ -772,22 +1323,55 @@ int main(int argc, char* argv[])
         size_t len = strlen(argv[i]);
         if (0 == strncmp(argv[i], "input", len))
         {
-            if (++i == argc)
+            if (++i >= argc)
             {
                 fprintf(stderr, "gr error: missing \"input\" argument!\n");
                 Usage();
                 return -1;
             }
-            if (!graphRider.SetInputFile(argv[i]))
-            {
-                perror("gr error: unable to open input file");
-                return -1;
-            }
-            gotInput = true;
+            inputFile = argv[i];
         }
         else if (0 == strncmp(argv[i], "degree", len))
         {
             useDegree = true;
+        }
+        else if (0 == strncmp(argv[i], "mecds", len))
+        {
+            mecds = true;
+        }
+        else if (0 == strncmp(argv[i], "link", len))
+        {
+            // link <name>,<priority>
+            if (++i >= argc)
+            {
+                fprintf(stderr, "gr error: missing \"link\" argument!\n");
+                Usage();
+                return -1;
+            }
+            ProtoTokenator tk(argv[i], ',');
+            const char* item = tk.GetNextItem();
+            GraphRider::LinkType* linkType = graphRider.GetLinkType(item);
+            if ((NULL == linkType) && (NULL == (linkType = graphRider.AddLinkType(item))))
+            {
+                fprintf(stderr, "gr new LinkTpye error: %s\n", GetErrorString());
+                return -1;
+            }
+            item = tk.GetNextItem();
+            if (NULL == item)
+            {
+                
+                fprintf(stderr, "gr error: missing \"link priority\" argument!\n");
+                Usage();
+                return -1;
+            }
+            unsigned int priority;
+            if (1 != sscanf(item, "%u", &priority))
+            {
+                fprintf(stderr, "gr error: invalid \"link priority\" argument!\n");
+                Usage();
+                return -1;
+            }
+            linkType->SetRtrPriority(priority);
         }
         else
         {
@@ -798,92 +1382,166 @@ int main(int argc, char* argv[])
         i++;
     }
     
-    if (!gotInput)
+    if (NULL == inputFile)
     {
         fprintf(stderr, "gr error: no input file specified!\n");
         Usage();
         return -1;
     }
     
-    ManetGraph& graph = graphRider.AccessGraph();
-    // This is a pool of ProtoGraph::Vertice::SortedList::Items
-    // that are used for temporary lists of ManetGraph::Interfaces
-    // for various graph manipulations, etc.  Note that the use of an 
-    // "external" item pool is _optional_ for the ProtoGraph/ManetGraph
-    // list classes, but can boost performance by reducing memory
-    // alloc/deallocs when doing a lot of list manipulation.
-    // If a list was inited with a "pool", then it is important to
-    // keep the "pool" valid until after any associate "lists" are
-    // destroyed as "pools" do _not_ keep track of which lists are
-    // using them (yet!).
-    ProtoGraph::Vertice::SortedList::ItemPool sortedVerticeItemPool;
-
-    while (graphRider.ReadNextEpoch() >= 0.0)
+    size_t len = strlen(inputFile);
+    if ((len > 2) && (0 == strcmp("ml", inputFile+len-2)))
+        graphML = true; 
+    
+    if (graphML)
     {
         
-        // We also build up a "disconnectedList" by first putting all nodes
-        // into it and then remove the relays and their one-hop neighbors.
-        // The disconnected nodes remaining in the list are colored "red"
-        
-        // a) Initialize our "disconnectedList" with all ifaces in graph
-        ManetGraph::Interface::SortedList disconnectedList(&sortedVerticeItemPool);
-        ManetGraph::InterfaceIterator ifaceIterator(graph);
-        ManetGraph::Interface* iface;
-        while (NULL != (iface = ifaceIterator.GetNextInterface()))
-            disconnectedList.Insert(*iface);
-        
-        
-        // "CalculateFullECDS" implements the ECDS relay set selection
-        // algorithm, marking selected nodes using the Node::SetRelayStatus() 
-        // method.  It also copies the selected nodes into the "relayList"
-        // that is passed to it.  (This is mainly for illustrative purposes
-        // to demonstrate the utility of the ManetGraph lists, iterators, etc
-        ManetGraph::Interface::SimpleList relayList;
-        GraphRider::CalculateFullECDS(graph, relayList, useDegree, &sortedVerticeItemPool);
-        
-        // Iterate over our relay set and color the relays "blue" and their
-        // (non-relay) one-hop neighbors "green"
-        
-        
-        // b) Remove relays (and their neighbors) from the "disconnectedList"
-        //    and output appropriate node colors
-        ManetGraph::Interface::SimpleList::Iterator relayIterator(relayList);
-        ManetGraph::Interface* relayIface;
-        //TRACE("coloring ECDS relays blue ...\n");
-        while (NULL != (relayIface = relayIterator.GetNextInterface()))
+        ManetGraphML graph;
+        if (!graph.Read(inputFile))
         {
-            // It's a relay, so remove from disconnected list
-            if (NULL != disconnectedList.FindInterface(relayIface->GetAddress()))
-                disconnectedList.Remove(*relayIface);
-            
-            Node& relayNode = static_cast<Node&>(relayIface->GetNode());
-            TRACE("iterated to node %s status %d in the relay list ...\n", relayNode.GetName(), relayNode.GetRelayStatus());
-            
-            printf("node %s symbol circle,blue,3\n", relayNode.GetName());
-            ManetGraph::AdjacencyIterator neighborIterator(*relayIface);
-            ManetGraph::Interface* neighborIface;
-            while (NULL != (neighborIface = neighborIterator.GetNextAdjacency()))
-            {
-                // It's a relay neighbor, so remove from disconnected list
-                if (NULL != disconnectedList.FindInterface(neighborIface->GetAddress()))
-                    disconnectedList.Remove(*neighborIface);
-                Node& neighborNode = static_cast<Node&>(neighborIface->GetNode());
-                if (!neighborNode.GetRelayStatus())
-                    printf("node %s symbol circle,green,3\n", neighborNode.GetName());
-            }  
+            fprintf(stderr, "gr error: unable to parse GraphML input file!\n");
+            return -1;
         }
-        
-        // c) Color any nodes remaining in "disconnectedList" red (orphans and orphan pairs)
-        ManetGraph::Interface::SortedList::Iterator dcIterator(disconnectedList);
-        ManetGraph::Interface* disconnectedIface;
-        while (NULL != (disconnectedIface = dcIterator.GetNextInterface()))
+        printf("gr: graphML loaded ...\n");
+        ManetGraphML::InterfaceIterator ifaceIterator(graph);
+        // Get first iface to init Dijkstra
+        ManetGraphML::Interface* iface = ifaceIterator.GetNextInterface();
+        ManetGraphML::DijkstraTraversal dijkstra(graph, iface->GetNode(), iface);        
+        ifaceIterator.Reset();
+        //std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+        while (NULL != (iface = ifaceIterator.GetNextInterface()))
         {
-            Node& disconnectedNode = static_cast<Node&>(disconnectedIface->GetNode());
-            printf("node %s symbol circle,red,3\n", disconnectedNode.GetName());
-        }   
-
-        //double nodeDensity = GraphRider::CalculateDensity(graph);
+            dijkstra.Reset(iface);
+            //std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+            ManetGraphML::Interface* dface;
+            while (NULL != (dface = dijkstra.GetNextInterface()))
+            {
+                const ManetGraphML::Cost* cost = dijkstra.GetCost(*dface);
+                if (NULL != cost)
+                     TRACE("   dijkstra iterated to iface \"%s\" cost:%lf\n", dface->GetName(), cost->GetValue());
+            }
+            //std::chrono::high_resolution_clock::time_point t3 = std::chrono::high_resolution_clock::now();
+            //unsigned int duration = (unsigned int)(std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count());
+            //TRACE("   duration: %u\n", duration);
+        }
+        //std::chrono::high_resolution_clock::time_point t4 = std::chrono::high_resolution_clock::now();
+        //unsigned int duration = (unsigned int)(std::chrono::duration_cast<std::chrono::microseconds>(t4 - t1).count());
+        //TRACE("total duration: %u\n", duration);
     }
+    else 
+    {
+        NodeTree& nodeTree = graphRider.AccessNodeTree();
+        CdsGraph& graph = graphRider.AccessGraph();
+        if (!graphRider.SetInputFile(inputFile))
+        {
+            perror("gr error: unable to open input file");
+            return -1;
+        }
+        // This is a pool of ProtoGraph::Vertice::SortedList::Items
+        // that are used for temporary lists of CdsGraph::Interfaces
+        // for various graph manipulations, etc.  Note that the use of an 
+        // "external" item pool is _optional_ for the ProtoGraph/CdsGraph
+        // list classes, but can boost performance by reducing memory
+        // alloc/deallocs when doing a lot of list manipulation.
+        // If a list was inited with a "pool", then it is important to
+        // keep the "pool" valid until after any associate "lists" are
+        // destroyed as "pools" do _not_ keep track of which lists are
+        // using them (yet!).
+        ProtoGraph::Vertice::SortedList::ItemPool sortedVerticeItemPool;
+
+        while (graphRider.ReadNextEpoch() >= 0.0)
+        {
+            // We also build up a "disconnectedList" by first putting all nodes
+            // into it and then remove the relays and their one-hop neighbors.
+            // The disconnected nodes remaining in the list are colored "red"
+
+            // a) Initialize our "disconnectedList" with all nodes in graph
+            NodeQueue disconnectedList;
+            NodeTree::Iterator nodeIterator(nodeTree);
+            Node* node;
+            while (NULL != (node = nodeIterator.GetNextItem()))
+                disconnectedList.Append(*node);
+            
+            // "CalculateFullECDS" implements the ECDS relay set selection
+            // algorithm, marking selected nodes using the Node::SetRelayStatus() 
+            // method.
+            if (mecds)
+                GraphRider::CalculateFullMECDS(nodeTree, graph, useDegree, &sortedVerticeItemPool);
+            else
+                GraphRider::CalculateFullECDS(nodeTree, graph, useDegree, &sortedVerticeItemPool);
+            
+            // Iterate over our nodeTree and color the relays "purple" and their
+            // (non-relay) one-hop neighbors "green" removing them from the
+            // disconnectedList
+            nodeIterator.Reset();
+            while (NULL != (node = nodeIterator.GetNextItem()))
+            {
+                if (node->GetRelayStatus())
+                {
+                    printf("node %s symbol circle,purple,3\n", node->GetName());
+                    if (disconnectedList.Contains(*node))
+                        disconnectedList.Remove(*node);
+                }
+                else
+                {
+                    printf("node %s symbol circle,green,3\n", node->GetName());
+                }
+                // Color links from relays to other nodes thick and solid and links among non-relay nodes their link colors with skinny stipple
+                CdsInterface* iface1;
+                Node::InterfaceIterator it(*node);
+                while (NULL != (iface1 = it.GetNextInterface()))
+                {
+                    CdsGraph::AdjacencyIterator adjacerator(*iface1);
+                    CdsInterface* iface2;
+                    while (NULL != (iface2 = adjacerator.GetNextAdjacency()))
+                    {
+                        GraphRider::LinkType* linkType = graphRider.GetLinkType(iface1->GetName());
+                        ASSERT(NULL != linkType);
+                        const char* linkColor = linkType->GetColorName();
+                        //TRACE("iterating %s/%s->%s/%s ...\n", iface1->GetNode().GetName(), iface1->GetName(), iface2->GetNode().GetName(), iface2->GetName());
+                        if (iface1->GetRelayStatus() || iface2->GetRelayStatus())
+                        {
+                            if (iface1->GetRelayStatus()) ASSERT(iface1->GetNode().GetRelayStatus());
+                            if (iface2->GetRelayStatus()) ASSERT(iface2->GetNode().GetRelayStatus());
+                            // sdt link usage:  link node1,node2,name line color,thickness,opacity,stipple
+                            printf("link %s,%s,%s line %s,4,x,0\n", iface1->GetNode().GetName(), iface2->GetNode().GetName(), iface1->GetName(), linkColor);
+                            Node& node2 = iface2->GetNode();
+                            if (disconnectedList.Contains(node2))
+                                disconnectedList.Remove(node2);
+                        }
+                        else
+                        {
+                            // Make sure non-relay link colors are returned to non-purple state.  
+                            printf("link %s,%s,%s line %s,2,x,2,3855\n", iface1->GetNode().GetName(), iface2->GetNode().GetName(), iface1->GetName(), linkColor);
+                        }
+                    }
+                }
+            }
+            // Color any nodes remaining in "disconnectedList" red (orphans and orphan pairs)  
+            // Make sure link colors are returned to non-purple state.          
+            NodeQueue::Iterator dcIterator(disconnectedList);
+            while (NULL != (node = dcIterator.GetNextItem()))
+            {
+                disconnectedList.Remove(*node);
+                printf("node %s symbol circle,red,3\n", node->GetName());
+                CdsInterface* iface1;
+                Node::InterfaceIterator it(*node);
+                while (NULL != (iface1 = it.GetNextInterface()))
+                {
+                    CdsGraph::AdjacencyIterator adjacerator(*iface1);
+                    CdsInterface* iface2;
+                    while (NULL != (iface2 = adjacerator.GetNextAdjacency()))
+                    {
+                        GraphRider::LinkType* linkType = graphRider.GetLinkType(iface1->GetName());
+                        ASSERT(NULL != linkType);
+                        const char* linkColor = linkType->GetColorName();
+                        printf("link %s,%s,%s line %s,2,x,2,3855\n", iface1->GetNode().GetName(), iface2->GetNode().GetName(), iface1->GetName(), linkColor);
+                    }
+                }
+            }
+            //double nodeDensity = GraphRider::CalculateDensity(graph);
+        }  // end while ReadNextEpoch()
+    }  // end if/else graphML
     fprintf(stderr, "gr: Done.\n");
     return 0;
 }  // end main()

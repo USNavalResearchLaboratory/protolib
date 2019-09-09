@@ -32,18 +32,27 @@
 
 void* operator new(size_t size, const char* file, int line);
 
-void operator delete(void * p) throw();
-
 void* operator new[](size_t size, const char* file, int line);
 
-void operator delete[](void * p) throw();
+void operator delete(void* p) throw();
+
+void operator delete[](void *p) throw();
 
 #define new new(__FILE__, __LINE__)
+
+// This trick is used to log delete operator file/line 
+// info just before the call to delete is made.
+
+void ProtoCheckCacheInfo(const char* file, int line);
+//void ProtoCheckDelete(void* p, const char* file, int line);
+        
+#define delete ProtoCheckCacheInfo(__FILE__, __LINE__), delete
 
 #endif  // !_PROTO_CHECK_IMPL
 
 #endif // USE_PROTO_CHECK
 
+void ProtoCheckResetLogging();
 void ProtoCheckLogAllocations(FILE* filePtr);
 
 #endif // _PROTO_CHECK

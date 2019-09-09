@@ -3,6 +3,7 @@
 * 
 * @brief This is a base class that maintains a 32-bit aligned buffer for "packet" (or message) building and parsing 
 */
+#include "protoDebug.h"
 #include "protoPkt.h"
 
 ProtoPkt::ProtoPkt(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)

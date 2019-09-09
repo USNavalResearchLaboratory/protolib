@@ -22,7 +22,7 @@ ProtoChannel::ProtoChannel()
 #else
    : descriptor(INVALID_HANDLE), blocking_status(true),
 #endif // if/else WIN32/UNIX
-     listener(NULL), notifier(NULL), notify_flags(0)
+     listener(NULL), notifier(NULL)
 {
 #ifdef WIN32
 	overlapped_read_buffer = NULL;
@@ -117,22 +117,21 @@ bool ProtoChannel::StartInputNotification()
         // See if we're using overlapped i/o and kickstart if applicable
         if ((NULL != overlapped_read_buffer) && (NULL != notifier))
         {
-            notify_flags |= (int)NOTIFY_INPUT;
+            SetNotifyFlag(NOTIFY_INPUT);
             if (!StartOverlappedRead())  // note it calls UpdateNotification() for us
             {
-                notify_flags &= ~((int)NOTIFY_INPUT);
+                UnsetNotifyFlag(NOTIFY_INPUT);
                 PLOG(PL_ERROR, "ProtoChannel::StartInputNotification() error: overlapped read startup failure!\n");
                 return false;
             }
             return true;
         } 
 #endif // WIN32
-        if (0 != (notify_flags & (int)NOTIFY_INPUT)) return true;
-        notify_flags |= (int)NOTIFY_INPUT;
+        SetNotifyFlag(NOTIFY_INPUT);
         if (!UpdateNotification())
         {
-            notify_flags &= ~((int)NOTIFY_INPUT);
             PLOG(PL_ERROR, "ProtoChannel::StartInputNotification() error: notification update failure!\n");
+            UnsetNotifyFlag(NOTIFY_INPUT);
             return false;
         }
     }
@@ -143,7 +142,7 @@ void ProtoChannel::StopInputNotification()
 {
     if (InputNotification())
     {
-        notify_flags &= ~((int)NOTIFY_INPUT);
+        UnsetNotifyFlag(NOTIFY_INPUT);
         UpdateNotification();
     }
 }  // end ProtoChannel::StopInputNotification()  
@@ -155,10 +154,10 @@ bool ProtoChannel::StartOutputNotification()
 #ifdef WIN32
         output_ready = true;
 #endif // WIN32
-        notify_flags |= (int)NOTIFY_OUTPUT;
+        SetNotifyFlag(NOTIFY_OUTPUT);
         if (!UpdateNotification())
         {
-            notify_flags &= ~((int)NOTIFY_OUTPUT);
+            UnsetNotifyFlag(NOTIFY_OUTPUT);
             PLOG(PL_ERROR, "ProtoChannel::StartOutputNotification() error: notification update failure!\n");
             return false;
         }
@@ -170,7 +169,7 @@ void ProtoChannel::StopOutputNotification()
 {
     if (OutputNotification())
     {
-        notify_flags &= ~((int)NOTIFY_OUTPUT);
+        UnsetNotifyFlag(NOTIFY_OUTPUT);
         UpdateNotification();
     }
 }  // end ProtoChannel::StopOutputNotification() 
@@ -186,7 +185,7 @@ bool ProtoChannel::UpdateNotification()
                 PLOG(PL_ERROR, "ProtoChannel::UpdateNotification() SetBlocking() error\n");
                 return false;  
             }
-            return notifier->UpdateChannelNotification(*this, notify_flags);
+            return notifier->UpdateChannelNotification(*this, GetNotifyFlags());
         }
         return true;
     }

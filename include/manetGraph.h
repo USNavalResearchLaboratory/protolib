@@ -2,7 +2,7 @@
 #define _MANET_GRAPH
 
 #include "protoGraph.h"
-#include <protoAddress.h>
+#include "protoAddress.h"
 
 /**
 * @class NetGraph
@@ -578,7 +578,6 @@ class NetGraph : public ProtoGraph
                 virtual unsigned int GetKeysize() const
                     {return GetVerticeKeysize();}
                 
-            private:
                 Node*                   node;
                 NetGraph*               graph;
                 ProtoAddressList        addr_list;
@@ -693,7 +692,7 @@ class NetGraph : public ProtoGraph
         
         Interface* FindInterfaceByName(const char *theName); 
        
-        Interface* FindInterfaceByString(const char *theString);//finds the interface both by name and address
+        Interface* FindInterfaceByString(const char *theString); // finds the interface both by name and address
  
         Node* FindNodeByName(const char *theName) 
         {
@@ -701,7 +700,7 @@ class NetGraph : public ProtoGraph
             return ((NULL != iface) ? &iface->GetNode() : NULL);
         }
      
-        Node*FindNodeByString(const char* theString)
+        Node* FindNodeByString(const char* theString)
         {
             Interface* iface = FindInterfaceByString(theString);
             return ((NULL != iface) ? &iface->GetNode() : NULL);
@@ -725,12 +724,13 @@ class NetGraph : public ProtoGraph
                 SimpleTraversal(const NetGraph&  theGraph, 
                                 Interface&       startIface,
                                 bool             traverseNodes = true,
+                                bool             collapseNodes = true,
                                 bool             depthFirst = false);
             
                 virtual ~SimpleTraversal();
                 
                 bool Reset()
-                    {return ProtoGraph::SimpleTraversal::Reset();}
+                    {return Reset(false);}
                 
                 Interface* GetNextInterface(unsigned int* level = NULL);
            
@@ -740,8 +740,11 @@ class NetGraph : public ProtoGraph
                 // Note "link" will be NULL is src/dst are on same node
                 virtual bool AllowLink(const Interface& srcIface, const Interface& dstIface, Link* link)
                     {return true;}
+            
+                bool Reset(bool constructor);  // arg for internal-use only
                 
-                bool    traverse_nodes;
+                bool    traverse_nodes;  // traverse all node interfaces
+                bool    collapse_nodes;  // treat node co-interfaces as a common vertice
                 
         };  // end class NetGraph::SimpleTraversal
         
@@ -783,9 +786,12 @@ class NetGraph : public ProtoGraph
                 Interface* TreeWalkNext(unsigned int* level = NULL);
                 
             protected:
+                DijkstraTraversal(NetGraph&    theGraph,   
+                                  Interface*   startIface);
+            
                 DijkstraTraversal(NetGraph&     theGraph, 
                                   Node&         startNode,
-                                  Interface*    startIface);
+                                  Interface*    startIface = NULL);
             
                 // Note:  The template subclass provides the "ItemFactory::CreateItem()" method
                 
@@ -902,7 +908,7 @@ class NetGraph : public ProtoGraph
                         MY_TYPE* FindInterface(const ProtoAddress& addr) const
                             {return static_cast<MY_TYPE*>(FindVertice(addr.GetRawHostAddress(), addr.GetLength() << 3));}
 
-                        MY_TYPE* FindInterfaceByName(const char* name) const
+                        MY_TYPE* FindInterfaceByName(const char* name)
                             {return static_cast<MY_TYPE*>(FindVertice(name,(strlen(name) & 0x01) ? (strlen(name) << 3) : ((strlen(name)+1) << 3)));}
 
                         MY_TYPE* GetHead() const
@@ -987,6 +993,9 @@ class NetGraph : public ProtoGraph
                 
                 IFACE_TYPE* FindInterface(const ProtoAddress& addr) const
                     {return static_cast<IFACE_TYPE*>(NetGraph::Node::FindInterface(addr));}
+                
+                IFACE_TYPE* FindInterfaceByName(const char* theName)
+                    {return static_cast<IFACE_TYPE*>(NetGraph::Node::FindInterfaceByName(theName));}
 
                 IFACE_TYPE* GetDefaultInterface() const
                     {return static_cast<IFACE_TYPE*>(NetGraph::Node::GetDefaultInterface());}
@@ -1012,7 +1021,7 @@ class NetGraph : public ProtoGraph
                         
                         LINK_TYPE* GetNextNeighborLink()
                             {return static_cast<LINK_TYPE*>(NetGraph::Node::NeighborIterator::GetNextNeighborLink());}
-                };  // end class NetGraphTemplate::Node::NeighborIterator
+                };  // end class NetGraph::NodeTemplate::NeighborIterator
 
         };  // end class NetGraph::NodeTemplate
         
@@ -1135,12 +1144,13 @@ class NetGraphTemplate : public NetGraph
                 SimpleTraversal(const NetGraphTemplate& theGraph, 
                                 IFACE_TYPE&             startIface,
                                 bool                    traverseNodes = true,
+                                bool                    collapseNodes = true,
                                 bool                    depthFirst = false)
-                    : NetGraph::SimpleTraversal(theGraph, startIface, traverseNodes, depthFirst) {}
+                    : NetGraph::SimpleTraversal(theGraph, startIface, traverseNodes, collapseNodes, depthFirst) {}
                 virtual ~SimpleTraversal() {}
                 
                 IFACE_TYPE* GetNextInterface(unsigned int* level = NULL)
-                    {return static_cast<IFACE_TYPE*>(NetGraph::SimpleTraversal::GetNextInterface());}
+                    {return static_cast<IFACE_TYPE*>(NetGraph::SimpleTraversal::GetNextInterface(level));}
                 
         };  // end class NetGraphTemplate::SimpleTraversal
         

@@ -19,9 +19,12 @@
 
 #include <unistd.h>  // for close()
 #include <stdio.h>   // for sprintf()
+#ifdef MACOSX
 #include <sys/kern_event.h>  // // for kernel event stuff
+#endif
 #include <sys/ioctl.h>  // for ioctl()
 #include <net/if.h>  // for KEV_DL_SUBCLASS, etc
+#include <net/if_var.h> // needed for freebsd
 #include <netinet/in.h>      // for KEV_INET_SUBCLASS, etc
 #include <netinet/in_var.h>  // for KEV_INET_SUBCLASS, etc
 #include <netinet6/in6_var.h>  // for KEV_INET6_SUBCLASS, etc
@@ -163,7 +166,7 @@ BsdNetMonitor::Interface::Interface(const char* name, unsigned int index)
 {
     iface_name[IFNAMSIZ] = '\0';
     strncpy(iface_name, name, IFNAMSIZ);
-    iface_name_bits = strlen(iface_name) << 3;
+    iface_name_bits = (unsigned int)strlen(iface_name) << 3;
 }
 
 BsdNetMonitor::Interface::~Interface()

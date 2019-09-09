@@ -37,7 +37,10 @@
 #include "protoDebug.h"
 #include "protoDefs.h"  // for ProtoSystemTime()
 #include "protoTime.h"
+#include "protoTree.h"  // for ProtoSortedTree
 #include <math.h>
+
+#define _SORTED_TIMERS 1
 
 /**
  * @class ProtoTimer
@@ -50,7 +53,10 @@
  * associated with the ProtoTimer::Listener is invoked.  
  *
  */
-class ProtoTimer
+class ProtoTimer 
+#ifdef _SORTED_TIMERS
+    : public ProtoSortedTree::Item
+#endif // _SORTED_TIMERS
 {
     friend class ProtoTimerMgr;
     
@@ -59,15 +65,25 @@ class ProtoTimer
         ~ProtoTimer();
         
  		/**
-		 * This function will define which method will be called upon a timer timing out
+		 * This function sets what class instance (timer listener) and method will be 
+         * invoked upon a timer timeout..
+         *
+         * Note there are two forms for the listener method here.  The newer form has a "void"
+         * return type and requires less consideration for its implementation.  The older 
+         * (likely to be deprecated) form has a "bool" return type that is used to indicate
+         * whether the ProtoTimer instance (and likely its listener) are any longer valid
+         * (and implies whether or not it should be reinstalled if it is a repeating timer).
+         * The current ProtoTimerMgr automates the detection/management of this case, thus
+         * the newer, easier-to-use form.  The old form is retained simply for backwards
+         * compatibility.
 		 *
-		 * TODO: Update text with new timer functionality
-		 *
-		 * IMPORTAN: Special notice should be taken of the boolean return value of this function.
-		 * When returning "true" the number of repeats will be decremented and if below 0
-		 * will deactivate the timer.  If, in this function, you are rescheduling the timer, deleting it,
-		 * or repetions of the timer which invoked the call, the function should return "false"
-		 * to avoid standard exit actions (i.e. the timeout function has overridden usual timer handling).
+		 * IMPORTANT: For the "legacy" listener method form and _older_ Protolib versions, the 
+         * 'bool' return value of this function MUST be set appropriately.  When returning "true" 
+         * the 'repeat_count' will be decremented and the timer will be reactivated or 
+         *  deactivated accordingly. So, if the timer is rescheduled, canceled, or deleted during 
+         * the listener method invocation, the method MUST return "false'.  Again, NOTE that 
+         * the _current_ Protolib automatically tracks timer change/deletion and the return value
+         * is now ignored.
 
 		 * NOTE: For VC++ 6.0 Debug builds, you _cannot_ use pre-compiled
          * headers with this template code.  Also, "/ZI" or "/Z7" compile options 
@@ -85,9 +101,9 @@ class ProtoTimer
         template <class LTYPE>
         bool SetListener(LTYPE* theListener, void(LTYPE::*timeoutHandler)(ProtoTimer&))
         {
-            if (listener) delete listener;
+            if (NULL != listener) delete listener;
             listener = theListener ? new LISTENER_TYPE<LTYPE>(theListener, timeoutHandler) : NULL;
-            return theListener ? (NULL != theListener) : true;
+            return (NULL == listener) ? (NULL != theListener) : true;
         }
         
         //  This is the old "ProtoTimer::SetListener()" we keep for backwards-compatibility
@@ -95,14 +111,14 @@ class ProtoTimer
 		template <class LTYPE>
         bool SetListener(LTYPE* theListener, bool(LTYPE::*timeoutHandler)(ProtoTimer&))
         {
-            if (listener) delete listener;
+            if (NULL != listener) delete listener;
             listener = theListener ? new OLD_LISTENER_TYPE<LTYPE>(theListener, timeoutHandler) : NULL;
-            return theListener ? (NULL != theListener) : true;
+            return (NULL == listener) ? (NULL != theListener) : true;
         }
        
         /**
          * This method sets the interval (in seconds) after which the
-         * timer will "fire" (i.e., the method specified by 
+         * timer will "fire" (i.e., the listener/method specified by 
          * ProtoTimer::SetListener() is invoked).
          *
          * @param theInterval timer interval in seconds
@@ -110,24 +126,23 @@ class ProtoTimer
         // Our ProtoTime class currently only handles 1 usec granularity (for non-zero timeouts)
         // so we enforce that constraint here.
         void SetInterval(double theInterval) 
-            {interval = (theInterval < 0.0) ? 0.0 : ((theInterval < 1.0e-06) ? 1.0e-06 : theInterval);}
+            {interval = (theInterval >= 1.0e-06) ? theInterval : ((theInterval > 0.0) ? 1.0e-06 : 0.0);}
+            
         double GetInterval() const {return interval;}
 		/**
         * Timer repetition (0 =  one shot, -1 = infinite repetition)
         *
-		* @param numRepeat number of timer repetitions
+		* @param numRepeat number of timer repetitions (0 is one-shot)
 		*/
 		void SetRepeat(int numRepeat) 
             {repeat = numRepeat;}
         int GetRepeat() const 
             {return repeat;}
         
-        
         /// Provided for "advanced" timer monitoring/control
         void ResetRepeat() 
             {repeat_count = repeat;}
        /// Provided for "advanced" timer monitoring/control
-  
 		void DecrementRepeatCount() 
             { if (repeat_count > 0) repeat_count--; }
        /// Provided for "advanced" timer monitoring/control
@@ -139,14 +154,13 @@ class ProtoTimer
         void SetRepeatCount(int repeatCount)
             {repeat_count = repeatCount;}
         
-        //double GetTimeout() {return timeout;}
-        
         // Activity status/control
         /**
 		* Returns true if timer is associated with a ProtoTimerMgr
 		*/
 		bool IsActive() const {return (NULL != mgr);}
         double GetTimeRemaining() const;
+        const ProtoTime GetTimeout() const {return timeout;}
         void Reset()
         {
             ResetRepeat();
@@ -164,7 +178,21 @@ class ProtoTimer
 		* Installer commands
         */
 		enum Command {INSTALL, MODIFY, REMOVE};
-          
+#ifdef _SORTED_TIMERS        
+        void UpdateKey()
+            {timeout_key.SetValue(timeout);}
+        void InvalidateKey()
+            {timeout_key.Invalidate();}
+        bool KeyIsValid() const
+            {return timeout_key.IsValid();}
+        
+        // ProtoSortedTree::Item required overrides
+        const char* GetKey() const
+            {return timeout_key.GetKey();}
+        unsigned int GetKeysize() const
+            {return timeout_key.GetKeysize();}
+#endif // _SORTED_TIMERS
+                 
     private:
 		/**
 		* Invokes the "listener's" callback function.
@@ -280,12 +308,21 @@ class ProtoTimer
         int                         repeat_count;            
         
         const void*                 user_data;
-        ProtoTime                   timeout;                 
-        bool                        is_precise;              
-        class ProtoTimerMgr*        mgr;                     
+        ProtoTime                   timeout;    
+        bool                        is_precise; 
+        class ProtoTimerMgr*        mgr; 
+#ifdef _SORTED_TIMERS      
+        ProtoTime::Key              timeout_key;            
+#else                            
         ProtoTimer*                 prev;                    
-        ProtoTimer*                 next;                    
+        ProtoTimer*                 next; 
+#endif  // if/else _SORTED_TIMERS                   
 };  // end class ProtoTimer
+
+#ifdef _SORTED_TIMERS
+class ProtoTimerList : public ProtoListTemplate<ProtoTimer> {};
+class ProtoTimerTable : public ProtoSortedTreeTemplate<ProtoTimer> {};
+#endif // _SORTED_TIMERS
 
 /** 
  * @class ProtoTimerMgr
@@ -313,13 +350,16 @@ class ProtoTimerMgr
         * @retval Returns "true" if there are any active timers
         */
         bool IsActive() const
-            {return (NULL != short_head);}
+            {return (NULL != GetShortHead());}
         
         /**
 		* @retval Returns any time remaining for the active short timer or -1
 		*/
         double GetTimeRemaining() const 
-            {return ((NULL != short_head) ? short_head->GetTimeRemaining() : -1.0);}
+        {
+            ProtoTimer* next = GetShortHead();
+            return ((NULL != next) ? next->GetTimeRemaining() : -1.0);
+        }
         
         /// Call this when the timer mgr's one-shot system timer fires
         void OnSystemTimeout();
@@ -334,7 +374,14 @@ class ProtoTimerMgr
         }
         
         virtual void GetSystemTime(struct timeval& currentTime);
-            
+
+#ifdef _SORTED_TIMERS        
+        // These are for testing
+        ProtoTimerTable& GetTimerTable() {return timer_table;}
+        ProtoTimerList& GetTimerList() {return timer_list;}
+        ProtoTimerTable& GetLongTable() {return long_timer_table;}
+#endif // _SORTED_TIMERS
+                    
     protected:
         /// System timer association/management definitions and routines
         virtual bool UpdateSystemTimer(ProtoTimer::Command command,
@@ -350,12 +397,25 @@ class ProtoTimerMgr
         bool InsertShortTimerReverse(ProtoTimer& theTimer);
         void RemoveShortTimer(ProtoTimer& theTimer);
         void Update();
+
+#ifdef _SORTED_TIMERS        
+        ProtoTimer* GetShortHead() const
+        {
+            ProtoTimer* next = timer_list.GetHead();
+            return (NULL != next) ? next : timer_table.GetHead();
+        }
+        ProtoTimer* GetLongHead() const {return long_timer_table.GetHead();}
+#else
+        ProtoTimer* GetShortHead() const {return short_head;}
+        ProtoTimer* GetLongHead() const {return long_head;} 
+#endif // if/else _SORTED_TIMERS
         
         bool GetNextTimeout(ProtoTime& nextTimeout) const
         {
-            if (NULL != short_head)
+            ProtoTimer* next = GetShortHead();
+            if (NULL != next)
             {
-                nextTimeout = short_head->timeout;
+                nextTimeout = next->timeout;
                 return true;
             }
             else
@@ -372,10 +432,9 @@ class ProtoTimerMgr
         
         static const double PRECISION_TIME_THRESHOLD;
         
-        
         void GetCurrentSystemTime(struct timeval& currentTime)
         {
-#if  (defined(SIMULATE) && defined(NS2))
+#if (defined(SIMULATE) && defined(NS2))
             GetSystemTime(currentTime);
 #else
             ProtoSystemTime(currentTime);
@@ -386,24 +445,31 @@ class ProtoTimerMgr
         // find its simulation context
         void GetCurrentProtoTime(ProtoTime& currentTime)
         {
-#if  (defined(SIMULATE) && defined(NS2))
+#if (defined(SIMULATE) && defined(NS2))
            GetSystemTime(currentTime.AccessTimeVal());
 #else
            currentTime.GetCurrentTime();
 #endif // if/else (SIMULATE && NS2)
         }
-        
        
         // Member variables
         bool            update_pending;       
         bool            timeout_scheduled;                     
         ProtoTime       scheduled_timeout;                                   
         ProtoTimer      pulse_timer;  // one second pulse timer    
-        ProtoTime       pulse_mark;                                
+        ProtoTime       pulse_mark;       
+
+#ifdef _SORTED_TIMERS   
+        unsigned int    timer_list_count;
+        ProtoTimerList  timer_list;
+        ProtoTimerTable timer_table;
+        ProtoTimerTable long_timer_table;
+#else                                 
         ProtoTimer*     long_head;                                 
         ProtoTimer*     long_tail;                                 
         ProtoTimer*     short_head;                                
         ProtoTimer*     short_tail; 
+#endif // if/else _SORTED_TIMERS        
         ProtoTimer*     invoked_timer;  // timer whose listener is being invoked
 };  // end class ProtoTimerMgr
 

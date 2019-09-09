@@ -1,8 +1,8 @@
 
-// The purpose of this program is to illustrate use of the "MyGraph" class
-// (Note the "NetGraphTemplate" allows different graph subclasses to be
-//  created with different metric properties.  The "MyGraph" assumes
-//  a non-negative "double" value metric for "link cost".
+// The purpose of this program is to illustrate use of the "NetGraphTemplate" 
+// classes.  (Note the "NetGraphTemplate" allows different graph subclasses to 
+// be created with different metric properties.  The "MyGraph" exaple here 
+// assumes a non-negative "double" value metric for "link cost".
 
 #include "manetGraph.h"
 #include "protoSpace.h"  // we use this for its bounding box iteration

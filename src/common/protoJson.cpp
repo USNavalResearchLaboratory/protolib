@@ -3,7 +3,7 @@
 #include <ctype.h>  // for tolower()
 #include <string.h>
 
-#include "protoCheck.h"
+//#include "protoCheck.h"
 
 ProtoJson::Item::Item(Type theType, Item* theParent)
  : type(theType), parent(theParent), level((NULL == theParent) ? 0 : theParent->level + 1)
@@ -55,7 +55,7 @@ ProtoJson::String::~String()
     }
 }
 
-bool ProtoJson::String::Set(const char* theText)
+bool ProtoJson::String::SetText(const char* theText)
 {
     if (NULL != text) delete[] text;
     if (NULL == (text = new char[strlen(theText)+1]))
@@ -65,7 +65,7 @@ bool ProtoJson::String::Set(const char* theText)
     }
     strcpy(text, theText);
     return true;
-}  // end ProtoJson::String::Set()
+}  // end ProtoJson::String::SetTezt()
             
 void ProtoJson::String::SetTextPtr(char* textPtr)
 {
@@ -161,6 +161,27 @@ void ProtoJson::Array::Destroy()
     array_len = 0;
 }  // end ProtoJson::Array::Destroy()
 
+bool ProtoJson::Array::AppendString(const char* text)
+{
+    ProtoJson::String* string = new ProtoJson::String();
+    if ((NULL == string) || !string->SetText(text) || !AppendValue(*string))
+    {
+        PLOG(PL_ERROR, "ProtoJson::Array::AppendString() error: %s\n", GetErrorString());
+        if (NULL != string) delete string;
+        return false;
+    }
+    return true;
+}  // end ProtoJson::Array::AppendString()
+
+const char* ProtoJson::Array::GetString(unsigned int index)
+{
+    const ProtoJson::Value* value = GetValue(index);
+    if ((NULL != value) && (Item::STRING == value->GetType()))
+        return static_cast<const ProtoJson::String*>(value)->GetText();
+    else
+        return NULL;
+}  // end ProtoJson::Array::GetString()
+
 bool ProtoJson::Array::AppendValue(Value& value)
 {
     // TBD - should we do more clever memory mgmnt for better performance 
@@ -251,20 +272,42 @@ void ProtoJson::Object::Destroy()
     ProtoSortedTreeTemplate<Entry>::Destroy();
 }  // end ProtoJson::Object::Destroy()
 
- bool ProtoJson::Object::InsertEntry(const char* key, Value& value)
- {
-     Entry* entry = new Entry();
-     if (entry->SetKey(key))
-     {
-         entry->SetValue(&value);
-         return InsertEntry(*entry);
-     }
-     else
-     {
-         PLOG(PL_ERROR, "ProtoJson::Object::InsertEntry() new Entry() error: %s\n", GetErrorString());
-         return false;
-     }
- }  // end ProtoJson::Object::InsertEntry()
+bool ProtoJson::Object::InsertEntry(const char* key, Value& value)
+{
+    Entry* entry = new Entry();
+    if ((NULL == entry) || !entry->SetKey(key) || !InsertEntry(*entry))
+    {
+        PLOG(PL_ERROR, "ProtoJson::Object::InsertEntry() error inserting new Entry: %s\n", GetErrorString());
+        if (NULL != entry) delete entry;
+        return false;
+    }
+    entry->SetValue(&value);
+    return true;
+}  // end ProtoJson::Object::InsertEntry()
+
+bool ProtoJson::Object::InsertString(const char* key, const char* text)
+{
+    ProtoJson::String* string = new ProtoJson::String();
+    if ((NULL == string) || !string->SetText(text) || !InsertEntry(key, *string))
+    {
+        PLOG(PL_ERROR, "ProtoJson::Object::InsertString() error inserting new String: %s\n", GetErrorString());
+        if (NULL != string) delete string;
+        return false;
+    }
+    return true;
+}  // end ProtoJson:::Object::InsertString()
+
+bool ProtoJson::Object::InsertBoolean(const char* key, bool state)
+{
+    ProtoJson::Boolean* boolean = new ProtoJson::Boolean(state);
+    if ((NULL == boolean) || !InsertEntry(key, *boolean))
+    {
+        PLOG(PL_ERROR, "ProtoJson::Object::InsertString() error inserting new Boolean: %s\n", GetErrorString());
+        if (NULL != boolean) delete boolean;
+        return false;
+    }
+    return true;
+}  // end ProtoJson:::Object::InsertBoolean()
 
 bool ProtoJson::Object::InsertEntry(Entry& entry)
 {
@@ -280,9 +323,59 @@ bool ProtoJson::Object::InsertEntry(Entry& entry)
     }
 }  // end ProtoJson::Object::InsertEntry()
 
-ProtoJson::Object::Iterator::Iterator(Object& object, bool reverse)
- : ProtoSortedTreeTemplate<Entry>::Iterator(object, reverse), match_key(NULL)
-    
+// Returns first String text matching "key"
+const char* ProtoJson::Object::GetString(const char* key)
+{
+    Iterator iterator(*this);
+    if (!iterator.Reset(false, key)) return NULL;
+    ProtoJson::Entry* entry;
+    while (NULL != (entry = iterator.GetNextEntry()))
+    {
+        const ProtoJson::Value* value = entry->GetValue();
+        if ((NULL != value) && STRING == value->GetType())
+            return static_cast<const ProtoJson::String*>(value)->GetText();
+    }    
+    return NULL;
+}  // end ProtoJson::Object::GetString()
+
+// Returns first Boolean value matching "key"
+bool ProtoJson::Object::GetBoolean(const char* key)
+{
+    Iterator iterator(*this);
+    if (!iterator.Reset(false, key)) return false;
+    ProtoJson::Entry* entry;
+    while (NULL != (entry = iterator.GetNextEntry()))
+    {
+        const ProtoJson::Value* value = entry->GetValue();
+        if (NULL != value)
+        {
+            if (TRUE == value->GetType())
+                return true;
+            else if (FALSE == value->GetType())
+                return false;
+        }
+    }    
+    return false;
+}  // end ProtoJson::Object::GetBoolean()
+
+// Returns first Boolean value matching "key"
+ProtoJson::Array* ProtoJson::Object::GetArray(const char* key)
+{
+    Iterator iterator(*this);
+    if (!iterator.Reset(false, key)) return NULL;
+    ProtoJson::Entry* entry;
+    while (NULL != (entry = iterator.GetNextEntry()))
+    {
+        ProtoJson::Value* value = entry->AccessValue();
+        if ((NULL != value) && (ARRAY == value->GetType()))
+            return static_cast<ProtoJson::Array*>(value);
+    }    
+    return NULL;
+}  // end ProtoJson::Object::GetArray()
+
+
+ProtoJson::Object::Iterator::Iterator(Object& object)
+ : ProtoSortedTreeTemplate<Entry>::Iterator(object), match_key(NULL)
 {   
 }      
 
@@ -295,51 +388,51 @@ ProtoJson::Object::Iterator::~Iterator()
     }
 }
 
-ProtoJson::Entry* ProtoJson::Object::Iterator::GetNextEntry(const char* key)
+bool ProtoJson::Object::Iterator::Reset(bool reverse, const char* key)
 {
-    
     if (NULL != key)
     {
-        // Check to see if it is a new or different key
-        bool initKey = (NULL == match_key) || (0 != strcmp(key, match_key));
-        if (initKey)
+        if ((NULL == match_key) || (0 != strcmp(match_key, key)))
         {
             if (NULL != match_key) delete[] match_key;
-            if (NULL == (match_key = new char[strlen(key) + 1]))
+            if (NULL == (match_key = new char[strlen(key)+1]))
             {
-                PLOG(PL_ERROR, "ProtoJson::Object::Iterator::GetNextEntry()  new match_key error: %s\n", GetErrorString());
-                return NULL;
+                PLOG(PL_ERROR, "ProtoJson::Object::Iterator::Reset() new match_key error: %s\n", GetErrorString());
+                return false;
             }
             strcpy(match_key, key);
-            unsigned int keysize = (strlen(key) + 1) * 8;
-            Reset(false, key, keysize); 
         }
     }
-    return ProtoSortedTreeTemplate<Entry>::Iterator::GetNextItem();
+    else if (NULL != match_key)
+    {
+        delete[] match_key;
+        match_key = NULL;
+    }
+    ProtoSortedTreeTemplate<Entry>::Iterator::Reset(reverse, key, (unsigned int)((NULL != key) ? 8*(strlen(key)+1) : 0));
+    return true;
+}  // end ProtoJson::Object::Iterator::Reset()
+
+ProtoJson::Entry* ProtoJson::Object::Iterator::GetNextEntry()
+{
+    ProtoJson::Entry* nextEntry = ProtoSortedTreeTemplate<Entry>::Iterator::GetNextItem();
+    if (NULL != match_key)
+    {
+        if (0 != strncmp(match_key, nextEntry->GetKey(), strlen(match_key)))
+            return NULL;
+    }
+    return nextEntry;
 }  // end ProtoJson::Object::Iterator::GetNextEntry()
 
-ProtoJson::Entry* ProtoJson::Object::Iterator::GetPrevEntry(const char* key)
+ProtoJson::Entry* ProtoJson::Object::Iterator::GetPrevEntry()
 {
-    
-    if (NULL != key)
+    ProtoJson::Entry* nextEntry = ProtoSortedTreeTemplate<Entry>::Iterator::GetPrevItem();
+    if (NULL != match_key)
     {
-        // Check to see if it is a new or different key
-        bool initKey = (NULL == match_key) || (0 != strcmp(key, match_key));
-        if (initKey)
-        {
-            if (NULL != match_key) delete[] match_key;
-            if (NULL == (match_key = new char[strlen(key) + 1]))
-            {
-                PLOG(PL_ERROR, "ProtoJson::Object::Iterator::GetPrevEntry()  new match_key error: %s\n", GetErrorString());
-                return NULL;
-            }
-            strcpy(match_key, key);
-            unsigned int keysize = (strlen(key) + 1) * 8;
-            Reset(true, key, keysize); 
-        }
+        if (0 != strncmp(match_key, nextEntry->GetKey(), strlen(match_key)))
+            return NULL;
     }
-    return ProtoSortedTreeTemplate<Entry>::Iterator::GetPrevItem();
-}  // end ProtoJson::Object::Iterator::GetPrevEntry()
+    return nextEntry;
+}  // end ProtoJson::Object::Iterator::GetPrevEntry()               
 
 ProtoJson::Entry::Entry(ProtoJson::Item* theParent)
   : ProtoJson::Item(ENTRY, theParent), key(NULL), keysize(0), value(NULL)
@@ -364,7 +457,7 @@ ProtoJson::Entry::~Entry()
 bool ProtoJson::Entry::SetKey(const char* text)
 {
     if (NULL != key) delete[] key;
-    keysize = strlen(text) + 1;  // include null termination
+    keysize = (unsigned int)strlen(text) + 1;  // include null termination
     if (NULL == (key = new char[keysize]))
     {
         keysize = 0;
@@ -443,31 +536,41 @@ void ProtoJson::Document::Print(FILE* filePtr)
             while (value->GetParent() != stack.GetHead())
             {
                 prevValue = stack.RemoveHead();
-                stackDepth--;
                 switch (prevValue->GetType())
                 {
                     case Value::OBJECT:
+                        stackDepth--;
                         if(Value::OBJECT != savePrev->GetType())
                         {
                             fprintf(filePtr, "\n");
                             for (unsigned int i = 0; i < stackDepth; i++)
                                 fprintf(filePtr, " %s", indent);
                         }
-                        // else was an empty object
+                        // else was an NONE object
                         fprintf(filePtr, "}");
                         break;
                     case Value::ARRAY:
+                        stackDepth--;
                         if(Value::ARRAY != savePrev->GetType())
                         {
                             fprintf(filePtr, "\n");
                             for (unsigned int i = 0; i < stackDepth; i++)
                                 fprintf(filePtr, " %s", indent);
                         }
-                        // else was an empty array
+                        // else was an NONE array
                         fprintf(filePtr, "]");
                         break;
+                        
+                    case Value::ENTRY:
+                    {
+                        Item::Type etype = static_cast<Entry*>(prevValue)->GetValue()->GetType();
+                        if ((Value::ARRAY != etype) && (Value::OBJECT != etype))
+                            stackDepth--;
+                        break;
+                    }
                     default:
-                        // should be an ENTRY?
+                        // should never occur
+                        ASSERT(0);
                         break;
                 }
             }
@@ -475,7 +578,6 @@ void ProtoJson::Document::Print(FILE* filePtr)
             //if ((NULL != value->GetParent()) && (value->GetParent() == prevValue->GetParent()))
             if (value->GetParent() == prevValue->GetParent())
                 fprintf(filePtr, ",");
-            
             
             if ((Value::ENTRY != savePrev->GetType()) ||
                 (Value::OBJECT == value->GetType()) ||
@@ -493,10 +595,17 @@ void ProtoJson::Document::Print(FILE* filePtr)
         {
             case Value::OBJECT:
             case Value::ARRAY:
-            case Value::ENTRY:
                 stack.Prepend(*value);
                 stackDepth++;
                 break;
+            case Value::ENTRY:
+            {
+                stack.Prepend(*value);
+                Item::Type etype = static_cast<Entry*>(value)->GetValue()->GetType();
+                if ((Value::ARRAY != etype) && (Value::OBJECT != etype))
+                    stackDepth++;
+                break;
+            }
             default:
                 break;
         }
@@ -525,7 +634,19 @@ void ProtoJson::Document::Print(FILE* filePtr)
                 break;
         }
         prevValue = stack.RemoveHead();
-        if(NULL != prevValue) stackDepth--;
+        if (NULL != prevValue) 
+        {
+            if (Value::ENTRY == prevValue->GetType())
+            {
+                Item::Type etype = static_cast<Entry*>(prevValue)->GetValue()->GetType();
+                if ((Value::ARRAY != etype) && (Value::OBJECT != etype))
+                    stackDepth--;
+            }   
+            else //if (0 != stackDepth) 
+            {
+                stackDepth--;
+            }
+        }
     }
     fprintf(filePtr, "\n");
     if (item_count > 1) fprintf(filePtr, "]\n");
@@ -545,7 +666,8 @@ void ProtoJson::Document::PrintValue(FILE* filePtr, const Value& value)
         case Value::STRING:
         {
             const char* text = static_cast<const String&>(value).GetText();
-            fprintf(filePtr, "\"%s\"", (NULL != text) ? text : "");
+            //fprintf(filePtr, "\"%s\"", (NULL != text) ? text : "");
+            PrintString(filePtr, text);
             break;
         }
         case Value::NUMBER:
@@ -577,6 +699,23 @@ void ProtoJson::Document::PrintValue(FILE* filePtr, const Value& value)
             break;
     }
 }  // end ProtoJson::Document::PrintValue() 
+
+void ProtoJson::Document::PrintString(FILE* filePtr, const char* text)
+{
+    // Converts any escapable characters to corresponding sequence
+    fprintf(filePtr, "\"");
+    const char* ptr = text;
+    while ('\0' != *ptr)
+    {
+        char escape = Parser::GetEscapeCode(*ptr);
+        if (0 != escape)
+            fprintf(filePtr, "\\%c", escape);
+        else
+            fprintf(filePtr, "%c", *ptr);
+        ptr++;
+    }
+    fprintf(filePtr, "\"");
+}  // end ProtoJson::Document::PrintString()
 
 ProtoJson::Document::Iterator::Iterator(Document& document, bool depthFirst)
  : list_iterator(document.item_list), depth_first(depthFirst)
@@ -625,7 +764,8 @@ ProtoJson::Item* ProtoJson::Document::Iterator::GetNextItem()
         {
             // Put object entries into pending_list
             Object* object = static_cast<Object*>(currentItem);
-            Object::Iterator iterator(*object, true);  // reverseto make pending_list order right
+            Object::Iterator iterator(*object);  
+            iterator.Reset(true);  // reverse to make pending_list order right
             Entry* entry;
             while (NULL != (entry = iterator.GetPrevEntry()))
             {
@@ -678,7 +818,8 @@ const char ProtoJson::Parser::NULL_START = 'n';
             
 ProtoJson::Parser::Parser()
  : current_document(NULL), current_item(NULL), input_offset(0),
-   is_escaped(false), seek_colon(false), temp_buffer(NULL),
+   input_escape_pending(false), is_escaped(false), 
+   seek_colon(false), temp_buffer(NULL),
    temp_buffer_max(0), temp_buffer_len(0)
 {
 }
@@ -702,6 +843,7 @@ void ProtoJson::Parser::Destroy()
         current_item = NULL;
     }
     input_offset = 0;
+    input_escape_pending = false;
     is_escaped = false;
     seek_colon = false;
     if (NULL != temp_buffer)
@@ -712,7 +854,7 @@ void ProtoJson::Parser::Destroy()
     temp_buffer_len = temp_buffer_max = 0;
 }  // end ProtoJson::Parser::Destroy()
 
-bool ProtoJson::Parser::LoadDocument(const char *path)
+bool ProtoJson::Parser::LoadDocument(const char *path, Document* document)
 {
     FILE* infile = fopen(path, "r");
     if (NULL == infile)
@@ -720,25 +862,34 @@ bool ProtoJson::Parser::LoadDocument(const char *path)
         PLOG(PL_ERROR, "ProtoJson::Parser::LoadDocument() error opening file: %s\n", GetErrorString());
         return false;
     }
-    Status status = PARSE_MORE;
-    int result;
-    char buffer[1024];
-    while (0 != (result = fread(buffer, sizeof(char), 1024, stdin)))
+    if (NULL != document)
     {
-        status = ProcessInput(buffer, result);
+        if (NULL != current_document)
+            delete current_document;
+        current_document = document;
+    }
+    Status status = PARSE_MORE;
+    size_t result;
+    char buffer[1024];
+    while (0 != (result = fread(buffer, sizeof(char), 1024, infile)))
+    {
+        status = ProcessInput(buffer, (unsigned int)result);
         if (PARSE_ERROR == status) 
         {
             PLOG(PL_ERROR, "ProtoJson::Parser::LoadDocument() error: invalid JSON document!\n");
+            if (NULL != document) DetachDocument();
             return false;
         }
     }
     if (PARSE_MORE == status)
     {
         PLOG(PL_ERROR, "ProtoJson::Parser::LoadDocument() error: incomplete JSON document!\n");
+        if (NULL != document) DetachDocument();
         return false;
     }
     else
     {
+        if (NULL != document) DetachDocument();
         return true;
     }
 }  // end ProtoJson::Parser::LoadDocument()
@@ -789,7 +940,8 @@ bool ProtoJson::Parser::AddValueToParent(Item* parent, Item& value)
     
     if (NULL == parent)
     {
-        ASSERT((Item::ARRAY == value.GetType()) || (Item::OBJECT == value.GetType()));
+        //ASSERT((Item::ARRAY == value.GetType()) || (Item::OBJECT == value.GetType()));
+        ASSERT(Item::INVALID != value.GetType());
         current_document->AddItem(value);
     }
     else
@@ -814,10 +966,107 @@ bool ProtoJson::Parser::AddValueToParent(Item* parent, Item& value)
     }
     return true;
 }  // end AddValueToParent()
+
+bool ProtoJson::Parser::IsValidEscapeCode(char c)
+{
+    switch (c)
+    {
+        case 'b':   // backspace
+        case 'f':   // form feed
+        case 'n':   // new line
+        case 'r':   // carriage return
+        case 't':   // tab
+        case '"':   // double quote
+        case '\\':  // backslash
+            return true;
+        default:
+            return false;
+    }
+}  // end ProtoJson::Parser::IsValidEscapeCode()
+
+char ProtoJson::Parser::GetEscapeCode(char c)
+{
+    // returns escape code for input char
+    // (or zero if non-escaped character)
+    switch (c)
+    {
+        case '\b':   // backspace
+            return 'b';
+        case '\f':   // form feed
+            return 'f';
+        case '\n':   // new line
+            return 'n';
+        case '\r':   // carriage return
+            return 'r';
+        case '\t':   // tab
+            return 't';
+        case '"':   // double quote
+            return '"';
+        case '\\':  // backslash
+            return '\\';
+        default:
+            return 0;
+    }
+}  // end ProtoJson::Parser::GetEscapeCode()
+
+char ProtoJson::Parser::Unescape(char c)
+{
+    // returns char corresponding to escape code 
+    // (or input char if non-escaped character)
+    switch (c)
+    {
+        case 'b':   // backspace
+            return '\b';
+        case 'f':   // form feed
+            return '\f';
+        case 'n':   // new line
+            return '\n';
+        case 'r':   // carriage return
+            return '\r';
+        case 't':   // tab
+            return '\t';
+        case '"':   // double quote
+            return '"';
+        case '\\':  // backslash
+            return '\\';
+        default:
+            return c;
+    }
+}  // end ProtoJson::Parser::Unescape()
     
 bool ProtoJson::Parser::AddToString(String& string, const char* text, unsigned int length)
 {
-    unsigned int total = string.GetLength() + length;  
+    // Unescape text being added
+    // First, determine length of "unescaped" version of 'text'
+    unsigned int count = 0;
+    bool pending = input_escape_pending;
+    for (unsigned int i = 0; i < length; i++)
+    {
+        char c = text[i];
+        if (pending)
+        {
+            pending = false;
+            if (IsValidEscapeCode(c))
+            {
+                count++;
+            }
+            else
+            {
+                PLOG(PL_ERROR, "ProtoJson::Parser::AddToString() error: invalid escape sequence code '\\%c'!\n", c);
+                return false;
+            }
+        }
+        else if ('\\' == c)
+        {
+            pending = true;
+            continue;
+        }
+        else
+        {
+            count++;
+        }
+    }
+    size_t total = string.GetLength() + count;
     char* buffer = new char[total + 1]; // include null terminator
     if (NULL == buffer)
     {
@@ -827,7 +1076,30 @@ bool ProtoJson::Parser::AddToString(String& string, const char* text, unsigned i
     if (NULL != string.GetText())
         strcpy(buffer, string.GetText());
     if (0 != length)
-        memcpy(buffer + string.GetLength(), text, length);
+    {
+        // Convert/copy 'unescaped text' into new buffer
+        char* ptr = buffer + string.GetLength();
+        count = 0;
+        for (unsigned int i = 0; i < length; i++)
+        {
+            char c = text[i];
+            if (input_escape_pending)
+            {
+                input_escape_pending = false;
+                // already validated escape codes above
+                ptr[count++] = Unescape(c);
+            }
+            else if ('\\' == c)
+            {
+                input_escape_pending = true;
+                continue;
+            }
+            else
+            {
+                ptr[count++] = c;
+            }
+        }
+    }
     buffer[total] = '\0';
     string.SetTextPtr(buffer);
     return true;
@@ -835,14 +1107,13 @@ bool ProtoJson::Parser::AddToString(String& string, const char* text, unsigned i
             
 ProtoJson::Parser::Status ProtoJson::Parser::ProcessStringInput(const char* input, unsigned int length)
 {
-    if (0 == length) return PARSE_MORE;  // need more input
     bool start = (NULL == current_item) ? true : false;
     String* string;
     if (start)
     {
         // We're starting a new string, so create using top of stack as parent
         Item* parent = PeekStack();
-        if ((NULL == parent) || ((Item::ENTRY != parent->GetType()) && (Item::ARRAY != parent->GetType())))
+        if ((NULL != parent) && ((Item::ENTRY != parent->GetType()) && (Item::ARRAY != parent->GetType())))
         {
             PLOG(PL_ERROR, "ProtoJson::Parser::ProcessStringInput() error: invalid JSON syntax\n");
             return PARSE_ERROR;
@@ -860,6 +1131,7 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessStringInput(const char* inpu
         ASSERT(Item::STRING == current_item->GetType());
         string = static_cast<String*>(current_item);
     }
+    if (0 == length) return PARSE_MORE;  // need more input
     unsigned int i = 0;//start ? 1 : 0;  // to skip leading quote if applicable
     const char* startPtr = input + i;
     for (; i < length; i++)
@@ -867,6 +1139,10 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessStringInput(const char* inpu
         char c = input[i];
         if (is_escaped) 
         {
+            // TBD - should we convert escaped characters here,
+            //       or do it within the AddToString() method?
+            //       (and PrintString() should have option to
+            //        output escaped or raw version of string)
             is_escaped = false;
             continue;
         }
@@ -882,7 +1158,6 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessStringInput(const char* inpu
             {
                 // consume string text and end QUOTE
                 input_offset += i + 1;
-                ASSERT(NULL != string->GetParent());
                 if (!AddValueToParent(string->AccessParent(), *string))
                 {
                     PLOG(PL_ERROR, "ProtoJson::Parser::ProcessStringInput() error: unable to add to parent\n");
@@ -908,7 +1183,6 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessStringInput(const char* inpu
         return PARSE_ERROR;
     }
 }  // end ProtoJson::Parser::ProcessStringInput()
-
 
 bool ProtoJson::Parser::AddToTemp(const char* text, unsigned int length)
 {
@@ -945,14 +1219,13 @@ bool ProtoJson::Parser::AddToTemp(const char* text, unsigned int length)
 
 ProtoJson::Parser::Status ProtoJson::Parser::ProcessNumberInput(const char* input, unsigned int length)
 {
-    if (0 == length) return PARSE_MORE;  // need more input
     bool start = (NULL == current_item) ? true : false;
     Number* number;
     if (start)
     {
         // We're starting a new number, so create using top of stack as parent
         Item* parent = PeekStack();
-        if ((NULL == parent) || ((Item::ENTRY != parent->GetType()) && (Item::ARRAY != parent->GetType())))
+        if ((NULL != parent) && ((Item::ENTRY != parent->GetType()) && (Item::ARRAY != parent->GetType())))
         {
             PLOG(PL_ERROR, "ProtoJson::Parser::ProcessNumberInput() error: invalid JSON syntax\n");
             return PARSE_ERROR;
@@ -971,6 +1244,7 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessNumberInput(const char* inpu
         ASSERT(Item::NUMBER == current_item->GetType());
         number = static_cast<Number*>(current_item);
     }
+    if (0 == length) return PARSE_MORE;  // need more input
     for (unsigned int i = 0; i < length; i++)
     {
         char c = input[i];
@@ -1018,7 +1292,11 @@ bool ProtoJson::Parser::FixedItemIsValid(Item::Type type)
 {
     char* ptr = temp_buffer;
     // Convert temp_buffer to lower case for validation
-    while ('\0' != *ptr) tolower(*ptr++);
+    while ('\0' != *ptr) 
+    {
+        *ptr = tolower(*ptr);
+        ptr++;
+    }
     switch (type)
     {
         case Item::TRUE:
@@ -1039,13 +1317,12 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessFixedInput(const char* input
 {
     // This is used for "true", "false", and "null" value fields (i.e. fixed text)
     // Basically, the first character gives it away, but we validate
-    if (0 == length) return PARSE_MORE;  // need more input
     bool start = (NULL == current_item) ? true : false;
     if (start)
     {
         // We're starting a new number, so create using top of stack as parent
         Item* parent = PeekStack();
-        if ((NULL == parent) || ((Item::ENTRY != parent->GetType()) && (Item::ARRAY != parent->GetType())))
+        if ((NULL != parent) && ((Item::ENTRY != parent->GetType()) && (Item::ARRAY != parent->GetType())))
         {
             PLOG(PL_ERROR, "ProtoJson::Parser::ProcessNumberInput() error: invalid JSON syntax\n");
             return PARSE_ERROR;
@@ -1055,10 +1332,10 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessFixedInput(const char* input
         switch (c)
         {
             case TRUE_START:
-                current_item = new ProtoJson::TrueValue(parent);
+                current_item = new ProtoJson::Boolean(true, parent);
                 break;
             case FALSE_START:
-                current_item = new ProtoJson::FalseValue(parent);
+                current_item = new ProtoJson::Boolean(false, parent);
                 break;
             case NULL_START:
                 current_item = new ProtoJson::NullValue(parent);
@@ -1071,6 +1348,7 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessFixedInput(const char* input
     ASSERT((Item::TRUE == current_item->GetType()) ||
            (Item::FALSE == current_item->GetType()) ||
            (Item::NONE == current_item->GetType()));
+    if (0 == length) return PARSE_MORE;  // need more input
     for (unsigned int i = 0; i < length; i++)
     {
         char c = input[i];
@@ -1117,7 +1395,6 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessFixedInput(const char* input
 ProtoJson::Parser::Status ProtoJson::Parser::ProcessArrayInput(const char* input, unsigned int length)
 {
     // Seeking array value items or ARRAY_END
-    if (0 == length) return PARSE_MORE;  // need more input
     bool start = (NULL == current_item) ? true : false;
     Array* array;
     if (start)
@@ -1134,7 +1411,7 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessArrayInput(const char* input
         ASSERT(Item::ARRAY == current_item->GetType());
         array = static_cast<Array*>(current_item);
     }
-    
+    if (0 == length) return PARSE_MORE;  // need more input
     for (unsigned int i = 0; i < length; i++)
     {
         char c = input[i];
@@ -1173,7 +1450,6 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessArrayInput(const char* input
 ProtoJson::Parser::Status ProtoJson::Parser::ProcessEntryInput(const char* input, unsigned int length)
 {
     // Seeking entry key, Value, or end-of-entry delimiter
-    if (0 == length) return PARSE_MORE;  // need more input
     bool start = (NULL == current_item) ? true : false;
     Entry* entry;
     Object* object;  // parent of entry
@@ -1222,6 +1498,7 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessEntryInput(const char* input
         mode = SEEK_VALUE;
     else
         mode = SEEK_TERM;
+    if (0 == length) return PARSE_MORE;  // need more input
     for (unsigned int i = 0; i < length; i++)
     {
         char c = input[i];
@@ -1326,7 +1603,6 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessEntryInput(const char* input
 ProtoJson::Parser::Status ProtoJson::Parser::ProcessObjectInput(const char* input, unsigned int length)
 {
     // Seeking object key,value items or OBJECT_END
-    if (0 == length) return PARSE_MORE;  // need more input
     bool start = (NULL == current_item) ? true : false;
     Object* object;
     if (start)
@@ -1343,7 +1619,7 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessObjectInput(const char* inpu
         ASSERT(Item::OBJECT == current_item->GetType());
         object = static_cast<Object*>(current_item);
     }
-    
+    if (0 == length) return PARSE_MORE;  // need more input
     for (unsigned int i = 0; i < length; i++)
     {
         char c = input[i];
@@ -1445,17 +1721,16 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessInput(const char* inputBuffe
     input_offset = 0;
     while (input_offset < inputLength)
     {
-        ProtoCheckLogAllocations(stdout);
-        
+        //ProtoCheckLogAllocations(stdout);
         const char* input = inputBuffer + input_offset;
         unsigned int length = inputLength - input_offset;
         // TBD - should we pop the stack down in the lower parser layers instead?
         if (NULL == current_item) current_item = PopStack();
         if (NULL == current_item)
         {
-            bool empty = true;
-            result = PARSE_DONE;  // default result for empty document
-            // Seeking top level ARRAY or OBJECT
+            bool NONE = true;
+            result = PARSE_DONE;  // default result for NONE document
+            // Seeking top level item
             for (unsigned int i = 0; i < length; i++)
             {
                 char c = input[i];
@@ -1464,24 +1739,57 @@ ProtoJson::Parser::Status ProtoJson::Parser::ProcessInput(const char* inputBuffe
                 switch (c)
                 {
                     case ARRAY_START:
+                    {
                         // consume skipped white space + ARRAY_START
-                        empty = false;
+                        NONE = false;
                         input_offset += (i + 1);
-                        result = ProcessArrayInput(input + (i + 1), length - (i + 1));
+                        unsigned int remainder = (length > i) ? length - (i+1) : 0;
+                        result = ProcessArrayInput(input + (i + 1), remainder);
                         break;
+                    }
                     case OBJECT_START:
+                    {
                         // consume skipped white space + OBJECT_START
-                        empty = false;
+                        NONE = false;
                         input_offset += (i + 1);
-                        result = ProcessObjectInput(input + (i + 1), length - (i + 1));
+                        unsigned int remainder = (length > i) ? length - (i+1) : 0;
+                        result = ProcessObjectInput(input + (i + 1), remainder);
                         break;
+                    }
+                    case QUOTE:
+                    {
+                        // consume skipped white space + QUOTE
+                        NONE = false;
+                        input_offset += (i + 1);
+                        unsigned int remainder = (length > i) ? length - (i+1) : 0;
+                        result = ProcessStringInput(input + (i + 1), remainder);
+                        break;
+                    }
+                    case TRUE_START:
+                    case FALSE_START:
+                    case NULL_START:
+                    {
+                        NONE = false;
+                        input_offset += i;
+                        unsigned int remainder = (length > i) ? length - i : 0;
+                        result = ProcessFixedInput(input + i, remainder);
+                        break;
+                    }
                     default:
-                        // invalid input at top level 
-                        return PARSE_ERROR;
+                    {
+                        if (0 == isdigit(c))
+                            return PARSE_ERROR; // invalid input at top level 
+                        NONE = false;
+                        input_offset += i;
+                        unsigned int remainder = (length > i) ? length - i : 0;
+                        result = ProcessNumberInput(input + i, remainder);
+                        break;
+                    }
+                        
                 }
                 break; // an increment of non-whitespace parsing occurred
             }
-            if (empty) input_offset += length;  // consumes skipped white space
+            if (NONE) input_offset += length;  // consumes skipped white space
             if (PARSE_ERROR == result) break;
         }
         else

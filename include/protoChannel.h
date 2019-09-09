@@ -21,8 +21,9 @@
  */
 
 #include "protoDefs.h"
+#include "protoNotify.h"
 
-class ProtoChannel
+class ProtoChannel : public ProtoNotify
 {
     public:
         virtual ~ProtoChannel();
@@ -33,6 +34,8 @@ class ProtoChannel
         typedef int Handle;     // UNIX uses "int" type for descriptors
 #endif // if/else WIN32
         static const Handle INVALID_HANDLE;
+        
+        typedef NotifyFlag Notification;  // TBD - deprecate this
         
         // Derived classes MUST _end_ their own "Open()" method
         // with a call to this
@@ -55,14 +58,6 @@ class ProtoChannel
             return (INVALID_HANDLE != descriptor);
 #endif // if/else WIN32/UNIX    
         }
-        
-        // Asynchronous I/O notification stuff
-        enum Notification
-        {
-            NOTIFY_NONE     = 0x00,
-            NOTIFY_INPUT    = 0x01,
-            NOTIFY_OUTPUT   = 0x02
-        };
         /**
          * @class Notifier
          *
@@ -85,18 +80,18 @@ class ProtoChannel
         bool StartInputNotification();
         void StopInputNotification();
         bool InputNotification() 
-            {return (0 != (notify_flags & ((int)NOTIFY_INPUT)));}        
+            {return NotifyFlagIsSet(NOTIFY_INPUT);}      
 
         bool StartOutputNotification();
         void StopOutputNotification();
          bool OutputNotification() 
-            {return (0 != (notify_flags & ((int)NOTIFY_OUTPUT)));}
+            {return NotifyFlagIsSet(NOTIFY_OUTPUT);} 
 
         bool UpdateNotification();
         
-        void OnNotify(ProtoChannel::Notification theNotification)
+        void OnNotify(NotifyFlag theFlag)
         {
-            if (listener) listener->on_event(*this, theNotification);   
+            if (listener) listener->on_event(*this, theFlag);   
         }
         
         
@@ -114,15 +109,14 @@ class ProtoChannel
         // NOTE: For VC++ 6.x Debug builds "/ZI" or "/Z7" compile options must NOT be specified
         // (or else VC++ 6.x experiences an "internal compiler error")
         template <class listenerType>
-        bool SetListener(listenerType* theListener, void(listenerType::*eventHandler)(ProtoChannel&, Notification))
+        bool SetListener(listenerType* theListener, void(listenerType::*eventHandler)(ProtoChannel&, NotifyFlag))
         {
-            bool doUpdate = ((NULL == listener) && (NULL != theListener)) || 
-                            ((NULL == theListener) && (NULL != listener));
-            if (listener) delete listener;
-            listener = theListener ? new LISTENER_TYPE<listenerType>(theListener, eventHandler) : NULL;
-            bool result = theListener ? (NULL != theListener) : true;
+            bool doUpdate = ((NULL != theListener) || (NULL != listener));
+            if (NULL != listener) delete listener;
+            listener = (NULL != theListener) ? new LISTENER_TYPE<listenerType>(theListener, eventHandler) : NULL;
+            bool result = (NULL != theListener) ? (NULL != listener) : true;
             return result ? (doUpdate ? UpdateNotification() : true) : false;
-        }
+        }        
         bool HasListener() {return (NULL != listener);}
             
     protected:
@@ -138,7 +132,7 @@ class ProtoChannel
         {
             public:
                 virtual ~Listener() {}
-                virtual void on_event(ProtoChannel& theChannel, Notification theNotification) = 0;
+                virtual void on_event(ProtoChannel& theChannel, NotifyFlag theFlag) = 0;
                 virtual Listener* duplicate() = 0;
         };
         template <class listenerType>
@@ -146,15 +140,15 @@ class ProtoChannel
         {
             public:
                 LISTENER_TYPE(listenerType* theListener, 
-                              void(listenerType::*eventHandler)(ProtoChannel&, Notification))
+                              void(listenerType::*eventHandler)(ProtoChannel&, NotifyFlag))
                     : listener(theListener), event_handler(eventHandler) {}
-                void on_event(ProtoChannel& theChannel, Notification theNotification)
-                    {(listener->*event_handler)(theChannel, theNotification);}
+                void on_event(ProtoChannel& theChannel, NotifyFlag theFlag)
+                    {(listener->*event_handler)(theChannel, theFlag);}
                 Listener* duplicate()
                     {return (static_cast<Listener*>(new LISTENER_TYPE<listenerType>(listener, event_handler)));}
             private:
                 listenerType* listener;
-                void(listenerType::*event_handler)(ProtoChannel&, Notification);
+                void(listenerType::*event_handler)(ProtoChannel&, NotifyFlag);
         };
 
     protected: 
@@ -193,7 +187,6 @@ class ProtoChannel
 #endif // UNIX
         Listener*               listener; 
         Notifier*               notifier;   
-        int                     notify_flags; 
         
 };  // end class ProtoChannel
 

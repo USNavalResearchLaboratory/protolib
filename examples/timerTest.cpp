@@ -168,26 +168,56 @@ TimerTestApp::CmdType TimerTestApp::GetCmdType(const char* cmd)
     return type; 
 }  // end TimerTestApp::GetCmdType()
 
+#ifdef WIN32
+typedef NTSTATUS(CALLBACK* LPFN_NtQueryTimerResolution)(PULONG, PULONG, PULONG);
+#endif // WIN32
 
 bool TimerTestApp::OnStartup(int argc, const char*const* argv)
 {
-    
+
 #if defined(USE_TIMERFD)
-    TRACE("USE_TIMERFD\n");
+	TRACE("USE_TIMERFD\n");
 #endif
 #if defined(USE_SELECT)
-    TRACE("USE_SELECT\n");
+	TRACE("USE_SELECT\n");
 #endif
 #if defined(HAVE_PSELECT)
-    TRACE("HAVE_PSELECT\n");
+	TRACE("HAVE_PSELECT\n");
 #endif
 #if defined(USE_EPOLL)
-    TRACE("USE_EPOLL\n");
+	TRACE("USE_EPOLL\n");
 #endif
+#ifdef USE_WAITABLE_TIMER
+	TRACE("USE_WAITABLE_TIMER\n");
+#endif
+#ifdef WIN32
+	HMODULE hNtDll = ::GetModuleHandle("Ntdll");
+	if (hNtDll)
+	{
+		ULONG nMinRes, nMaxRes, nCurRes;
+		LPFN_NtQueryTimerResolution pQueryResolution =
+			(LPFN_NtQueryTimerResolution)::GetProcAddress(hNtDll, "NtQueryTimerResolution");
+		if (NULL != pQueryResolution)
+		{
+			pQueryResolution(&nMinRes, &nMaxRes, &nCurRes);	
+			TRACE("Windows system timer resolutions (min/max/cur): %u.%u / %u.%u / %u.%u msec\n",
+				nMinRes / 10000, (nMinRes % 10000) / 10,
+				nMaxRes / 10000, (nMaxRes % 10000) / 10,
+				nCurRes / 10000, (nCurRes % 10000) / 10);
+			/* Eventually use this to set higher resolution 
+			LPFN_NtSetTimerResolution pSetResolution = 
+				(LPFN_NtSetTimerResolution)::GetProcAddress(hNtDll, "NtSetTimerResolution");
+			if (pSetResolution && nSetRes)
+			{
+				NTSTATUS nStatus = pSetResolution(nSetRes, TRUE, &nCurRes);
+			}
+			*/
+		}
+	}
+#endif // WIN32
     
     if (!ProcessCommands(argc, argv))
     {
-        PLOG(PL_ERROR, "TimerTestApp::OnStartup() error processing command line options\n");
         return false;   
     }
     

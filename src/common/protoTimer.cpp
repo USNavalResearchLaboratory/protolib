@@ -22,8 +22,10 @@
 * @param next(NULL)
 */
 ProtoTimer::ProtoTimer()
- : listener(NULL), interval(1.0), repeat(0), repeat_count(0),
-   mgr(NULL), prev(NULL), next(NULL)
+ : listener(NULL), interval(1.0), repeat(0), repeat_count(0), mgr(NULL)
+#ifndef _SORTED_TIMERS
+   ,prev(NULL), next(NULL)
+#endif  // !_SORTED_TIMERS
 {
 
 }
@@ -128,7 +130,12 @@ double ProtoTimer::GetTimeRemaining() const
  */
 ProtoTimerMgr::ProtoTimerMgr()
 : update_pending(false), timeout_scheduled(false),
-  long_head(NULL), long_tail(NULL), short_head(NULL), short_tail(NULL), invoked_timer(NULL)
+#ifdef _SORTED_TIMERS
+  timer_list_count(0),
+#else
+  long_head(NULL), long_tail(NULL), short_head(NULL), short_tail(NULL), 
+#endif // if/else SORTTED_TIMERS
+  invoked_timer(NULL)
 {
     pulse_timer.SetListener(this, &ProtoTimerMgr::OnPulseTimeout);
     pulse_timer.SetInterval(1.0);
@@ -154,11 +161,10 @@ const double ProtoTimerMgr::PRECISION_TIME_THRESHOLD = 8.0;
 */
 void ProtoTimerMgr::OnSystemTimeout()
 {
-    //TRACE("enter OnSystemTimeout() short_head interval:%lf ...\n", short_head ? short_head->GetInterval() : -1.0);
     timeout_scheduled = false;
     bool updateStatus = update_pending;
     update_pending = true;
-    ProtoTimer* next = short_head;
+    ProtoTimer* next = GetShortHead();
     ProtoTime now;
     GetCurrentProtoTime(now);
     while (next)
@@ -188,7 +194,7 @@ void ProtoTimerMgr::OnSystemTimeout()
             }
             // else timer got deleted or otherwise rescheduled, etc
             invoked_timer = NULL;
-            next = short_head;
+            next = GetShortHead();
         } 
         else
         {
@@ -201,26 +207,25 @@ void ProtoTimerMgr::OnSystemTimeout()
 
 bool ProtoTimerMgr::OnPulseTimeout(ProtoTimer& /*theTimer*/)
 {
-    ProtoTimer* next = long_head;
+    ProtoTimer* next = GetLongHead();
     pulse_mark += 1.0;
-    while (next)
+    while (NULL != next)
     {
         double delta = ProtoTime::Delta(next->timeout, pulse_mark);
         if (delta < PRECISION_TIME_THRESHOLD)
         {
-            ProtoTimer& current = *next;
-            next = next->next;
-            RemoveLongTimer(current);
-            GetCurrentProtoTime(current.timeout);
-            current.timeout += delta;
-            InsertShortTimer(current);
+            RemoveLongTimer(*next);
+            GetCurrentProtoTime(next->timeout);
+            next->timeout += delta;
+            InsertShortTimer(*next);
+            next = GetLongHead();
         }
         else
         {
             break;   
         }
     }
-    if (NULL == long_head)
+    if (NULL == GetLongHead())
     {
         DeactivateTimer(pulse_timer);
         return false;
@@ -307,7 +312,7 @@ void ProtoTimerMgr::DeactivateTimer(ProtoTimer& theTimer)
         else
         {
             RemoveLongTimer(theTimer);
-            if (NULL == long_head) 
+            if (NULL == GetLongHead()) 
             {
                 bool updateStatus = update_pending;
                 update_pending = true;
@@ -321,7 +326,7 @@ void ProtoTimerMgr::DeactivateTimer(ProtoTimer& theTimer)
 
 void ProtoTimerMgr::Update()
 {
-    if (NULL == short_head)
+    if (NULL == GetShortHead())
     {
         // REMOVE existing scheduled system timeout if applicable
         if (timeout_scheduled)
@@ -334,11 +339,11 @@ void ProtoTimerMgr::Update()
     else if (timeout_scheduled)
     {
         // MODIFY existing scheduled system timeout if different
-        if (scheduled_timeout != short_head->timeout)
+        if (scheduled_timeout != GetShortHead()->timeout)
         {
-            if (UpdateSystemTimer(ProtoTimer::MODIFY, short_head->GetTimeRemaining()))
+            if (UpdateSystemTimer(ProtoTimer::MODIFY, GetShortHead()->GetTimeRemaining()))
             {
-                scheduled_timeout = short_head->timeout;
+                scheduled_timeout = GetShortHead()->timeout;
             }
             else  // (TBD) if MODIFY fails, do we still have a system timeout ???
             {
@@ -350,9 +355,9 @@ void ProtoTimerMgr::Update()
     else 
     {
         // INSTALL new scheduled system timeout
-        if (UpdateSystemTimer(ProtoTimer::INSTALL, short_head->GetTimeRemaining()))
+        if (UpdateSystemTimer(ProtoTimer::INSTALL, GetShortHead()->GetTimeRemaining()))
         {
-                scheduled_timeout = short_head->timeout;
+                scheduled_timeout = GetShortHead()->timeout;
                 timeout_scheduled = true;
         }  
         else
@@ -361,6 +366,143 @@ void ProtoTimerMgr::Update()
         }
     }
 }  // end ProtoTimerMgr::Update()
+
+#ifdef _SORTED_TIMERS
+void ProtoTimerMgr::InsertShortTimer(ProtoTimer& theTimer)
+{
+    theTimer.mgr = this;
+    theTimer.is_precise = true;
+    const int LINKED_LIST_MAX = 16;
+    bool addToList;
+    if (timer_list_count < LINKED_LIST_MAX) 
+    {
+        if (timer_table.IsEmpty() || (theTimer.timeout <= timer_table.GetHead()->timeout))
+        {
+            addToList = true;
+            timer_list_count++;
+        }
+        else
+        {
+            // there's room in the list but the timer is bigger than table head
+            addToList = false;
+        }
+    }
+    else if (LINKED_LIST_MAX > 0)
+    {
+        ProtoTimer* listTail = timer_list.GetTail();
+        if (theTimer.timeout < listTail->timeout)
+        {
+            timer_list.Remove(*listTail);
+            listTail->UpdateKey();
+            timer_table.Insert(*listTail);
+            addToList = true;
+        }   
+        else
+        {
+            addToList = false;
+        }             
+    }
+    else
+    {
+        addToList = false;
+    }
+    if (addToList)
+    {
+        ProtoTimerList::Iterator iterator(timer_list);
+        ProtoTimer* nextTimer;
+        
+        // Thus code (as stands), searches for the timer insertion
+        // point from the front of the list.  The assumption is that
+        // applications will generally have a small number of high speed
+        // timers being updated frequently and other, longer term, timers
+        // being updated less frequently that end up at the end of the list. 
+        // Thus, searching from the front is more efficient on average
+        // (Note that the "timer_list" linked list is only used for a
+        //  modest number of timers and the "timer_table" ProtoSortedTree
+        //  is used to maintain low insertion cost for cases of large
+        //  numbers of timers). 
+        //
+        // NOTE:  There is additional code here that, if uncommented, will 
+        // search the "timer_list" from the front _and_ the back.  This 
+        // approach is not expected to provide significant benefit in general, 
+        // but the commented code is provided for someone to evaluate as desired.
+        // (Also the "LINKER_LIST_MAX" constant could be changed to adjust
+        //  the balance of "timer_list" entries vs. "timer_table" entries.
+        //ProtoTimerList::Iterator riterator(timer_list, true);
+        //ProtoTimer* prevTimer = NULL;
+        while (true)
+        {
+            nextTimer = iterator.GetNextItem();
+            if ((NULL == nextTimer) || (theTimer.timeout <= nextTimer->timeout))
+                break;
+            // Note we know riterator.GetPrevItem() will be non-NULL at this point
+            //nextTimer = prevTimer;
+            //prevTimer = riterator.GetPrevItem();
+            //if (prevTimer->timeout <= theTimer.timeout)
+            //    break;
+        } 
+        theTimer.InvalidateKey();
+        if (NULL == nextTimer)
+            timer_list.Append(theTimer);
+        else
+            timer_list.Insert(theTimer, *nextTimer);
+    }
+    else
+    {
+        theTimer.UpdateKey();
+        timer_table.Insert(theTimer);
+    }
+    
+    while (timer_list_count < LINKED_LIST_MAX)
+    {
+        // Move any timers that can fit from table to list.  This is essentially a 
+        // deferred action that would be done in RemoveShortTimer() but doing it 
+        // here allows for a timer in the "timer_list" to be quickly removed and 
+        // reinserted without unnecessarily migrating a timer from and then back 
+        // to the "timer_table"
+        ProtoTimer* next = timer_table.RemoveHead();
+        if (NULL != next)
+        {
+            next->InvalidateKey();
+            timer_list.Append(*next);
+            timer_list_count++;
+        }
+        else
+        {
+            break;
+        }
+    } 
+}  // end ProtoTimerMgr::InsertShortTimer()
+
+void ProtoTimerMgr::RemoveShortTimer(ProtoTimer& theTimer)
+{
+    if (theTimer.KeyIsValid())
+    {
+        timer_table.Remove(theTimer);
+    }
+    else
+    {
+        timer_list.Remove(theTimer);
+        timer_list_count--;
+    }
+    theTimer.mgr = NULL;
+}  // end ProtoTimerMgr::RemoveShortTimer()
+
+void ProtoTimerMgr::InsertLongTimer(ProtoTimer& theTimer)
+{
+    theTimer.mgr = this;
+    theTimer.is_precise = false;
+    theTimer.UpdateKey();
+    long_timer_table.Insert(theTimer);
+}  // end ProtoTimerMgr::InsertLongTimer()
+
+void ProtoTimerMgr::RemoveLongTimer(ProtoTimer& theTimer)
+{
+    long_timer_table.Remove(theTimer);
+    theTimer.mgr = NULL;
+}  // end ProtoTimerMgr::InsertLongTimer()
+
+#else
 
 void ProtoTimerMgr::InsertShortTimer(ProtoTimer& theTimer)
 {
@@ -548,3 +690,5 @@ void ProtoTimerMgr::RemoveLongTimer(ProtoTimer& theTimer)
         long_tail = theTimer.prev;
     theTimer.mgr = NULL;
 }  // end ProtoTimerMgr::RemoveLongTimer()
+
+#endif // if/else _SORTED_TIMERS

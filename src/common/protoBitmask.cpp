@@ -610,7 +610,7 @@ bool ProtoSlidingMask::Resize(UINT32 numBits)
 
 void ProtoSlidingMask::Destroy()
 {
-    if (mask)
+    if (NULL != mask)
     {
         delete[] mask;
         mask = NULL;

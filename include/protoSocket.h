@@ -3,6 +3,7 @@
 
 #include "protoAddress.h"
 #include "protoDebug.h"  // temp
+#include "protoNotify.h"
 
 #ifdef WIN32
 /*#ifdef _WIN32_WCE
@@ -22,6 +23,11 @@ typedef GUID *LPGUID;
 #include <unistd.h>  // for read()
 #include <stdio.h>
 #endif // if/else WIN32/UNIX
+// "RAW" is predefined IOCTL macro in Gnu/Hurd Linux
+// so this deconflicts it for the ProtoSocket::Protocol enum
+#ifdef RAW
+#undef RAW
+#endif // RAW
 /**
  * @class ProtoSocket
  *
@@ -36,7 +42,7 @@ typedef GUID *LPGUID;
  * UDP or TCP socket.
  */
 
-class ProtoSocket
+class ProtoSocket : public ProtoNotify
 {
     public:
 			// Type definitions
@@ -176,7 +182,7 @@ class ProtoSocket
 		// This was for debugging?? Remove??
         bool Read(char* buffer, unsigned int &numBytes)
         {
-            int result = read(handle, buffer, numBytes);
+            ssize_t result = read(handle, buffer, numBytes);
             if (result < 0)
             {
                 perror("read() error");
@@ -191,7 +197,7 @@ class ProtoSocket
             }   
             else
             {
-                numBytes = result;
+                numBytes = (unsigned int)result;
                 return true;
             }
         }
@@ -216,10 +222,10 @@ class ProtoSocket
 
 		// Helper methods
 #ifdef HAVE_IPV6
-		static bool HostIsIPv6Capable();
+	static bool HostIsIPv6Capable();
         // Temporarily retained for backward compatability
-		static bool SetHostIPv6Capable() {return true;}
-		bool SetFlowLabel(UINT32 label);
+	static bool SetHostIPv6Capable() {return true;}
+	bool SetFlowLabel(UINT32 label);
 #endif //HAVE_IPV6
 
         // These are some static network "helper" functions that get information
@@ -230,9 +236,9 @@ class ProtoSocket
         // the implementations here will eventually be removed _and_ the ProtoSocket
         // static method declarations themselves will be eventually deprecated  
         //          
-		// This appends addresses of type "addrType" to the "addrList"
-		static bool GetHostAddressList(ProtoAddress::Type  addrType,
-								       ProtoAddressList&   addrList);
+	// This appends addresses of type "addrType" to the "addrList"
+	static bool GetHostAddressList(ProtoAddress::Type  addrType,
+				       ProtoAddressList&   addrList);
 
         static bool GetInterfaceAddressList(const char*         ifName, 
 				                            ProtoAddress::Type  addrType,
@@ -250,15 +256,6 @@ class ProtoSocket
         static bool GetInterfaceName(unsigned int index, char* buffer, unsigned int buflen);   
         static bool GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen); 
         
-        // Asynchronous I/O notification stuff
-        enum Flag
-        {
-            NOTIFY_NONE      =   0x00,
-            NOTIFY_INPUT     =   0x01,
-            NOTIFY_OUTPUT    =   0x02,
-            NOTIFY_EXCEPTION =  0x04,
-	        NOTIFY_ERROR     =   0x08
-        };
         class Notifier
         {
             public:
@@ -282,7 +279,7 @@ class ProtoSocket
         bool ExceptionNotification() const
             {return notify_exception;}
 
-        void OnNotify(ProtoSocket::Flag theFlag);
+        void OnNotify(ProtoNotify::NotifyFlag theFlag);
         
         enum Event {INVALID_EVENT, CONNECT, ACCEPT, SEND, RECV, DISCONNECT, ERROR_, EXCEPTION};
         
@@ -293,13 +290,13 @@ class ProtoSocket
         template <class listenerType>
         bool SetListener(listenerType* theListener, void(listenerType::*eventHandler)(ProtoSocket&, Event))
         {
-            bool doUpdate = ((NULL == listener) && (NULL != theListener)) || 
-                            ((NULL == theListener) && (NULL != listener));
-            if (listener) delete listener;
-            listener = theListener ? new LISTENER_TYPE<listenerType>(theListener, eventHandler) : NULL;
-            bool result = theListener ? (NULL != theListener) : true;
+            bool doUpdate = ((NULL != theListener) || (NULL != listener));
+            if (NULL != listener) delete listener;
+            listener = (NULL != theListener) ? new LISTENER_TYPE<listenerType>(theListener, eventHandler) : NULL;
+            bool result = (NULL != theListener) ? (NULL != listener) : true;
             return result ? (doUpdate ? UpdateNotification() : true) : false;
         }
+        
         
         bool HasListener() 
             {return (NULL != listener);}
@@ -456,7 +453,6 @@ class ProtoSocket
 	private:
 		static const int IFBUFSIZ = 256;  // for GetHostAddressList
 		static const int IFIDXSIZ = 256;  //   "
-
 #ifdef WIN32
 		static LPFN_WSARECVMSG  WSARecvMsg;
 #else
@@ -466,6 +462,5 @@ class ProtoSocket
         static IPv6SupportStatus ipv6_support_status;
 
 };  // end class ProtoSocket
-
 
 #endif // _PROTO_SOCKET

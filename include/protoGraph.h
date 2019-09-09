@@ -1,8 +1,12 @@
 #ifndef _PROTO_GRAPH
 #define _PROTO_GRAPH
 
-#include <protoTree.h>
-#include <protoDebug.h>
+#include "protoTree.h"
+#include "protoDebug.h"
+#include "protoDefs.h"
+
+// TBD - this could be re-implemented using ProtoQueue classes
+//       for VerticeQueue, etc.
 
 /**
  * @class ProtoGraph

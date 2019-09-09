@@ -2,7 +2,7 @@
 #define _PROTO_PIPE
 
 #include "protoSocket.h"
-
+#include "protoDefs.h"
 /**
  * @class ProtoPipe 
  *

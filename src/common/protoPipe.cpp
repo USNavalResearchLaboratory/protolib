@@ -276,7 +276,7 @@ bool ProtoPipe::Open(const char* theName)
     // (TBD) use a semaphore to avoid issue of stale
     // Unix domain socket paths causing Open() to fail ???
     if (IsOpen()) Close();
-    char pipeName[PATH_MAX];
+    char pipeName[PATH_MAX] = {0};
     if(*theName!='/')
     {
 #ifdef __ANDROID__
@@ -291,10 +291,10 @@ bool ProtoPipe::Open(const char* theName)
     sockAddr.sun_family = AF_UNIX;
     strcpy(sockAddr.sun_path, pipeName);
 #ifdef SCM_RIGHTS  /* 4.3BSD Reno and later */
-    int len = sizeof(sockAddr.sun_len) + sizeof(sockAddr.sun_family) + 
+    size_t len = sizeof(sockAddr.sun_len) + sizeof(sockAddr.sun_family) +
 	          strlen(sockAddr.sun_path) + 1;
 #else
-    int len = strlen(sockAddr.sun_path) + sizeof(sockAddr.sun_family);
+    size_t len = strlen(sockAddr.sun_path) + sizeof(sockAddr.sun_family);
 #endif // if/else SCM_RIGHTS    
     int socketType = (UDP == protocol) ? SOCK_DGRAM : SOCK_STREAM;      
     if ((handle = socket(AF_UNIX, socketType, 0)) < 0)
@@ -303,7 +303,7 @@ bool ProtoPipe::Open(const char* theName)
         Close();
         return false;   
     }
-    if (bind(handle, (struct sockaddr*)&sockAddr,  len) < 0)
+    if (bind(handle, (struct sockaddr*)&sockAddr,  (socklen_t)len) < 0)
     {
         PLOG(PL_WARN, "ProtoPipe::Open() bind(%s) error: %s\n", pipeName, GetErrorString());
         Close();
@@ -334,7 +334,7 @@ void ProtoPipe::Close()
 
 void ProtoPipe::Unlink(const char* theName)
 {
-    char pipeName[PATH_MAX];
+    char pipeName[PATH_MAX] = {0};
     if(*theName!='/')
     {
 #ifdef __ANDROID__
@@ -469,7 +469,7 @@ bool ProtoPipe::Connect(const char* theName)
     }
     strncat(serverAddr.sun_path, theName, PATH_MAX - strlen(serverAddr.sun_path));
 #ifdef SCM_RIGHTS  // 4.3BSD Reno and later 
-    int addrLen = sizeof(serverAddr.sun_len) + sizeof(serverAddr.sun_family) + 
+    size_t addrLen = sizeof(serverAddr.sun_len) + sizeof(serverAddr.sun_family) +
 	              strlen(serverAddr.sun_path) + 1;
 #else
     int addrLen = strlen(serverAddr.sun_path) + sizeof(serverAddr.sun_family);
@@ -477,7 +477,7 @@ bool ProtoPipe::Connect(const char* theName)
     // Make sure socket is "blocking" before connect attempt for "local socket
     ProtoPipe::Notifier* savedNotifier = notifier;
     if (NULL != savedNotifier) SetNotifier((ProtoPipe::Notifier*)NULL);   
-    if (connect(handle, (struct sockaddr*)&serverAddr, addrLen) < 0)
+    if (connect(handle, (struct sockaddr*)&serverAddr, (socklen_t)addrLen) < 0)
     {
 	    PLOG(PL_DEBUG, "ProtoPipe::Connect(): connect() error: %s\n", GetErrorString());
 	    Close();

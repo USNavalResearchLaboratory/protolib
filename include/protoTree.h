@@ -477,7 +477,7 @@ class ProtoSortedTree
                 virtual ProtoTree::Endian GetEndian() const
 #ifdef WIN32
                 // some windows compilers are more restrictive
-                    {return GetEndian();}
+                    {return ProtoTree::Item::GetEndian();}
 #else
                     {return ProtoTree::Item::GetEndian();}
 #endif
@@ -571,6 +571,8 @@ class ProtoSortedTree
                 
                 void SetCursor(Item* item)
                     {list_iterator.SetCursor(item);}
+                Item* GetCursor()
+                    {return list_iterator.PeekNextItem();}
                 
                 // This flips the reversal state, moving 
                 // cursor forward or backward one item
@@ -647,6 +649,8 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
             {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::GetHead()));}      
         ITEM_TYPE* GetTail() const
             {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::GetTail()));}
+        ITEM_TYPE* RemoveHead() 
+            {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::RemoveHead()));}      
         
         class Iterator : public ProtoSortedTree::Iterator
         {
@@ -660,12 +664,12 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
                 
                 ITEM_TYPE* GetPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::GetPrevItem());}
-                ITEM_TYPE* PeekPrevItem() const
+                ITEM_TYPE* PeekPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::PeekPrevItem());}
                 
                 ITEM_TYPE* GetNextItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::GetNextItem());}
-                ITEM_TYPE* PeekNextItem() const
+                ITEM_TYPE* PeekNextItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::PeekNextItem());}
 
         };  // end class ProtoSortedTreeTemplate::Iterator

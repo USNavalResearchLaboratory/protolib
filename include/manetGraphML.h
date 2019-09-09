@@ -51,16 +51,20 @@ class ManetGraphMLParser
         bool SetXMLName(const char* theName);
 
         bool SetAttributeKey(const char* theName,const char* theType, const char* theDomain = NULL, const char* oldIndex = NULL,const char* theDefault = NULL);
+        
+        bool SetAttribute(const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Node& node, const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Link& link, const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Interface& interface, const char* theName, const char* theValue);
 
     protected:         
         bool AddAttributeKey(const char* theName,const char* theType, const char* theDomain = NULL, const char* oldIndex = NULL,const char* theDefault = NULL);
+        bool AddAttribute(const char* theName, const char* theValue);
         bool AddAttribute(NetGraph::Node& node, const char* theName, const char* theValue);
         bool AddAttribute(NetGraph::Link& link, const char* theName, const char* theValue);
         bool AddAttribute(NetGraph::Interface& interface, const char* theName, const char* theValue);
 
+        bool GetLookup(char* theLookup,unsigned int maxlen);
         bool GetLookup(char* theLookup,unsigned int maxlen,NetGraph::Node& node);
         bool GetLookup(char* theLookup,unsigned int maxlen,NetGraph::Link& link);
         bool GetLookup(char* theLookup,unsigned int maxlen,NetGraph::Interface& interface);
@@ -125,6 +129,7 @@ class ManetGraphMLParser
         virtual NetGraph::Node* CreateNode() = 0;
 //        virtual bool WriteNodeAttributes(xmlTextWriter* writerPtr,NetGraph::Node& theNode) = 0;
         virtual bool UpdateNodeAttributes(NetGraph::Node& theNode) = 0; //this will replace the above so keys will be stored locally
+        bool WriteLocalAttributes(xmlTextWriter* writerPtr);
         bool WriteLocalNodeAttributes(xmlTextWriter* writerPtr,NetGraph::Node& theNode);
 
         virtual NetGraph::Interface* CreateInterface(NetGraph::Node& node) = 0;
@@ -185,6 +190,11 @@ class ManetGraphMLTemplate : public ManetGraphMLParser, public NetGraphTemplate<
             {return true;}
         virtual bool WriteLinkAttributes(xmlTextWriter* writerPtr, NetGraph::Link& theLInk)
             {return true;}*/
+//bunny new
+        virtual bool UpdateGraphAttributes(NetGraph& theGraph)
+            {return true;}
+//bunny end new
+
         virtual bool UpdateNodeAttributes(NetGraph::Node& theNode)
             {return true;}
         virtual bool UpdateInterfaceAttributes(NetGraph::Interface& theInterface)
@@ -210,6 +220,7 @@ class ManetGraphMLTemplate : public ManetGraphMLParser, public NetGraphTemplate<
 };  // end class ManetGraphMLParser    
 
 
-//class ManetGraphML : public ManetGraphMLTemplate<> {};
+// Example, default ManetGraphML
+class ManetGraphML : public ManetGraphMLTemplate<> {};
 
 #endif // _MANET_GRAPHML

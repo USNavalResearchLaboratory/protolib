@@ -2,7 +2,6 @@
 #include "protoDebug.h"
 
 
-
 // TBD - This code could be streamlined a bit and with moving stuff to "linuxNet.cpp" using NETLINK
 //       for everything so Android is supported there, too and keep this stuff cleaner.  Perhaps a
 //       "bsdNet.cpp" for OSX/BSD and keep the more legacy Unix stuff here???  I can't go on supporting
@@ -80,7 +79,7 @@ unsigned int ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer
                 theAddr.SetSockAddr(*(ptr->ifa_addr));
                 if (theAddr.HostIsEqual(ifAddr))
                 {
-                    namelen = strlen(ptr->ifa_name);
+                    namelen = (unsigned int)strlen(ptr->ifa_name);
                     if (namelen > IFNAMSIZ) namelen = IFNAMSIZ;
                     if (NULL == buffer) break;
                     unsigned int maxlen = (buflen > IFNAMSIZ) ? IFNAMSIZ : buflen;
@@ -740,7 +739,7 @@ unsigned int ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsign
     if (NULL != if_indextoname(index, ifName))
     {
         strncpy(buffer, ifName, buflen);
-        return strlen(ifName);
+        return (unsigned int)strlen(ifName);
     }
     else
     {

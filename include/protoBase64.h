@@ -6,6 +6,8 @@
 // the output is fully padded per the RFC's recommendation.  However, options
 // are provided to enforce a maximum text line length and exclude padding if desired.
 
+#include "protoDefs.h"
+
 class ProtoBase64
 {
     public:

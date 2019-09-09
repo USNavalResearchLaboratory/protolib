@@ -231,7 +231,11 @@ bool BsdDetour::SetIPFirewall(Action              action,
         if (NULL != p)
         {
             char feedback[256];
-            fread(feedback, 1, 256, p);
+            if (0 == fread(feedback, 1, 256, p))
+            {
+                PLOG(PL_WARN, "BsdDetour::SetIPFirewall() error: fread(%s): %s\n",
+                        rule, GetErrorString());
+            }
             char* ptr = strchr(feedback, '\n');
             if (NULL != ptr) *ptr = '\0';
             feedback[255] = '\0';

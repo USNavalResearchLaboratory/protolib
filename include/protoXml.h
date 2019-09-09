@@ -45,7 +45,7 @@ namespace ProtoXml
                     const char* GetKey() const
                         {return filter_path;}
                     unsigned int GetKeysize() const
-                        {return (strlen(filter_path) << 3);}
+                        {return (unsigned int)(strlen(filter_path) << 3);}
                     char filter_path[FILTER_PATH_MAX+1];
                     
             };  // end class IterFilterBase::Filter       

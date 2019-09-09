@@ -8,26 +8,32 @@
 // 1) The parsing of ASCII text JSON files is pretty much complete. Work needs to be done to support UTF 
 //    codings that can occur, etc.
 //
-// 2) Many backslash escapes are not handled or checked.  
-//
-// 3) The ProtoJson::Parser here loads JSON input text into a "document" data structure.  Object key,value pairs 
+// 2) The ProtoJson::Parser here loads JSON input text into a "document" data structure.  Object key,value pairs 
 //    _are_ stored in dictionaries and Array elements are in indexed array structures.  A ProtoJson::Document 
 //    is defined will be created with methods for iteration and queries. The ProtoJson::Document::Print() method
 //    uses iteration over the document tree and can serve as an example.  Eventually, helper methods for 
 //    programmatically constructing the Document/Tree will be supported, too.
 //
-//  4) The initial goal is to support configuration files for Protolib protocol implementations using the JSON
+//  3) The initial goal is to support configuration files for Protolib protocol implementations using the JSON
 //     format since it is well documented, fairly structured, and more human readable/editable than some other formats.
+//
+//  4) There are some additional convenience methods to be added for setting/getting object (by key) or
+//     array (by index) String, Number, etc. values.  Some of these have been implemented.
 
 #include "protoTree.h"
 #include "protoQueue.h"
+#include "protoDefs.h"
+
+#ifdef TRUE
+#undef TRUE
+#undef FALSE
+#endif // TRUE
 
 namespace ProtoJson
 {
     class Item : public ProtoQueue::Item
     {
         public:
-                
             virtual ~Item();    
                 
             enum Type
@@ -64,6 +70,8 @@ namespace ProtoJson
                  
         protected:
             Item(Type theType, Item* theParent = NULL);
+            void SetType(Type theType)
+                {type = theType;}
         
         private:
             Type         type;
@@ -83,20 +91,24 @@ namespace ProtoJson
                 {Append(item);}
     };  // end class ProtoJson::ItemList
     
+    // The String 'text' is "unescaped" representation
+    // Input parsing and output (e.g., printed to a file) 
+    // is decoded/encoded per JSON escape sequence requirements.
     class String : public Value
     {
         public:
             String(Item* theParent = NULL);
             virtual ~String();
             
-            bool Set(const char* theText);
-            void SetTextPtr(char* textPtr);
-            
+            bool SetText(const char* theText);
             const char* GetText() const
                 {return text;}
             
             size_t GetLength() const
                 {return (NULL != text) ? strlen(text) : 0;}
+            
+            // for internal use only
+            void SetTextPtr(char* textPtr);
             
         private:
             char*   text;     
@@ -139,6 +151,33 @@ namespace ProtoJson
             };     
     };  // end class ProtoJson::Number
     
+    class Array : public Value
+    {
+        public:
+            Array(Item* theParent = NULL);
+            virtual ~Array();
+            
+            void Destroy();  // clear all values
+            
+            unsigned int GetLength() const
+                {return array_len;}
+            
+            bool AppendString(const char* text);
+            const char* GetString(unsigned int index);
+            
+            bool AppendValue(Value& value);
+            const Value* GetValue(unsigned int index) const;
+            Value* AccessValue(unsigned int index);
+            
+            // "index" MUST be in existing array range for now
+            void SetValue(unsigned int index, Value& value);
+            void ClearValue(unsigned int index);  // remove/delete Value at index
+                   
+        private:
+            Item**          array_buf;
+            unsigned int    array_len;
+    };  // end class ProtoJson::Array
+    
      // This is used for JSON Object key,value pairs
     class Entry : public ProtoJson::Item, public ProtoSortedTree::Item
     {
@@ -173,13 +212,25 @@ namespace ProtoJson
             virtual ~Object();
             void Destroy();
             
+            bool HasKey(const char* key) const
+                {return (NULL != FindEntry(key));}
+            
+            bool InsertString(const char* key, const char* text);
+            bool InsertBoolean(const char* key, bool state);
+            
+            // Returns first String text matching "key"
+            const char* GetString(const char* key);
+            // Returns first Boolean value matching "key"
+            // Returns "false" if "key" is not included (i.e. "false" default
+            bool GetBoolean(const char* key);
+            // Returns first Array matching "key"
+            Array* GetArray(const char* key);
             
             bool InsertEntry(const char* key, Value& value);
-            
             bool InsertEntry(Entry& entry);
             
-            Entry* FindEntry(const char* key)
-               {return Find(key, (strlen(key)+1)*8);}
+            Entry* FindEntry(const char* key) const
+               {return Find(key, (unsigned int)(strlen(key)+1)*8);}
             
             void RemoveEntry(Entry& entry)
             {
@@ -190,56 +241,32 @@ namespace ProtoJson
             class Iterator : protected ProtoSortedTreeTemplate<Entry>::Iterator
             {
                 public:
-                    Iterator(Object& object, bool reverse = false);
-                    ~Iterator();
                     // If "key" is non-NULL, return matching entries only
-                    Entry* GetNextEntry(const char* key = NULL);
-                    Entry* GetPrevEntry(const char* key = NULL);
+                    Iterator(Object& object);
+                    ~Iterator();
+                    bool Reset(bool reverse = false, const char* key = NULL);
+                    Entry* GetNextEntry();
+                    Entry* GetPrevEntry();
+                    
                 private:
-                    char* match_key;
+                    char*   match_key;
                 
             };  // end class ProtoJson::Object::Iterator
         
     };  // end class ProtoJson::Object
     
-    class Array : public Value
+    class Boolean : public Value
     {
         public:
-            Array(Item* theParent = NULL);
-            virtual ~Array();
+            Boolean(bool value, Item* theParent = NULL)
+                : Item(value ? TRUE : FALSE, theParent) {}
+            virtual ~Boolean() {}
             
-            void Destroy();
-            
-            unsigned int GetLength() const
-                {return array_len;}
-            
-            bool AppendValue(Value& value);
-            
-            const Value* GetValue(unsigned int index) const;
-            Value* AccessValue(unsigned int index);
-            
-            // "index" MUST be in existing array range for now
-            void SetValue(unsigned int index, Value& value);
-            void ClearValue(unsigned int index);  // remove/delete Value at index
-                   
-        private:
-            Item**          array_buf;
-            unsigned int    array_len;
-    };  // end class ProtoJson::Array
-    
-    class TrueValue : public Value
-    {
-        public:
-            TrueValue(Item* theParent = NULL) : Item(TRUE, theParent) {}
-            virtual ~TrueValue() {}
-    };  // end class ProtoJson::TrueValue
-    
-    class FalseValue : public Value
-    {
-        public:
-            FalseValue(Item* theParent = NULL) : Item(FALSE, theParent) {}
-            virtual ~FalseValue() {}
-    };  // end class ProtoJson::FalseValue
+            bool GetValue() const
+                {return (TRUE == GetType() ? true : false);}
+            void SetValue(bool state)
+                {SetType(state ? TRUE: FALSE);}
+    };
     
     class NullValue : public Value
     {
@@ -248,11 +275,16 @@ namespace ProtoJson
             virtual ~NullValue() {}
     };  // end class ProtoJson::NullValue
     
-    class Document : public ItemList
+    class Document
     {
         public:
             Document();
             ~Document();
+            void Destroy()
+            {
+                item_list.Destroy();
+                item_count = 0;
+            }
             
             bool AddItem(ProtoJson::Item& item);
             void RemoveItem(ProtoJson::Item& item);
@@ -261,6 +293,7 @@ namespace ProtoJson
             
             void Print(FILE* filePtr);  // TBD - add a PrintToBuffer() method (or ConvertToText())
             static void PrintValue(FILE* filePtr, const Value& value);
+            static void PrintString(FILE* filePtr, const char* text);  // encodes escapable text
             class Iterator
             {
                 public:
@@ -275,7 +308,7 @@ namespace ProtoJson
                     ItemList            pending_list; 
             };
             friend class Iterator;
-        private:
+        protected:
             ItemList        item_list;
             unsigned int    item_count;
             
@@ -289,7 +322,7 @@ namespace ProtoJson
             
             void Destroy();
             
-            bool LoadDocument(const char *path);
+            bool LoadDocument(const char *path, Document* document = NULL);
             
             Document* AccessDocument()
                 {return current_document;}
@@ -304,6 +337,10 @@ namespace ProtoJson
             };      
                 
             Status ProcessInput(const char* inputBuffer, unsigned int inputLength);
+            
+            static bool IsValidEscapeCode(char c);
+            static char GetEscapeCode(char c);
+            static char Unescape(char c);
              
         private:  
             // Delimiters for parsing
@@ -332,7 +369,6 @@ namespace ProtoJson
             Status ProcessEntryInput(const char* input, unsigned int length);
             Status ProcessObjectInput(const char* input, unsigned int length);
             Status ProcessValueInput(const char* input, unsigned int length);
-            
             void PushStack(Item& item)
                 {parser_stack.Prepend(item);}
             Item* PopStack()
@@ -344,6 +380,7 @@ namespace ProtoJson
             ItemList        parser_stack;
             Item*           current_item;
             unsigned int    input_offset;
+            bool            input_escape_pending;
             bool            is_escaped;   // for caching escape parse state
             bool            seek_colon;   // for caching Object "key : value" parse state
             char*           temp_buffer;

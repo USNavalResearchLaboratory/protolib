@@ -36,6 +36,7 @@
 #include "protoTimer.h"
 #include "protoSocket.h"
 #include "protoChannel.h"
+#include "protoEvent.h"
 #include "protoQueue.h"    // for keeping track of our "streams" (channels, sockets, generic)
 
 #ifdef WIN32
@@ -57,9 +58,9 @@
 // Makefile must pick either USE_KQUEUE or USE_SELECT
 // or we default to USE_SELECT (TBD)
 #if (!defined(USE_KQUEUE) && !defined(USE_SELECT))
-#warning "Neither USE_SELECT or USE_KQUEUE defined, setting USE_SELECT"
+#warning "Neither USE_SELECT or USE_KQUEUE defined, setting USE_SELECT by default"
 #define USE_SELECT 1
-#endif
+#endif // MACOSX
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -88,7 +89,6 @@
 
 #else  // "other" UNIX
 #define USE_SELECT  1  // default Unix async i/o and timing mechanism
-
 #endif // if/else MACOSX / LINUX / OTHER
 
 #endif // if/else WIN32/UNIX
@@ -195,7 +195,8 @@
 /// Asynchronous event dispatcher and timer scheduler class
 class ProtoDispatcher : public ProtoTimerMgr, 
                         public ProtoSocket::Notifier,
-                        public ProtoChannel::Notifier
+                        public ProtoChannel::Notifier,
+                        public ProtoEvent::Notifier
 {
     public:    
     // Construction
@@ -340,10 +341,17 @@ class ProtoDispatcher : public ProtoTimerMgr,
                 bool                   use_lock_a;
         };  // end class ProtoDispatcher::Controller()  
         friend class Controller;
-        
-        /// OR the dispatcher can be run in a thread n(w/ optional Controller)
+    
+#ifdef WIN32
+        typedef DWORD ThreadId;
+#else
+        typedef pthread_t ThreadId;
+#endif // if/else WIN32
+    
+        // OR the dispatcher can be run in a thread n(w/ optional Controller)
         bool StartThread(bool                         priorityBoost = false,
-                         ProtoDispatcher::Controller* theController = NULL);
+                         ProtoDispatcher::Controller* theController = NULL,
+                         ThreadId                     threadId = (ThreadId)NULL);
         bool IsThreaded() {return ((ThreadId)(NULL) != thread_id);}
         
         /**
@@ -405,19 +413,22 @@ class ProtoDispatcher : public ProtoTimerMgr,
             UnsignalThread();
             return true;
         }
-        /// Associated ProtoSockets will use this as needed
+        // Associated ProtoSockets will use this as needed
         bool UpdateSocketNotification(ProtoSocket& theSocket,
                                       int          notifyFlags);
         
-        /// Associated ProtoChannels will use this as needed
+        // Associated ProtoChannels will use this as needed
         bool UpdateChannelNotification(ProtoChannel& theChannel,
                                        int           notifyFlags);
         
-         
+        // Associated ProtoEvents will use this as needed
+        bool UpdateEventNotification(ProtoEvent& theEvent, 
+                                     int         notifyFlags);
+          
         // Thread/Mutex stuff (TBD - make this its own class ???)
 #ifdef WIN32
         typedef DWORD WaitStatus;
-        typedef DWORD ThreadId;
+        //typedef DWORD ThreadId;
         ThreadId GetCurrentThread() {return ::GetCurrentThreadId();} 
 #ifdef _WIN32_WCE
         typedef DWORD ExitStatus;
@@ -430,7 +441,7 @@ class ProtoDispatcher : public ProtoTimerMgr,
 			{return exit_status;}
 #else  // Unix
         typedef int WaitStatus;
-        typedef pthread_t ThreadId;
+        //typedef pthread_t ThreadId;
         static ThreadId GetCurrentThread() {return pthread_self();}
         typedef void* ExitStatus;
 		ExitStatus GetExitStatus()  // note pthread uses a _pointer_ to the status value location
@@ -451,23 +462,14 @@ class ProtoDispatcher : public ProtoTimerMgr,
          * @brief This class helps manage notification for
          * protoSockets and generic I/O descriptors
          */
-        class Stream : public ProtoTree::Item, public ProtoQueue::Item
+        class Stream : public ProtoNotify, public ProtoTree::Item, public ProtoQueue::Item
         {
             public:
                 enum Type {GENERIC, SOCKET, CHANNEL, TIMER, EVENT};
-                enum Flag {NONE = 0x00, INPUT = 0x01, OUTPUT = 0x02, EXCEPTION = 0x04};
-                
                 Type GetType() const {return type;}
                 
-                bool IsInput() const {return FlagIsSet(INPUT);}
-                bool IsOutput() const {return FlagIsSet(OUTPUT);}
-                bool FlagIsSet(Flag theFlag) const {return (0 != (flags & theFlag));}
-                void SetFlag(Flag theFlag) {flags |= theFlag;}
-                void UnsetFlag(Flag theFlag) {flags &= ~theFlag;}
-                void SetFlags(int theFlags) {flags = theFlags;}
-                bool HasFlags() const {return (0 != flags);}
-                int GetFlags() const {return flags;}
-                void ClearFlags() {flags = 0;}
+                bool IsInput() const {return NotifyFlagIsSet(NOTIFY_INPUT);}
+                bool IsOutput() const {return NotifyFlagIsSet(NOTIFY_OUTPUT);}
                 
                 virtual Descriptor GetInputHandle() const = 0;
                 virtual Descriptor GetOutputHandle() const = 0;
@@ -487,7 +489,6 @@ class ProtoDispatcher : public ProtoTimerMgr,
                 virtual unsigned int GetKeysize() const = 0;      
                     
                 Type  type;
-                int   flags;
 #ifdef WIN32
                 int   index;
                 int   outdex;
@@ -613,31 +614,35 @@ class ProtoDispatcher : public ProtoTimerMgr,
         /**
          * @class EventStream
          *
-         * @brief This class lets us have a "Stream*" pointer
-         * for the user data in "struct epoll_event" since we
-         * use the "event.data" for that purpose.
+         * @brief This class helps manage notifications
+         * for ProtoEvent instances
          */
         class EventStream : public Stream
         {
             public:
-                EventStream();
+                EventStream(ProtoEvent& theEvent);
                 ~EventStream();
                 
-                void SetDescriptor(Descriptor theDescriptor)
-                    {descriptor = theDescriptor;}
+                void SetEvent(ProtoEvent& theEvent) {event = &theEvent;}
+                ProtoEvent& GetEvent() {return *event;}
+                
                 Descriptor GetDescriptor() const
-                    {return descriptor;}
-                Descriptor GetInputHandle() const
-                    {return descriptor;}
-                Descriptor GetOutputHandle() const
-                    {return descriptor;}
-            private:
-                const char* GetKey() const {return NULL;}
-                unsigned int GetKeysize() const {return 0;}
+                    {return (NULL != event) ? event->GetDescriptor() : INVALID_DESCRIPTOR;}
+                Descriptor GetInputHandle() const {return GetDescriptor();}
+                Descriptor GetOutputHandle() const {return GetDescriptor();}
                 
             private:
-                Descriptor descriptor;
+                const char* GetKey() const
+                    {return (const char*)(&event);}
+                unsigned int GetKeysize() const
+                    {return (sizeof(ProtoEvent*) << 3);}
+                
+            private:
+                ProtoEvent* event;
         };  // end class EventStream
+        EventStream* GetEventStream(ProtoEvent& theEvent);
+        void ReleaseEventStream(EventStream& eventStream);
+        class EventStreamPool : public ProtoTreeTemplate<EventStream>::ItemPool {};
         
         /**
          * @class GenericStream
@@ -708,6 +713,7 @@ class ProtoDispatcher : public ProtoTimerMgr,
         
         ChannelStreamPool           channel_stream_pool;    // land of inactive channel streams
         SocketStreamPool            socket_stream_pool;     // land of inactive socket streams
+        EventStreamPool             event_stream_pool;      // land of inactive event streams
         GenericStreamPool           generic_stream_pool;    // land of inactive generic streams
                 
         volatile bool            run;           
@@ -716,6 +722,7 @@ class ProtoDispatcher : public ProtoTimerMgr,
         double                   timer_delay;  // ( timer_delay < 0.0) means INFINITY
         bool                     precise_timing;
         ThreadId                 thread_id;
+        bool                     external_thread;
         bool                     priority_boost;
         volatile bool            thread_started;
         volatile bool            thread_signaled;  
@@ -731,9 +738,8 @@ class ProtoDispatcher : public ProtoTimerMgr,
         bool                     prompt_set;
         PromptCallback*          prompt_callback;
         const void*              prompt_client_data;
-#ifdef USE_TIMERFD    
-        int                      timer_fd;       
-#endif // USE_TIMERFD                           
+        ProtoEvent               break_event;         
+        EventStream              break_stream;
         bool                     is_signaled;
 #ifdef WIN32
         int Win32AddStream(Stream& theStream, HANDLE theHandle);
@@ -753,21 +759,19 @@ class ProtoDispatcher : public ProtoTimerMgr,
         DWORD                   stream_count;                                        
         HWND                    msg_window;   
         HANDLE                  actual_thread_handle;       
-		StreamList		        ready_stream_list;  // list of input or output "ready" streams                 
-        EventStream             break_stream;   
+	StreamList		ready_stream_list;  // list of input or output "ready" streams     
 #ifdef	USE_WAITABLE_TIMER
 		TimerStream				timer_stream;
 		bool					timer_active;
 #endif // USE_WAITABLE_TIMER
 #else  // UNIX
+        
+#ifdef USE_TIMERFD    
+        int                      timer_fd;       
+#endif // USE_TIMERFD                           
         static void* DoThreadStart(void* arg);
         int                     exit_status;
-#if (defined(USE_SELECT) || defined(USE_EPOLL))
-        EventStream             break_stream;
-#ifndef USE_EVENTFD
-        int                     break_pipe_fd[2]; 
-#endif // !USE_EVENTFD
-#endif // USE_SELECT || USE_EPOLL
+        
 #if defined(USE_SELECT)
         fd_set                  input_set;        
         fd_set                  output_set;  

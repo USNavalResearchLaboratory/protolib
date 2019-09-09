@@ -21,6 +21,7 @@
 *
 */
 
+#include "protoDefs.h"
 #include "protoTree.h"
 #include "protoDebug.h"
 
@@ -263,6 +264,8 @@ class ProtoSimpleQueue : public ProtoQueue
         
         bool Prepend(Item& theItem);
         bool Append(Item& theItem);
+        bool Insert(Item& theItem, Item& nextItem);  // insert "theItem" before "nextItem"
+        bool InsertAfter(Item& theItem, Item& prevItem);  // insert "theItem" after "prevItem"
         void Remove(Item& theItem);
         
         Item* GetHead() const
@@ -277,6 +280,20 @@ class ProtoSimpleQueue : public ProtoQueue
             return ((NULL != container) ? container->GetItem() : NULL);
         }
         Item* RemoveTail();
+        
+        Item* GetPrev(Item& item) const
+        {
+            const Container* container = static_cast<Container*>(GetContainer(item));
+            if (NULL != container)
+            {
+                container = static_cast<const Container*>(container->GetPrev());
+                return ((NULL != container) ? container->GetItem() : NULL);
+            }
+            else
+            {
+                return NULL;
+            }
+        }
         
         bool IsEmpty() const
             {return (NULL != GetHead()) ? false : true;}
@@ -375,6 +392,8 @@ class ProtoSimpleQueueTemplate : public ProtoSimpleQueue
             {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::GetTail());}
         ITEM_TYPE* RemoveTail()
             {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::RemoveTail());}
+        ITEM_TYPE* GetPrev(ITEM_TYPE& item)
+            {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::GetPrev(item));}
         
         class Iterator : public ProtoSimpleQueue::Iterator
         {

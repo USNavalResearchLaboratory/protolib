@@ -1,9 +1,9 @@
 #ifndef _PROTO_PKT_IP
 #define _PROTO_PKT_IP
 
-#include <protoPkt.h>
-#include <protoAddress.h>
-#include <protoDebug.h>
+#include "protoPkt.h"
+#include "protoAddress.h"
+#include "protoDebug.h"
 
 /**
  * @class ProtoPktIP

@@ -104,7 +104,7 @@ bool UnixVif::Open(const char* vifName, const ProtoAddress& ipAddr, unsigned int
     char devName[PATH_MAX];
     for (int i = 0; i < 256; i++)
     {
-        TRACE("trying to open /dev/tap%d ...\n", i);
+        //TRACE("trying to open /dev/tap%d ...\n", i);
         sprintf(devName, "/dev/tap%d", i);
         if ((descriptor = open(devName, O_RDWR)) < 0)
         {
@@ -177,7 +177,7 @@ void UnixVif::Close()
 
 bool UnixVif::SetARP(bool status)
 {
-    char cmd[64];
+    char cmd[1024];
     sprintf(cmd, "/sbin/ifconfig %s %s", vif_name, status ? "arp" : "-arp");
     if (system(cmd) < 0)
     {
@@ -195,7 +195,7 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
         return false;
     }
     const UINT8* addr = (const UINT8*)ethAddr.GetRawHostAddress();
-    char cmd[64];
+    char cmd[1024];
     
 #ifdef LINUX
     // On Linux, we need to bring the iface down before hw addr change    
@@ -208,7 +208,6 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
     
     sprintf(cmd, "/sbin/ifconfig %s hw ether %02x:%02x:%02x:%02x:%02x:%02x", 
                  vif_name, addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-    TRACE("trying cmd \"%s\"\n", cmd);
     if (system(cmd) < 0)
     {
         PLOG(PL_ERROR, "UnixVif::SetHardwareAddress(%s) error: \"%s\n\" failed: %s\n", cmd, GetErrorString());
@@ -261,6 +260,7 @@ bool UnixVif::Read(char* buffer, unsigned int& numBytes)
         // (TBD) Automatically try again on errno == EINTR ???
         if (EAGAIN != errno)
             PLOG(PL_ERROR, "UnixVif::Read() error read() failure: %s\n", GetErrorString());
+        numBytes = 0;
         return false;
     }
     numBytes = result;

@@ -6,8 +6,8 @@
 int main(int argc, char* argv[])
 {
     // Here we use the ProtoJson::Parser to parse JSON text from
-    // STDIN. If a complete JSON document is procesed, the resulting
-    // document is printed to STDOUT.
+    // STDIN. If a complete JSON document is processed, the resulting
+    // document is printed to STDOUT in a pretty format.
     ProtoJson::Parser parser;
     ProtoJson::Parser::Status status = ProtoJson::Parser::PARSE_MORE;
     int result;
@@ -28,9 +28,10 @@ int main(int argc, char* argv[])
     
         ProtoJson::Document* doc = parser.AccessDocument();
         
+        // If uncommented, the code below adds a top level object 
+        // to the loaded document to illustrate how a document can 
+        // be built or, in this casee augmented.
         /*
-        // This adds a top level object to the loaded document to
-        // illustrate how a document can be built/augmented
         ProtoJson::Object* object = new ProtoJson::Object();
         ProtoJson::Array* array = new ProtoJson::Array();
         for (unsigned int i = 0; i < 10; i++)

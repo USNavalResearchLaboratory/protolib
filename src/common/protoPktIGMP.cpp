@@ -140,7 +140,7 @@ bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bo
         size_t offset = 4*(recordPtr - buffer_ptr);
         if (offset > GetLength())
             return false;  // out of bounds
-        bufferSpace = GetLength() - offset;
+        bufferSpace = GetLength() - (unsigned int)offset;
     }
     if (0 == bufferSpace)
         return false;
@@ -154,22 +154,30 @@ bool ProtoPktIGMP::InitIntoBuffer(Type         type,
                                   unsigned int bufferBytes, 
                                   bool         freeOnDestruct)
 {
+    UINT16 minLength ;
     switch (type)
     {
+        case QUERY:
+            if (version < 3)
+                minLength = OFFSET_RESERVED;
+            else
+                minLength = OFFSET_SRC_LIST;
         case REPORT_V1:
             version = 1;
+            minLength = OFFSET_RESERVED;
             break;
         case REPORT_V2:
         case LEAVE:
             version = 2;
+            minLength = OFFSET_RESERVED;
             break;
         case REPORT_V3:
             version = 3;
+            minLength = OFFSET_REC_LIST;
             break;
         default:
             break;
     }
-    UINT16 minLength = (version < 3) ? OFFSET_RESERVED : OFFSET_SRC_LIST;
     if (NULL != bufferPtr) 
     {
         if (bufferBytes < minLength)
@@ -357,7 +365,9 @@ bool ProtoPktIGMP::AppendGroupRecord(const GroupRecord& groupRecord, bool update
     // Check if we need to copy since this is _not_ an attached group record
     if (ptr != groupRecord.GetBuffer())
         memcpy(ptr, groupRecord.GetBuffer(), groupRecord.GetLength());
+    SetUINT16(OFFSET_NUM_REC, GetNumRecords() + 1);    
     SetLength(currentLength + groupRecord.GetLength());
+    
     if (updateChecksum) ComputeChecksum();
     return true;
 }  // end ProtoPktIGMP::AppendGroupRecord()
@@ -365,14 +375,15 @@ bool ProtoPktIGMP::AppendGroupRecord(const GroupRecord& groupRecord, bool update
 UINT16 ProtoPktIGMP::ComputeChecksum(bool set)
 {
     UINT32 sum = 0;
-    const UINT16* ptr = (const UINT16*)GetBuffer32();
+    if (set) SetUINT16(OFFSET_CHECKSUM, (UINT16)0);
+    const UINT16* ptr = (const UINT16*)GetBuffer();
     // Compute before checksum
     unsigned int end = OFFSET_CHECKSUM/2;
-    for (unsigned int i = 0; i < end; i++)
-        sum += (UINT16)ntohs(ptr[i]);
-    unsigned int start = end + 1;
+    //for (unsigned int i = 0; i < end; i++)
+    //    sum += (UINT16)ntohs(ptr[i]);
+    //unsigned int start = end + 1;
     end = GetLength() / 2;
-    for (unsigned int i = start; i < end; i++)
+    for (unsigned int i = 0; i < end; i++)
         sum += (UINT16)ntohs(ptr[i]);
     
     // Carry as needed
@@ -453,6 +464,7 @@ bool ProtoPktIGMP::GroupRecord::InitIntoBuffer(UINT32*      bufferPtr,
     }
     if (GetBufferLength() < minLength) return false;
     memset(buffer_ptr, 0, OFFSET_SRC_LIST);
+    SetLength(minLength);
     return true;
 }  // end ProtoPktIGMP::GroupRecord::InitIntoBuffer()
 
@@ -463,6 +475,12 @@ void ProtoPktIGMP::GroupRecord::SetGroupAddress(const ProtoAddress* groupAddr)
         memset(ptr, 0, 4);
     else 
         memcpy(ptr, groupAddr->GetRawHostAddress(), 4);
+    TRACE("set group address: ");
+    for (int i = 0; i < 4; i++)
+    {
+        TRACE("%02x", ptr[i]);
+    }
+    TRACE("\n");
 }  // end ProtoPktIGMP::GroupRecord::SetGroupAddress()
 
 bool ProtoPktIGMP::GroupRecord::AppendSourceAddress(const ProtoAddress& srcAddr)

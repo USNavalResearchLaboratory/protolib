@@ -45,6 +45,8 @@ def options(ctx):
             help='Build in debug mode [default:release]')
     build_opts.add_option('--enable-wx', action='store_true',
             help='Enable checking for wxWidgets.')
+    build_opts.add_option('--enable-static-library', action='store_true',
+            help='Enable installing static library. [default:false]')
 
 def configure(ctx):
     if system == 'windows':
@@ -55,7 +57,7 @@ def configure(ctx):
     # Use this USE variable to add flags to protolib's compilation
     ctx.env.USE_BUILD_PROTOLIB += ['BUILD_PROTOLIB']
 
-    if system in ('linux', 'darwin', 'freebsd'):
+    if system in ('linux', 'darwin', 'freebsd', 'gnu', 'gnu/kfreebsd'):
         ctx.env.DEFINES_BUILD_PROTOLIB += ['UNIX', 'HAVE_DIRFD', 'HAVE_IPV6',
                 'HAVE_ASSERT', 'HAVE_GETLOGIN']
 
@@ -67,10 +69,10 @@ def configure(ctx):
                     package='', uselib_store='WX', mandatory=False)
 
     if system == 'linux':
-        ctx.env.DEFINES_BUILD_PROTOLIB += ['_FILE_OFFSET_BITS=64',
-                'HAVE_LOCKF', 'HAVE_OLD_SIGNALHANDLER', 'HAVE_SCHED', 'LINUX',
-                'HAVE_TIMERFD', 'NO_SCM_RIGHTS']
-
+        ctx.env.DEFINES_BUILD_PROTOLIB += ['LINUX', 
+                'HAVE_LOCKF', '_FILE_OFFSET_BITS=64', 'HAVE_OLD_SIGNALHANDLER', 
+                'NO_SCM_RIGHTS', 'HAVE_SCHED',  
+                'USE_TIMERFD', 'USE_EVENTFD', 'HAVE_PSELECT', 'USE_SELECT']
         ctx.check_cxx(lib='dl rt')
         ctx.env.USE_BUILD_PROTOLIB += ['DL', 'RT']
 
@@ -78,20 +80,25 @@ def configure(ctx):
                 mandatory=False)
 
     if system == 'darwin':
-        ctx.env.DEFINES_BUILD_PROTOLIB += ['MACOSX', 'HAVE_FLOCK',
-                '_FILE_OFFSET_BITS=64', 'HAVE_DIRFD', 'HAVE_PSELECT']
+        ctx.env.DEFINES_BUILD_PROTOLIB += ['MACOSX',
+                'HAVE_FLOCK', '_FILE_OFFSET_BITS=64', 'HAVE_PSELECT', 'USE_SELECT']
         ctx.check_cxx(lib='resolv')
         ctx.env.USE_BUILD_PROTOLIB += ['RESOLV']
 
-    if system == 'freebsd':
-        ctx.env.DEFINES_BUILD_PROTOLIB += ['HAVE_FLOCK']
+    if system in ('freebsd'):
+        ctx.env.DEFINES_BUILD_PROTOLIB += ['HAVE_FLOCK', '_FILE_OFFSET_BITS=64', 
+                                           'HAVE_PSELECT', 'USE_SELECT']
 
     if system == 'windows':
         ctx.env.DEFINES_BUILD_PROTOLIB += ['_CRT_SECURE_NO_WARNINGS',
                 'HAVE_ASSERT', 'WIN32', 'HAVE_IPV6']
-        #ctx.env.CXXFLAGS += ['/EHsc']
-        ctx.check_libs_msvc(['ws2_32', 'iphlpapi', 'user32', 'gdi32', 'Advapi32'])
-        ctx.env.USE_BUILD_PROTOLIB += ['WS2_32', 'IPHLPAPI', 'USER32', 'GDI32', 'ADVAPI32']
+        ctx.env.CXXFLAGS += ['/EHsc']
+        ctx.check_libs_msvc(['ws2_32', 'iphlpapi', 'user32', 'gdi32', 'Advapi32', 'ntdll'])
+        ctx.env.USE_BUILD_PROTOLIB += ['WS2_32', 'IPHLPAPI', 'USER32', 'GDI32', 'ADVAPI32', 'ntdll.lib']
+        
+    if system == "gnu":
+        ctx.check_cxx(lib='pcap')
+        ctx.env.LDFLAGS += ['-lpcap']
 
     if ctx.options.build_python:
         ctx.load('python')
@@ -111,11 +118,11 @@ def configure(ctx):
                 ctx.env.BUILD_JAVA = True
 
     # Compiler-specific flags
-
     if ctx.options.debug:
-        ctx.env.DEFINES_BUILD_PROTOLIB += ['PROTO_DEBUG', 'DEBUG', '_DEBUG']
+        #ctx.env.DEFINES_BUILD_PROTOLIB += ['PROTO_DEBUG', 'DEBUG', '_DEBUG']
+        ctx.env.DEFINES_BUILD_PROTOLIB += ['PROTO_DEBUG', 'DEBUG']
     else:
-        ctx.env.DEFINES_BUILD_PROTOLIB += ['NDEBUG']
+        ctx.env.DEFINES_BUILD_PROTOLIB += ['NDEBUG', "PROTO_DEBUG"]
 
     if ctx.env.COMPILER_CXX == 'g++' or ctx.env.COMPILER_CXX == 'clang++':
         ctx.env.CFLAGS += ['-fPIC']
@@ -150,7 +157,9 @@ def build(ctx):
             'protoChannel',
             'protoDebug',
             'protoDispatcher',
+            'protoEvent',
             'protoGraph',
+            'protoJson',
             'protoLFSR',
             'protoList',
             'protoNet',
@@ -166,14 +175,16 @@ def build(ctx):
             'protoSerial',
             'protoSocket',
             'protoSpace',
+            'protoString',
             'protoTime',
             'protoTimer',
             'protoTree',
             'protoVif',
-        ]]
+        ]],
+        install_path = '${LIBDIR}' if ctx.options.enable_static_library else '',
     )
 
-    if system in ('linux', 'darwin', 'freebsd'):
+    if system in ('linux', 'darwin', 'freebsd', 'gnu', 'gnu/kfreebsd'):
         protolib.source.extend(['src/unix/{0}.cpp'.format(x) for x in [
             'unixNet',
             'unixSerial',
@@ -195,12 +206,13 @@ def build(ctx):
             protolib.source.append('src/linux/linuxDetour.cpp')
             protolib.use.append('NETFILTER_QUEUE')
 
-    if system in ('darwin', 'freebsd'):
+    if system in ('darwin', 'freebsd', 'gnu/kfreebsd'):
         protolib.source.extend(['src/bsd/{0}.cpp'.format(x) for x in [
             'bsdDetour',
-            'bsdNet',
             'bsdRouteMgr',
         ]])
+        if system != 'gnu/kfreebsd':
+            protolib.source.append('src/bsd/bsdNet.cpp')
         protolib.source.append('src/unix/bpfCap.cpp')
 
     if system == 'windows':
@@ -208,6 +220,9 @@ def build(ctx):
             'win32Net',
             'win32RouteMgr',
         ]])
+        
+    if system == 'gnu':
+        protolib.source.append('src/common/pcapCap.cpp')
 
     # Only add wxWidgets support if we have the libraries installed
     if ctx.env.HAVE_WX:
@@ -242,6 +257,7 @@ def build(ctx):
     for example in (
             'base64Example',
             'detourExample',
+            'eventExample',
             'graphExample',
             'graphRider',
             'lfsrExample',
@@ -263,6 +279,7 @@ def build(ctx):
             'vifExample',
             'vifLan',
             'wxProtoExample',
+            'udptest'
             ):
         _make_simple_example(ctx, example)
 
@@ -277,6 +294,7 @@ def _make_simple_example(ctx, name):
     ctx.program(
         target = name,
         use = ['protolib'],
+        stlib = ['protolib'],
         source = ['examples/{0}.cpp'.format(name)],
         # Don't build examples by default
         posted = True,

@@ -10,6 +10,8 @@
 #include "protoRouteTable.h"
 #include "protoRouteMgr.h"
 #include "protoPipe.h"
+#include "protoEvent.h"
+
 #ifndef WIN32
 #include "protoFile.h"
 #endif

@@ -1,4 +1,5 @@
 #include "manetMsg.h"
+#include "protoDebug.h"
 
 ManetTlv::ManetTlv()
 {

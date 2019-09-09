@@ -12,7 +12,7 @@
 * 
 * @brief Win32 (Windows) implementation of ProtoNet 
 */
-
+#pragma comment(lib,"IPHlpApi.Lib")
 #include <Iphlpapi.h>
 #include <Iptypes.h>
 /**
@@ -1322,9 +1322,9 @@ unsigned int ProtoNet::GetInterfaceFriendlyName(const ProtoAddress& ifAddr, char
 			addrEntry = addrEntry->Next;
 		}  // end while(addrEntry)
 		delete[] addrBuffer;
-		PLOG(PL_WARN, "ProtoNet::GetInterfaceFriendlyName(%s) warning: no matching interface found\n", ifAddr.GetHostString());
-		return 0;
-	}
+    }
+	PLOG(PL_WARN, "ProtoNet::GetInterfaceFriendlyName(%s) warning: no matching interface found\n", ifAddr.GetHostString());
+	return 0;
 #else
 	PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName() not available on WINVER < 0x0501\n");
 	return 0;
@@ -1532,7 +1532,7 @@ bool ProtoNet::GetInterfaceIpAddress(unsigned int index,ProtoAddress& ifAddr)
 		IP_ADAPTER_INFO* adapterInfo = (IP_ADAPTER_INFO*)infoBuffer;
 		if (NO_ERROR != GetAdaptersInfo(adapterInfo, &bufferLength))
 		{
-			PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(by index) GetAdaptersInfo() error: %s\n", ::GetErrorString());
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(by index) GetAdaptersInfo() error: %s\n", GetErrorString());
 			delete[] infoBuffer;
 			return false;
 		}
@@ -1545,10 +1545,12 @@ bool ProtoNet::GetInterfaceIpAddress(unsigned int index,ProtoAddress& ifAddr)
 			}
 			adapterInfo = adapterInfo->Next;
 		}
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(%d) error: invalid index\n", index);
+		return false;
 	}
 	else
 	{
-		PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(%d) error: invalid index\n", index);
+		PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(by index) GetAdaptersInfo() error: %s\n", GetErrorString());
 		return false;
 	}
 

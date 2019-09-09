@@ -245,7 +245,6 @@ inline void ProtoSystemTime(struct timeval& theTime)
     gettimeofday(&theTime, &tz);
 }
 
-
 #endif  // if/else WIN32/UNIX
 
 #endif // if/else SIMULATE
@@ -283,6 +282,7 @@ typedef uint32_t UINT32;
 #define MIN(X,Y) ((X<Y)?(X):(Y))
 #endif //!MIN
 
+//#define USE_PROTO_CHECK
 #include "protoCheck.h"
 
 #endif // _PROTO_DEFS

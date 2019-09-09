@@ -10,6 +10,12 @@ to provide some additional description of significant changes made.
 Additionally, the developers will try to provide more timely releases of 
 the Protolib source tree outside of the SVN repository.
 
+
+Version 3.0b2
+=============
+  - Fix to protoTree.h to resolve issue with gcc7 compilation
+    (Thanks to Thomas Petazzoni!)
+
 Version 3.0b1
 =============
   - ProtoDispatcher can now use "epoll()" (Linux), "kqueue()" (BSD), and
