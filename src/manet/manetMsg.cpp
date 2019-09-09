@@ -672,7 +672,7 @@ ManetTlv* ManetAddrBlock::AppendTlv(UINT8 type)
     {
         // Check for "head-only" or "tail-only" address block
         if ((0 == GetHeadLength()) && (0 == GetTailLength()))
-            return false;
+            return NULL;
         else
             SetAddressCount(1);
     }

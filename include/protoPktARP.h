@@ -74,7 +74,7 @@ class ProtoPktARP : public ProtoPkt
         
         
         // Use these to build the ARP message 
-        // (should be called in order of appearance here)
+        // (MUST be called in order of appearance here)
         bool InitIntoBuffer(UINT32*        bufferPtr = 0, 
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
@@ -91,9 +91,9 @@ class ProtoPktARP : public ProtoPkt
             {((UINT16*)buffer_ptr)[OFFSET_HRD] = htons((UINT16)hwType);}
         void SetEtherType(ProtoPktETH::Type etherType)  // protocol address type
             {((UINT16*)buffer_ptr)[OFFSET_PRO] = htons((UINT16)etherType);}
-         void SetHardwareAddrLen(UINT8 numBytes) const
+        void SetHardwareAddrLen(UINT8 numBytes) const
             {((UINT8*)buffer_ptr)[OFFSET_HLN] = numBytes;}
-         void SetProtocolAddrLen(UINT8 numBytes) const
+        void SetProtocolAddrLen(UINT8 numBytes) const
             {((UINT8*)buffer_ptr)[OFFSET_PLN] = numBytes;}
            
         enum
@@ -120,5 +120,103 @@ class ProtoPktARP : public ProtoPkt
             
 };  // end class ProtoPktARP
 
+
+// Data structure for both MAC->IP and IP->MAC lookups (dually indexed)
+// (Note multiple IPs per MAC is allowed, but one MAC per IP)
+class ProtoArpTable
+{
+    public:
+        ProtoArpTable();
+        ~ProtoArpTable();
+
+        bool AddEntry(const ProtoAddress& ipAddr, const ProtoAddress& macAddr);
+        void RemoveEntryByIP(const ProtoAddress& ipAddr);
+        void RemoveEntryByMAC(const ProtoAddress& macAddr); 
+        
+        bool GetMacAddress(const ProtoAddress& ipAddr, ProtoAddress& macAddr);
+        bool GetAddressList(const ProtoAddress& macAddr, ProtoAddressList addrList);
+        
+        void Destroy()
+        {
+            mac_list.Destroy();
+            ip_list.Destroy();
+        }
+
+    private:
+        // Record of IP address listings for a given MAC address
+        class MacItem : public ProtoTree::Item
+        {
+            public:
+                MacItem(const ProtoAddress& macAddr);
+                ~MacItem();
+                
+                const ProtoAddress& GetMacAddr()
+                    {return mac_addr;}
+                ProtoAddressList& AccessAddressList()
+                    {return ip_addr_list;}
+                
+                bool AddAddress(const ProtoAddress& ipAddr)
+                    {return ip_addr_list.Insert(ipAddr);}
+                void RemoveAddress(const ProtoAddress& ipAddr)
+                    {ip_addr_list.Remove(ipAddr);}
+                
+            private:
+                const char* GetKey() const
+                    {return mac_addr.GetRawHostAddress();}
+                unsigned int GetKeysize() const
+                    {return (8 * mac_addr.GetLength());}
+                
+                ProtoAddress     mac_addr;
+                ProtoAddressList ip_addr_list;
+        };  // end class ProtoArpTable::MacItem
+        class MacList : public ProtoTreeTemplate<MacItem> 
+        {
+            public:
+                MacItem* FindItem(const ProtoAddress& macAddr)
+                    {return Find(macAddr.GetRawHostAddress(), 8 * macAddr.GetLength());}
+        };  // end class ProtoArpTable::IPList
+        
+        // MAC address indexed by IP address
+        class IPItem : public ProtoTree::Item
+        {
+            public:
+                IPItem(const ProtoAddress& ipAddr, MacItem* macItem)
+                    : ip_addr(ipAddr), mac_item(macItem) {}
+                ~IPItem() {}
+                
+                const ProtoAddress& GetAddress()const
+                    {return ip_addr;}
+                const ProtoAddress& GetMacAddr() const
+                    {return mac_item->GetMacAddr();}
+                
+                MacItem* GetMacItem()
+                    {return mac_item;}
+                
+            private:
+                const char* GetKey() const
+                    {return ip_addr.GetRawHostAddress();}
+                unsigned int GetKeysize() const
+                    {return (8 * ip_addr.GetLength());}
+                
+                ProtoAddress    ip_addr;
+                MacItem*        mac_item;
+        };  // end class ProtoArpTable::IPItem
+        
+        
+        // List of MAC address item indexed by IP address
+        class IPList : public ProtoTreeTemplate<IPItem>
+        {
+            public:
+                IPItem* FindItem(const ProtoAddress& ipAddr)
+                    {return Find(ipAddr.GetRawHostAddress(), 8 * ipAddr.GetLength());}
+        };  // end class ProtoArpTable::IPList
+
+        void DeleteIPItem(IPItem* ipItem);
+        void DeleteMacItem(MacItem* macItem);
+
+        MacList     mac_list;
+        IPList      ip_list;
+
+};  // end class ProtoArpTable
 
 #endif // _PROTO_PKT_ARP

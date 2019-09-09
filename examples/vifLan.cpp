@@ -137,7 +137,7 @@ bool VifLanApp::OnStartup(int argc, const char*const* argv)
     ProtoAddress invalidAddr;
     for (int i = 1; i < argc; i++)
     {
-        // Create virutal interface with given name
+        // Create virtual interface with given name
         ProtoVif* vif = ProtoVif::Create();
         if (NULL == vif)
         {

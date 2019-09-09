@@ -163,7 +163,7 @@ class ManetTlv : public ProtoPkt
         bool IsMultiValue() const
         {
             bool result = SemanticIsSet(MULTIVALUE);
-            if (result) ASSERT(HasValue() && !HasSingleIndex());
+            ASSERT(!result || (HasValue() && !HasSingleIndex()));
             return result;
         }
 

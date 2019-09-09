@@ -38,7 +38,8 @@ class ProtoDetour : public ProtoChannel
                           const ProtoAddress& srcFilterAddr = PROTO_ADDR_NONE, 
                           unsigned int        srcFilterMask = 0,
                           const ProtoAddress& dstFilterAddr = PROTO_ADDR_NONE,
-                          unsigned int        dstFilterMask = 0)
+                          unsigned int        dstFilterMask = 0,
+                          int                 dscpValue     = -1)
         {
             return ProtoChannel::Open();
         }
@@ -59,8 +60,13 @@ class ProtoDetour : public ProtoChannel
         
         virtual bool SetMulticastInterface(const char* interfaceName) {return false;}
             
+        void SetUserData(const void* userData) 
+            {user_data = userData;}
+        const void* GetUserData() const
+            {return user_data;}
+            
     protected:
-        ProtoDetour() 
+        ProtoDetour() : user_data(NULL) 
         {
             // Enable input notification by default
             StartInputNotification();  
@@ -88,6 +94,8 @@ class ProtoDetour : public ProtoChannel
                 }                  
             }
         }   
+        
+        const void*     user_data;
 };  // end class ProtoDetour
 
 #endif // _PROTO_DETOUR

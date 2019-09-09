@@ -77,7 +77,7 @@ class TimerTestApp : public ProtoApp
       bool OnCommand(const char* cmd, const char* val);        
       void Usage();
       
-      bool OnTimeout(ProtoTimer& theTimer);
+      void OnTimeout(ProtoTimer& theTimer);
       
       ProtoTimer    the_timer;
       
@@ -91,7 +91,11 @@ class TimerTestApp : public ProtoApp
       
       Histogram     histogram;
       
+      unsigned int  report_count;
+      int           timer_int_count;
       struct timeval last_time;
+
+	  FILE*			out_file;
       
       
       bool          use_nanosleep;
@@ -101,16 +105,18 @@ class TimerTestApp : public ProtoApp
 
 void TimerTestApp::Usage()
 {
-    fprintf(stderr, "Usage: timerTest [help] interval <timerInterval>\n");
+    fprintf(stderr, "Usage: timerTest [help][precise][interval <timerInterval>][output <outFile>][timer_int_count <5secIntervalCount>]\n");
 }
 
 const char* const TimerTestApp::CMD_LIST[] =
 {
     "-help",        // print help info an exit
     "+interval",    // <timerInterval>
-    "-nanosleep",   
+	"-nanosleep",   // Linux only
     "-priority", 
     "-precise",
+	"+output",
+    "+timer_int_count", // number of 5 second report intervals
     "+debug",       // <debugLevel>
     NULL
 };
@@ -121,7 +127,7 @@ const char* const TimerTestApp::CMD_LIST[] =
 PROTO_INSTANTIATE_APP(TimerTestApp) 
 
 TimerTestApp::TimerTestApp()
-    : first_timeout(true)
+: first_timeout(true), report_count(0), timer_int_count(4), out_file(stdout)
 {
     the_timer.SetListener(this, &TimerTestApp::OnTimeout);
     the_timer.SetInterval(1.0);
@@ -165,6 +171,19 @@ TimerTestApp::CmdType TimerTestApp::GetCmdType(const char* cmd)
 
 bool TimerTestApp::OnStartup(int argc, const char*const* argv)
 {
+    
+#if defined(USE_TIMERFD)
+    TRACE("USE_TIMERFD\n");
+#endif
+#if defined(USE_SELECT)
+    TRACE("USE_SELECT\n");
+#endif
+#if defined(HAVE_PSELECT)
+    TRACE("HAVE_PSELECT\n");
+#endif
+#if defined(USE_EPOLL)
+    TRACE("USE_EPOLL\n");
+#endif
     
     if (!ProcessCommands(argc, argv))
     {
@@ -211,7 +230,12 @@ bool TimerTestApp::OnStartup(int argc, const char*const* argv)
 
 void TimerTestApp::OnShutdown()
 {
-   histogram.Print(stdout);
+   histogram.Print(out_file);
+   if (stdout != out_file) 
+   {
+	   fclose(out_file);
+	   out_file = stdout;
+   }
    PLOG(PL_ERROR, "timerTest: Done.\n"); 
 }  // end TimerTestApp::OnShutdown()
 
@@ -296,6 +320,26 @@ bool TimerTestApp::OnCommand(const char* cmd, const char* val)
         }
         the_timer.SetInterval((double)timerInterval);
     }
+    else if (!strncmp("timer_int_count", cmd, len))
+    {
+        int inCount;
+        if (1 != sscanf(val, "%d", &inCount))
+        {
+            PLOG(PL_ERROR, "TimerTestApp::OnCommand(count) error: invalid argument\n",GetErrorString());
+            return false;
+        }
+        timer_int_count = inCount;
+    }
+    else if (!strncmp("output", cmd, len))
+    {
+        FILE* file = fopen(val, "w+");
+		if (NULL == file)
+		{
+			PLOG(PL_ERROR, "TimerTestApp::OnCommand(interval) fopen() error: %s\n", GetErrorString());
+			return false;
+		}
+		out_file = file;
+    }
     else if (!strncmp("debug", cmd, len))
     {
         SetDebugLevel(atoi(val));
@@ -310,14 +354,14 @@ bool TimerTestApp::OnCommand(const char* cmd, const char* val)
 }  // end TimerTestApp::OnCommand()
 
 
-bool TimerTestApp::OnTimeout(ProtoTimer& /*theTimer*/)
+void TimerTestApp::OnTimeout(ProtoTimer& /*theTimer*/)
 {
     struct timeval currentTime;
     ProtoSystemTime(currentTime);
     if (first_timeout)
     {
-        elapsed_sec = 0.0;
         first_timeout = false;
+        elapsed_sec = 0.0;
         ave_sum = 0.0;
         squ_sum = 0.0;
         timeout_count = 0;
@@ -349,12 +393,12 @@ bool TimerTestApp::OnTimeout(ProtoTimer& /*theTimer*/)
             
             TRACE("timer interval: ave>%lf min>%lf max>%lf var>%lf\n",
                     ave, delta_min, delta_max, var);
-            
             elapsed_sec = 0.0;
+            if (timer_int_count == ++report_count) Stop();
+            
         }
     }
     last_time = currentTime;
-    return true;   
 }  // end TimerTestApp::OnTimeout()
 
 

@@ -3,7 +3,6 @@
  *  AgentJ
  *
  *  Created by Ian Taylor on 17/07/2008.
- *  Copyright 2008 __MyCompanyName__. All rights reserved.
  *
  */
   

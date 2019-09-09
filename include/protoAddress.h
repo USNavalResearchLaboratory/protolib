@@ -6,6 +6,7 @@
 
 #include "protoDefs.h"
 #include "protoTree.h"
+#include "protoDebug.h"
 
 #ifdef UNIX
 #include <sys/types.h>
@@ -90,6 +91,7 @@ class ProtoAddress
         // Construction/initialization
         ProtoAddress();
         ProtoAddress(const ProtoAddress& theAddr);
+        ProtoAddress(const char* theAddr);  // must be a numeric address, not a host name!
         ~ProtoAddress();
         bool IsValid() const {return (INVALID != type);}
         void Invalidate()
@@ -128,6 +130,9 @@ class ProtoAddress
         bool IsSiteLocal() const;
         bool IsLinkLocal() const;
         bool IsUnspecified() const;
+        bool IsUnicast() const
+            {return (!IsMulticast() && !IsBroadcast() && !IsUnspecified());}
+        
         const char* GetHostString(char*         buffer = NULL, 
                                   unsigned int  buflen = 0) const;
         
@@ -168,6 +173,7 @@ class ProtoAddress
         unsigned int SetCommonTail(const ProtoAddress &theAddr);
 
         UINT8 GetPrefixLength() const;
+        void GeneratePrefixMask(ProtoAddress::Type theType, UINT8 prefixLen);
         void ApplyPrefixMask(UINT8 prefixLen);        
         void ApplySuffixMask(UINT8 suffixLen);
         void GetSubnetAddress(UINT8         prefixLen,  
@@ -179,16 +185,15 @@ class ProtoAddress
         void GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr);
         
         // Name/address resolution
-        bool ResolveFromString(const char* string);
+        bool ResolveFromString(const char* text);
         bool ResolveToName(char* nameBuffer, unsigned int buflen) const;
         bool ResolveLocalAddress(char* nameBuffer = NULL, unsigned int buflen = 0);
         
+        // Expects IPv4, IPv6, or ETH address in numeric notation form
+        bool ConvertFromString(const char* text);
         // This expects a an "Ethernet" MAC address string 
         // in colon-delimited hexadecmial format
         bool ResolveEthFromString(const char* text);
-        
-        // Expects IPv4, IPv6, or ETH address in numeric notation form
-        bool ConvertFromString(const char* text);
         
         // Miscellaneous
         // This function returns a 32-bit number which might _sometimes_
@@ -224,11 +229,11 @@ class ProtoAddress
 #ifdef WIN32
             static bool Win32Startup() 
             {
-                WSADATA wsaData;
+				WSADATA wsaData;
                 WORD wVersionRequested = MAKEWORD(2, 2);
                 return (0 == WSAStartup(wVersionRequested, &wsaData));
             }
-            static void Win32Cleanup() {WSACleanup();}
+			static void Win32Cleanup() {WSACleanup(); }
 #endif  // WIN32
 
     private:
@@ -274,6 +279,11 @@ class ProtoAddressList
             return (NULL != entry) ? entry->GetUserData() : NULL;
         }
         void Remove(const ProtoAddress& addr);
+        
+        // Add (non-duplicative) / Remove addresses from input list
+        // (input list is not modified)
+        bool AddList(ProtoAddressList& addrList);
+        void RemoveList(ProtoAddressList& addrList);
         
         bool IsEmpty() const
             {return (addr_tree.IsEmpty());}
@@ -334,7 +344,7 @@ class ProtoAddressList
         ProtoTree           addr_tree;
 };  // end class ProtoAddressList
 
-extern const ProtoAddress PROTO_ADDR_NONE;
+extern const ProtoAddress PROTO_ADDR_NONE;  // invalid ProtoAddress (useful as a default)
 
 #endif // _PROTO_ADDRESS
 

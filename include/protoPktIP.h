@@ -57,18 +57,22 @@ class ProtoPktIP : public ProtoPkt
             HOPOPT   =   0,  // IPv6 hop-by-hop option                    
             ICMP     =   1,  // Internet Control Message Protocol         
             IGMP     =   2,  // Internet Group Management Protocol             
-            IPIP     =   3,  // IP in IP encapsulation                    
+            IPIP     =   4,  // IPv4 in IPv4 encapsulation                    
             TCP      =   6,  // Transmission Control Protocol             
             UDP      =  17,  // User Datagram Protocol  
+            IPV6     =  41,  // Used for tunneling IPv6 packets over IPv4 or IPv6
             RTG      =  43,  // IPv6 routing header
             FRAG     =  44,  // IPv6 fragment header
+            GRE      =  47,  // Generic Router Encapsulation
             ESP      =  50,  // Encapsulation security payload header
-            AUTH     =  51,  // authentication/ESP header                  
+            AUTH     =  51,  // authentication/ESP header  
+            MOBILE   =  55,  // IP Moobility (Min Encap)                
             ICMPv6   =  58,  // ICMP for IPv6 
             MLD      =  58,  // IPv6 Multicast Listener Discovery  
             NONE     =  59,  // IPPROTO_NONE
-            DSTOPT   =  60,  // IPv6 destination options header    
-            MOBILE   = 135,  // IPv6 mobility header?                        
+            DSTOPT   =  60,  // IPv6 destination options header 
+            OSPF     =  89,  // OSPF routing protocol   
+            MOBILITY = 135,  // IPv6 mobility extension header                        
             EXP1     = 253,  // for experimental use
             EXP2     = 254,  // for experimental use     
             RESERVED = 255        
@@ -159,6 +163,7 @@ class ProtoPktIPv4 : public ProtoPktIP
         
         enum Flag
         {
+            FLAG_NONE     = 0x00,
             FLAG_RESERVED = 0x80,  // reserved bit
             FLAG_DF       = 0x40,  // 0 = may fragment,  1 = don't fragment 
             FLAG_MF       = 0x20   // 0 = last fragment, 1 = more fragments
@@ -312,7 +317,6 @@ class ProtoPktIPv4 : public ProtoPktIP
         void GetDstAddr(ProtoAddress& addr) const
             {addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_DST_ADDR), 4);}
         
-        
         /// Helper method to get pointer to ID portion of IPv4 header
         const char* GetIDPtr() const
             {return ((char*)buffer_ptr + (OFFSET_ID*2));}
@@ -393,8 +397,10 @@ class ProtoPktIPv4 : public ProtoPktIP
             return ttl;
         }
         
-        /// Return checksum in host byte order
+        // Return checksum in host byte order
         UINT16 CalculateChecksum(bool set = true);
+        UINT16 FinalizeChecksum()
+            {return CalculateChecksum(true);}
            
     private:
         void SetHeaderLength(UINT8 hdrBytes) 
@@ -592,7 +598,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 
                 bool Pack();
                 
-                bool InitFromBuffer(Protocol extType, UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false);
+                bool InitFromBuffer(Protocol extType, UINT32* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
                 Protocol GetType() const 
                     {return ext_type;}
                 Protocol GetNextHeader() const
@@ -924,6 +930,83 @@ class ProtoPktESP : public ProtoPkt
             OFFSET_PAYLOAD  = (OFFSET_SEQUENCE + 1)     // UINT32 offset
         };
 };  // end class ProtoPktESP
+
+
+
+// This represents the RFC 2004 Minimal Forwarding Header and IP Payload
+class ProtoPktMobile : public ProtoPkt
+{
+    public:
+        ProtoPktMobile(UINT32*       bufferPtr = NULL, 
+                       unsigned int  numBytes = 0, 
+                       bool          initFromBuffer = false,
+                       bool          freeOnDestruct = false);
+        ~ProtoPktMobile();
+        
+        enum Flag {FLAG_SRC = 0x80};
+        
+        // Use these to build an MOBILE Minimal Forwarding Header 
+        bool InitIntoBuffer(UINT32*       bufferPtr = NULL, 
+                            unsigned int  numBytes = 0, 
+                            bool          freeOnDestruct = false);
+        
+        void SetProtocol(ProtoPktIP::Protocol protocol)
+            {SetUINT8(OFFSET_PROTOCOL, (UINT8)protocol);}
+        void SetFlag(Flag flag)
+            {((UINT8*)buffer_ptr)[OFFSET_FLAGS] |= flag;}
+        void ClearFlag(Flag flag)
+            {((UINT8*)buffer_ptr)[OFFSET_FLAGS] &= ~flag;}
+        void SetChecksum(UINT16 checksum)
+            {((UINT16*)buffer_ptr)[OFFSET_CHECKSUM] = htons(checksum);}  
+        void SetDstAddr(const ProtoAddress& addr, bool calculateChecksum = false);
+        bool SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum = false);
+        void SetPayload(const char* payload, UINT16 numBytes)
+        {
+            memcpy((char*)(buffer_ptr+OffsetPayload()), payload, numBytes);
+            if (FlagIsSet(FLAG_SRC))
+                SetLength(12 + numBytes);
+            else
+                SetLength(8 + numBytes);
+        }
+        UINT16 CalculateChecksum(bool set = true);
+        
+        bool InitFromBuffer(UINT32*         bufferPtr = NULL, 
+                            unsigned int    numBytes = 0, 
+                            bool            freeOnDestruct = false);
+        
+        ProtoPktIP::Protocol GetProtocol() const
+            {return (ProtoPktIP::Protocol)GetUINT8(OFFSET_PROTOCOL);}
+        bool FlagIsSet(Flag flag) const
+            {return (0 != (flag & (((UINT8*)buffer_ptr)[OFFSET_FLAGS])));}    
+        UINT16 GetChecksum() const
+            {return GetUINT16(OFFSET_CHECKSUM);}    
+        void GetDstAddr(ProtoAddress& dst) const
+            {dst.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_DST_ADDR), 4);}
+        bool GetSrcAddr(ProtoAddress& src) const;
+        
+        UINT16 GetPayloadLength() const
+            {return GetLength() - 4*OffsetPayload();}
+        const UINT32* GetPayload() const
+            {return (buffer_ptr + OffsetPayload());}
+        UINT32* AccessPayload()
+            {return (buffer_ptr + OffsetPayload());}
+        
+    private:
+        enum 
+        {
+            OFFSET_PROTOCOL = 0,                        // UINT8 offset
+            OFFSET_RESERVED = (OFFSET_PROTOCOL + 1),    // UINT8 offset
+            OFFSET_FLAGS = OFFSET_RESERVED,             // UINT8 offset
+            OFFSET_CHECKSUM = (OFFSET_PROTOCOL/2 + 1),  // UINT16 offset
+            OFFSET_DST_ADDR = (OFFSET_CHECKSUM/2 + 1),  // UINT32 offset 
+            OFFSET_SRC_ADDR = (OFFSET_DST_ADDR + 1)     // UINT32 offset   
+        };
+            
+        unsigned int OffsetPayload() const  // (UINT32 offset
+            {return (FlagIsSet(FLAG_SRC) ? OFFSET_SRC_ADDR + 1 : OFFSET_SRC_ADDR);}
+                
+    
+};  // end class ProtoPktMobile
 
 /**
  * @class ProtoPktDPD

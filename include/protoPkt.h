@@ -23,6 +23,11 @@
  * building and parsing (For examples, see 
  * ProtoPktIP, ProtoPktRTP, etc)
  */
+ 
+ // TBD - we should make this a template class so we can use different "buffer_ptr" types
+ //       such as char*, UINT16*, etc depending upon the alignment requirements of the
+ //       packet format specification.
+ 
 class ProtoPkt
 {
     public:
@@ -65,6 +70,7 @@ class ProtoPkt
         }
         
         const char* GetBuffer() const {return (char*)buffer_ptr;} 
+        const UINT32* GetBuffer32() const {return buffer_ptr;}
         unsigned int GetBufferLength() const {return buffer_bytes;}
         unsigned int GetLength() const {return pkt_length;} 
         
@@ -79,6 +85,7 @@ class ProtoPkt
         
         // These helper methods are defined for setting multi-byte protocol
         // fields in one of two ways:  1) "cast and assign", or 2) memcpy()
+        // **IMPORTANT** Note the offsets are _byte_ offsets!!!
 #ifdef CAST_AND_ASSIGN
         static UINT16 GetUINT16(UINT16* ptr) const
             {return ntohs(*ptr);}
@@ -123,23 +130,25 @@ class ProtoPkt
         
         UINT16 GetUINT16(unsigned int byteOffset) const
         {
-            UINT16* ptr = (UINT16*)((char*)buffer_ptr + byteOffset);
-            return GetUINT16(ptr);
+            UINT16 value;
+            memcpy(&value, (char*)buffer_ptr + byteOffset, 2);
+            return ntohs(value);
         }
         UINT32 GetUINT32(unsigned int byteOffset) const
         {
-            UINT32* ptr = (UINT32*)((char*)buffer_ptr + byteOffset);
-            return GetUINT32(ptr);
+            UINT32 value;
+            memcpy(&value, (char*)buffer_ptr + byteOffset, 4);
+            return ntohl(value);
         }
         void SetUINT16(unsigned int byteOffset, UINT16 value)
         {
-            UINT16* ptr = (UINT16*)((char*)buffer_ptr + byteOffset);
-            SetUINT16(ptr, value);
+            value = htons(value);
+            memcpy((char*)buffer_ptr + byteOffset, &value, 2);
         }
         void SetUINT32(unsigned int byteOffset, UINT32 value)
         {
-            UINT32* ptr = (UINT32*)((char*)buffer_ptr + byteOffset);
-            SetUINT32(ptr, value);
+            value = htonl(value);
+            memcpy((char*)buffer_ptr + byteOffset, &value, 4);
         }
 #endif // if/else CAST_AND_ASSIGN
             

@@ -98,24 +98,31 @@ extern "C" {
         Py_RETURN_NONE;
     }
 
-    static PyObject* Pipe_Listen(Pipe *self, PyObject *args) {
+    static PyObject* Pipe_Listen(Pipe *self, PyObject *args) 
+    {
         const char *name;
-
         if (!PyArg_ParseTuple(args, "s", &name))
             return NULL;
-
         if (!self->thisptr->Listen(name)) {
             PyErr_SetString(ProtoError, "Could not start listener.");
             return NULL;
         }
-
         self->isConnected = true;
         Py_RETURN_NONE;
     }
 
+    // Thisc currently only allows a single connection to be accepted
+    // TBD - provide option to accept multiple connections
     static PyObject* Pipe_Accept(Pipe *self, PyObject *args) {
-        PyErr_SetString(PyExc_NotImplementedError, "");
-        return NULL;
+        
+        if (!self->thisptr->Accept())
+        {
+            PyErr_SetString(ProtoError, "ProtoPipe::Accept() error");   
+            return NULL;
+        }    
+        //PyErr_SetString(PyExc_NotImplementedError, "");
+        //return NULL;
+        Py_RETURN_NONE;
     }
 
     static PyObject* Pipe_Close(Pipe *self) {
@@ -244,8 +251,7 @@ extern "C" {
         if (PyType_Ready(&PipeType) < 0)
             return;
 
-        m = Py_InitModule3("protokit", protokit_methods,
-                "Python wrapper for Protokit");
+        m = Py_InitModule3("protokit", protokit_methods, "Python wrapper for Protokit");
 
         if (m == NULL)
             return;

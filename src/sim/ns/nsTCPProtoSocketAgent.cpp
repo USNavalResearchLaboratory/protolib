@@ -1,8 +1,6 @@
 /*
  *  TCPProtoSocketAgent.cpp
  *
- *  Copyright 2007 __MyCompanyName__. All rights reserved.
- *
  */
 
 #include "nsTCPProtoSocketAgent.h"

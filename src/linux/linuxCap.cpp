@@ -28,12 +28,9 @@ class LinuxCap : public ProtoCap
             
         bool Open(const char* interfaceName = NULL);
         void Close();
-        bool Send(const char* buffer, unsigned int buflen);
-        bool Forward(char* buffer, unsigned int buflen);
+        bool Send(const char* buffer, unsigned int& numBytes);
         bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL);
-    
-    private:
-        struct sockaddr_ll  iface_addr;
+        
 };  // end class LinuxCap
 
 ProtoCap* ProtoCap::Create()
@@ -101,24 +98,24 @@ bool LinuxCap::Open(const char* interfaceName)
                 GetErrorString());
     
     
-    ProtoAddress ethAddr;
-    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, ethAddr))
+    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
     {
         PLOG(PL_ERROR, "LinuxCap::Open() error getting interface MAC address\n");
         Close();
         return false;
     }
     
-    // Init our interface address structure   
-    memset((char*)&iface_addr, 0, sizeof(iface_addr));
-    iface_addr.sll_protocol = htons(ETH_P_ALL);
-    iface_addr.sll_ifindex = ifIndex;
-    iface_addr.sll_family = AF_PACKET;
-    memcpy(iface_addr.sll_addr, ethAddr.GetRawHostAddress(), 6);
-    iface_addr.sll_halen = ethAddr.GetLength();
+    // Init our interface address structure  
+    struct sockaddr_ll  ifaceAddr; 
+    memset((char*)&ifaceAddr, 0, sizeof(ifaceAddr));
+    ifaceAddr.sll_protocol = htons(ETH_P_ALL);
+    ifaceAddr.sll_ifindex = ifIndex;
+    ifaceAddr.sll_family = AF_PACKET;
+    memcpy(ifaceAddr.sll_addr, if_addr.GetRawHostAddress(), 6);
+    ifaceAddr.sll_halen = if_addr.GetLength();
     
     // bind() the socket to the specified interface
-    if (bind(descriptor, (struct sockaddr*)&iface_addr, sizeof(iface_addr)) < 0)
+    if (bind(descriptor, (struct sockaddr*)&ifaceAddr, sizeof(ifaceAddr)) < 0)
     {
         PLOG(PL_ERROR, "LinuxCap::Open() bind error: %s\n", GetErrorString());
         Close();
@@ -146,7 +143,7 @@ void LinuxCap::Close()
     }  
 }  // end LinuxCap::Close()
 
-bool LinuxCap::Send(const char* buffer, unsigned int buflen)
+bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
 {
     // Make sure packet is a type that is OK for us to send
     // (Some packets seem to cause a PF_PACKET socket trouble)
@@ -158,38 +155,33 @@ bool LinuxCap::Send(const char* buffer, unsigned int buflen)
             PLOG(PL_DEBUG, "LinuxCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
             return false;
     }
-    size_t result = write(descriptor, buffer, buflen);
-    if (result != buflen)
+    for(;;)
     {
-        PLOG(PL_ERROR, "LinuxCap::Send() write() error: %s\n", GetErrorString());
-        return false;  
-    }    
+        ssize_t result = write(descriptor, buffer, numBytes);
+        if (result < 0)
+        {
+            switch (errno)
+            {
+                case EINTR:
+                    continue;  // try again
+                case EWOULDBLOCK:
+                    numBytes = 0;
+                case ENOBUFS:
+                    // because this doesn't block write()
+                default:
+                    PLOG(PL_WARN, "LinuxCap::Send() error: %s\n", GetErrorString());
+                    break;
+            }   
+            return false; 
+        }   
+        else
+        {
+            ASSERT(result == numBytes);
+            break;
+        } 
+    }
     return true;
 }  // end LinuxCap::Send()
-
-bool LinuxCap::Forward(char* buffer, unsigned int buflen)
-{
-    // Make sure packet is a type that is OK for us to send
-    // (Some packet types seem to cause PF_PACKET socket trouble)
-    UINT16 type;
-    memcpy(&type, buffer+12, 2);
-    type = ntohs(type);
-    if (type <=  0x05dc) // assume it's 802.3 Length and ignore
-    {
-        PLOG(PL_DEBUG, "LinuxCap::Forward() unsupported 802.3 frame (len = %04x)\n", type);
-        return false;
-    }
-    // Change the src MAC addr to our own
-    // (TBD) allow caller to specify dst MAC addr ???
-    memcpy(buffer+6, iface_addr.sll_addr, 6);
-    size_t result = write(descriptor, buffer, buflen);                   
-    if (result != buflen)
-    {
-        PLOG(PL_ERROR, "LinuxCap::Send() write() error: %s\n", GetErrorString());
-        return false;  
-    }    
-    return true;
-}  // end LinuxCap::Forward()
 
 bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
 {
@@ -200,15 +192,20 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     if (result < 0)
     {
         numBytes = 0;
-        if ((EAGAIN != errno) && (EINTR != errno))
-            PLOG(PL_ERROR, "LinuxCap::Recv() error: %s\n", GetErrorString());
-        else
-            return true;
+        switch (errno)
+        {
+            case EINTR:
+            case EAGAIN:
+                return true;
+            default:
+                PLOG(PL_ERROR, "LinuxCap::Recv() error: %s\n", GetErrorString());
+                break;
+        }
         return false;
     }
     else
     {
-        if (direction)
+        if (NULL != direction)
         {
             if (pktAddr.sll_pkttype == PACKET_OUTGOING)
                 *direction = OUTBOUND;

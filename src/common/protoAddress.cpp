@@ -11,6 +11,8 @@
  * @file protoAddress.cpp
  * @brief Network address container class.
  */
+
+
 #ifdef UNIX
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -42,10 +44,18 @@ ProtoAddress::ProtoAddress()
 {
     memset(&addr, 0, sizeof(addr));
 }
+
 ProtoAddress::ProtoAddress(const ProtoAddress& theAddr)
 {
     *this = theAddr;
 }
+
+
+ProtoAddress::ProtoAddress(const char* theAddr)
+{
+    ConvertFromString(theAddr);
+}
+
 ProtoAddress::~ProtoAddress()
 {
 }
@@ -97,7 +107,7 @@ bool ProtoAddress::IsMulticast() const
         }
 #endif // HAVE_IPV6
         case ETH:
-            // not ethernet broadcast also considered mcast here
+            // ethernet broadcast also considered mcast here
             return (0 != (0x01 & ((char*)&addr)[0]));
 
 #ifdef SIMULATE
@@ -158,7 +168,7 @@ bool ProtoAddress::IsLoopback() const
     {
         case IPv4:
         {
-            // This was change since any 127.X.X.X is a loopback address
+            // This was changed since any 127.X.X.X is a loopback address
             // and many Linux configs have started using this fact for some purpose 
             UINT32 addrVal = (UINT32)((struct sockaddr_in*)&addr)->sin_addr.s_addr;
             return (0x7f == (ntohl(addrVal) >> 24));
@@ -311,7 +321,7 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
             unsigned long len = buflen;
             if (0 != WSAAddressToString((SOCKADDR*)&addr, sizeof(addr), NULL, (LPTSTR)buffer, &len))
                 PLOG(PL_ERROR, "ProtoAddress::GetHostString() WSAAddressToString() error\n");
-            Win32Cleanup();
+			Win32Cleanup();
 #ifdef _UNICODE
             // Convert from unicode
             wcstombs(buffer, (wchar_t*)buffer, len);
@@ -328,13 +338,18 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
                 char* ptr = strchr(buffer, '[');  // nuke start bracket
                 if (ptr)
                 {
+					char * pch;
                     size_t len = strlen(buffer);
                     if (len > buflen) len = buflen;
-                    memmove(buffer, ptr, len - (ptr-buffer));   
-                }   
+					ptr++;
+					memmove(buffer, ptr, len - (ptr-buffer));   
+                }  
                 ptr = strrchr(buffer, '%');  // nuke if index, if applicable
                 if (!ptr) ptr = strrchr(buffer, ']'); // nuke end bracket
-                if (ptr) ptr = '\0';
+				ptr = (char *)memchr(buffer, ']', strlen(buffer));
+				if (ptr)
+					buffer[ptr - buffer] = '\0';
+
             }
 #endif // HAVE_IPV6
             return buffer ? buffer : "(null)";
@@ -479,7 +494,7 @@ void ProtoAddress::Reset(ProtoAddress::Type theType, bool zero)
             break;
 #endif // SIMULATE
         default:
-            PLOG(PL_ERROR, "ProtoAddress::Init() Invalid address type!\n");
+            PLOG(PL_ERROR, "ProtoAddress::Reset() Invalid address type!\n");
             break;
     }
     SetPort(0);
@@ -518,7 +533,8 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
 #ifdef HAVE_IFDL
         case AF_LINK:
         {
-            struct sockaddr_dl* sdl = (struct sockaddr_dl*)&theAddr;
+            // The (void*) cast here avoid cast-align warning. TBD - may need to revisit this.
+            struct sockaddr_dl* sdl = (struct sockaddr_dl*)((void*)&theAddr);
             if (IFT_ETHER != sdl->sdl_type)
             {
                 PLOG(PL_WARN, "ProtoNet::SetSockAddr() error: non-Ethertype link address!\n");
@@ -529,7 +545,7 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
         }
 #endif  // HAVE_IFDL
         default:
-            PLOG(PL_WARN, "ProtoAddress::SetSockAddr() Invalid address type: %d\n", theAddr.sa_family);
+            PLOG(PL_ERROR, "ProtoAddress::SetSockAddr() warning: Invalid address type: %d\n", theAddr.sa_family);
             type = INVALID;
             length = 0;
             return false;
@@ -621,7 +637,7 @@ const char* ProtoAddress::GetRawHostAddress() const
             PLOG(PL_ERROR, "ProtoAddress::RawHostAddress() Invalid address type!\n");
             return NULL;
     }
-}  // end ProtoAddress::RawHostAddress()
+}  // end ProtoAddress::GetRawHostAddress()
 
 unsigned int ProtoAddress::SetCommonHead(const ProtoAddress& theAddr)
 {
@@ -715,6 +731,49 @@ UINT8 ProtoAddress::GetPrefixLength() const
     }
     return prefixLen;
 }  // end ProtoAddress::GetPrefixLength()
+
+void ProtoAddress::GeneratePrefixMask(ProtoAddress::Type type, UINT8 prefixLen)
+{
+    unsigned char* ptr;
+    switch (type)
+    {
+        case IPv4:
+            ptr = ((unsigned char*)&((struct sockaddr_in*)&addr)->sin_addr);
+            break;
+#ifdef HAVE_IPV6
+        case IPv6:
+            ptr = ((unsigned char*)&((struct sockaddr_in6*)&addr)->sin6_addr);
+            break;
+#endif // HAVE_IPV6  
+        case ETH:
+            ptr =  ((unsigned char*)&addr);
+            break;
+#ifdef SIMULATE          
+        case SIM:
+            ptr = ((unsigned char*)&((struct sockaddr_sim*)&addr)->addr);
+            break;
+#endif // SIMULATE
+        default:
+            PLOG(PL_ERROR, "ProtoAddress::GeneratePrefixMask() Invalid address type!\n");
+            return ;
+    }
+    Reset(type, true);  // init to zero
+    if (prefixLen > GetLength())
+        prefixLen = GetLength();
+    while (0 != prefixLen)
+    {
+        if (prefixLen < 8)
+        {
+            *ptr = 0xff << (8 - prefixLen);
+            return;
+        }
+        else
+        {
+            *ptr++ = 0xff;
+            prefixLen -= 8;
+        }
+    }
+}  // end ProtoAddress::GeneratePrefixMask()
 
 void ProtoAddress::ApplyPrefixMask(UINT8 prefixLen)
 {
@@ -1131,17 +1190,19 @@ bool ProtoAddress::ConvertFromString(const char* text)
     struct sockaddr_in sa;
     if (1 == inet_pton(AF_INET, text, &sa.sin_addr))
     {
+        sa.sin_family = AF_INET;
         return SetSockAddr((struct sockaddr&)sa);
     }  
     // Next try for an IPv6 addr 
     struct sockaddr_in6 sa6; 
     if (1 == inet_pton(AF_INET6, text, &sa6.sin6_addr))
     {
+        sa6.sin6_family = AF_INET6;
         return SetSockAddr((struct sockaddr&)sa6);
     }  
     // Finally, see if it's an Ethertype addr string
     return ResolveEthFromString(text);
-#endif
+#endif  // if/else WIN32
 #endif  // if/else SIMULATE
 }  // end ProtoAddress::ConvertFromString()
 
@@ -1185,7 +1246,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
     if(0 == getaddrinfo(text, NULL, NULL, &addrInfoPtr)) 
     {
 #ifdef WIN32
-        Win32Cleanup();
+		Win32Cleanup();
 #endif // WIN32
         struct addrinfo* ptr = addrInfoPtr;
         bool result = false;
@@ -1217,6 +1278,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
     }
     else
     {
+        if (NULL != addrInfoPtr) freeaddrinfo(addrInfoPtr);
         PLOG(PL_WARN, "ProtoAddress::ResolveFromString() getaddrinfo() error: %s\n", GetErrorString());
 #ifdef WIN32
         // on WinNT 4.0, getaddrinfo() doesn't work, so we check the OS version
@@ -1245,7 +1307,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
         // 2) Use "gethostbyname()" to lookup IPv4 address
         struct hostent *hp = gethostbyname(text);
 #ifdef WIN32
-        Win32Cleanup();
+		Win32Cleanup();
 #endif // WIN32
         if(hp)
         {
@@ -1257,7 +1319,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
         }
         else
         {
-            PLOG(PL_ERROR, "ProtoAddress::ResolveFromString() gethostbyname() error: %s\n",
+            PLOG(PL_WARN, "ProtoAddress::ResolveFromString() gethostbyname() error: %s\n",
                     GetErrorString());
             return false;
         }
@@ -1276,7 +1338,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
     }
 #endif // !SIMULATE
 }  // end ProtoAddress::ResolveFromString()
-
+#ifdef USE_GETHOSTBYADDR
 bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
 {
 #ifdef WIN32
@@ -1313,11 +1375,12 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
             return false;
     }  // end switch(type)
 #ifdef WIN32
-        Win32Cleanup();
+		Win32Cleanup();
 #endif // WIN32
         
     if (hp)
     {
+        // Use the hp->h_name hostname by default
         size_t nameLen = 0;
         unsigned int dotCount = 0;
         strncpy(buffer, hp->h_name, buflen);
@@ -1334,24 +1397,24 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
         // Use first alias by default
         if (alias && *alias && buffer)
         {
-            strncpy(buffer, *alias, buflen);
-            nameLen = strlen(*alias);
-            nameLen = nameLen < buflen ? nameLen : buflen;
-            alias++;
             // Try to find the fully-qualified name 
             // (longest alias with most '.')
-            while (*alias)
+            while (NULL != *alias)
             {
                 unsigned int dc = 0;
                 ptr = *alias;
-                while ((ptr = strchr(ptr, '.')))
+                bool isArpa = false;
+                while (NULL != (ptr = strchr(ptr, '.')))
                 {
                     ptr++;
+                    // don't let ".arpa" aliases override
+                    isArpa = (0 == strcmp(ptr, "arpa"));
                     dc++;   
                 }
                 size_t alen = strlen(*alias);
                 bool override = (dc > dotCount) || 
                                 ((dc == dotCount) && (alen >nameLen));
+                if (isArpa) override = false;
                 if (override)
                 {
                     strncpy(buffer, *alias, buflen);
@@ -1366,12 +1429,60 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
     }
     else
     {
-        PLOG(PL_ERROR, "ProtoAddress::ResolveToName() gethostbyaddr() error: %s\n",
+        PLOG(PL_WARN, "ProtoAddress::ResolveToName() gethostbyaddr() error: %s\n",
                 GetErrorString());
         GetHostString(buffer, buflen);
         return false;
     }
 }  // end ProtoAddress::ResolveToName() 
+
+#else // Use newer getnameinfo rather than legacy gethostbyaddr
+bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
+{
+#ifdef WIN32
+        if (!Win32Startup())
+        {
+            PLOG(PL_ERROR, "ProtoAddress::ResolveToName() Error initializing WinSock!\n");
+            GetHostString(buffer, buflen);
+            return false;
+        }
+        DWORD retval = 0;
+#else // WIN32
+        int retval = 0;
+#endif // endif WIN32
+    switch (type)
+    {
+        case IPv4:
+        case IPv6:
+            retval = getnameinfo((struct sockaddr *) &addr,
+                                 sizeof(addr),
+                                 buffer,
+                                 buflen,NULL,0,NI_NAMEREQD);
+            break;
+#ifdef SIMULATE
+        case SIM:
+            GetHostString(buffer, buflen);
+            return true;
+#endif // SIMULATE
+        case ETH:
+            GetHostString(buffer, buflen);
+            return true;
+        default:
+            PLOG(PL_ERROR, "ProtoAddress::ResolveToName(): Invalid address type!\n");
+            return false;
+    }  // end switch(type)
+#ifdef WIN32
+        Win32Cleanup();
+#endif // WIN32
+        if (retval != 0)
+        {
+            PLOG(PL_ERROR, "ProtoAddress::ResolveToName() error: %s\n", gai_strerror(retval));
+            return false;
+        }
+        
+        return true;
+}  // end ProtoAddress::ResolveToName() 
+#endif // endif USE_GETHOSTBYADDR
 
 bool ProtoAddress::ResolveLocalAddress(char* buffer, unsigned int buflen)
 {
@@ -1389,7 +1500,7 @@ bool ProtoAddress::ResolveLocalAddress(char* buffer, unsigned int buflen)
 #endif // WIN32
     int result = gethostname(hostName, 255);
 #ifdef WIN32
-    Win32Cleanup();
+	Win32Cleanup();
 #endif  // WIN32
     if (result)
     {
@@ -1492,6 +1603,25 @@ void ProtoAddressList::Remove(const ProtoAddress& addr)
         delete entry;
     }   
 }  // end ProtoAddressList::Remove()
+
+bool ProtoAddressList::AddList(ProtoAddressList& addrList)
+{
+    ProtoAddressList::Iterator iterator(addrList);
+    ProtoAddress addr;
+    while (iterator.GetNextAddress(addr))
+    {
+        if (!Insert(addr)) return false;
+    }
+    return true;
+}  // end ProtoAddressList::AddList()
+
+void ProtoAddressList::RemoveList(ProtoAddressList& addrList)
+{
+    ProtoAddressList::Iterator iterator(addrList);
+    ProtoAddress addr;
+    while (iterator.GetNextAddress(addr))
+        Remove(addr);
+}  // end ProtoAddressList::RemoveList()
 
 
 // Returns the root of the addr_tree

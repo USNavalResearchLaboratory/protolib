@@ -252,7 +252,8 @@ UINT32 ProtoLFSR::PolynomialSearch(unsigned int m)
         seq[i] = new char[LEN >> 3];
         if (NULL == seq[i])
         {
-            PLOG(PL_ERROR, "ProtoLFSR::PolynomialSearch() new 'seq[%lu] error: %s", i, GetErrorString());
+            PLOG(PL_ERROR, "ProtoLFSR::PolynomialSearch() new 'seq[%lu] error: %s", 
+                            (unsigned long)i, GetErrorString());
             for (UINT32 j = 0; j < i; j++)
                 delete[] seq[j];
             delete[] seq;
@@ -279,7 +280,7 @@ UINT32 ProtoLFSR::PolynomialSearch(unsigned int m)
         }
 
         unsigned int wtMin = 0xffffffff;
-        unsigned int offset = 0;
+        //unsigned int offset = 0;
         for (unsigned int i = 1; i < LEN-1; i++)
         {
             unsigned int wt = 0;
@@ -291,7 +292,7 @@ UINT32 ProtoLFSR::PolynomialSearch(unsigned int m)
             if (wt < wtMin)
             {
                 wtMin = wt;
-                offset = i;
+                //offset = i;
             }
         }    
         if (wtMin > maxMin)
@@ -387,7 +388,7 @@ bool ProtoLFSRX::SetPolynomial(const UINT32*    polynomial,
     
     return true;
 }  // end ProtoLFSRX::SetPolynomial()
-
+ 
 void ProtoLFSRX::Reset(UINT32* initialState)
 {
     byte_mode = false;

@@ -13,7 +13,7 @@ class NsRouteMgr : public ProtoRouteMgr
           NsRouteMgr();
           ~NsRouteMgr();
           virtual bool Open(const void* userData = NULL);
-          virtual bool IsOpen() const {return (NULL != node_id);}
+          virtual bool IsOpen() const {return (0 != node_id);}
           virtual void Close();
 
           virtual bool GetAllRoutes(ProtoAddress::Type addrType,

@@ -4,6 +4,7 @@
 #include "protoCap.h"  // used for packet injection
 #include "protoNet.h"
 
+#include <stdlib.h>  // for atoi(), getenv()
 #include <stdio.h>
 #include <unistd.h>  // for close()
 #include <linux/netfilter_ipv4.h>  // for NF_IP_LOCAL_OUT, etc
@@ -14,6 +15,8 @@
 #include <fcntl.h>  // for fcntl(), etc
 #include <linux/if_ether.h>  // for ETH_P_IP
 #include <net/if_arp.h>   // for ARPHRD_ETHER
+
+#include <linux/version.h>  // for LINUX_VERSION_CODE
 
 /** NOTES: 
  *
@@ -40,7 +43,8 @@ class LinuxDetour : public ProtoDetour
                   const ProtoAddress& srcFilterAddr = PROTO_ADDR_NONE, 
                   unsigned int        srcFilterMask = 0,
                   const ProtoAddress& dstFilterAddr = PROTO_ADDR_NONE,
-                  unsigned int        dstFilterMask = 0);
+                  unsigned int        dstFilterMask = 0,
+                  int                 dscpValue     = -1);
         void Close();
         
         virtual bool Recv(char*         buffer, 
@@ -61,14 +65,18 @@ class LinuxDetour : public ProtoDetour
             INSTALL,
             DELETE
         };
-            
+        
+        // Simple has used to randomize pid into base nfq_num    
+        UINT32 JenkinsHash(UINT32 value);  
+        
         bool SetIPTables(UINT16              nfqNum,
                          Action              action,
                          int                 hookFlags ,
                          const ProtoAddress& srcFilterAddr, 
                          unsigned int        srcFilterMask,
                          const ProtoAddress& dstFilterAddr,
-                         unsigned int        dstFilterMask);
+                         unsigned int        dstFilterMask,
+                         int                 dscpValue);
         
         int                     raw_fd;  // for packet injection
         int                     hook_flags;
@@ -76,6 +84,7 @@ class LinuxDetour : public ProtoDetour
         unsigned int            src_filter_mask;
         ProtoAddress            dst_filter_addr;
         unsigned int            dst_filter_mask;
+        int                     dscp_value;
         
         enum {NFQ_BUFFER_SIZE = 8192};
         
@@ -84,7 +93,12 @@ class LinuxDetour : public ProtoDetour
                                nfq_data*           nfqData,
                                void*               userData);
                 
-                
+        // This is initialized with a value set by the
+        // "PROTO_NFQ_NUM_BASE" or uses a hash of the
+        // process id otherwise
+        static bool             nfq_num_init;
+        static UINT16           nfq_num_next;  //   
+             
         struct nfq_handle*      nfq_handle;
         struct nfq_q_handle*    nfq_queue;
         UINT16                  nfq_num;  // based on pid
@@ -104,15 +118,25 @@ ProtoDetour* ProtoDetour::Create()
     return static_cast<ProtoDetour*>(new LinuxDetour());   
 }  // end ProtoDetour::Create(), (void*)nl_head  
 
+bool LinuxDetour::nfq_num_init = true;
+UINT16 LinuxDetour::nfq_num_next = 0;
 
 LinuxDetour::LinuxDetour()
- : raw_fd(-1), hook_flags(0), 
+ : raw_fd(-1), hook_flags(0), dscp_value(-1), 
    nfq_handle(NULL), nfq_queue(NULL),
    nfq_pkt_id(0), nfq_pkt_data(NULL), nfq_pkt_len(0),
    nfq_direction(UNSPECIFIED), nfq_ifindex(0)
    
 {
- 
+    if (nfq_num_init)
+    {
+        char* cp = getenv("PROTO_NFQ_NUM_BASE");
+        if (NULL != cp)
+            nfq_num_next = (UINT16)atoi(cp);
+        else
+            nfq_num_next = (UINT16)JenkinsHash(getpid());  // TBD - implement a semaphore for this?
+        nfq_num_init = false;
+    }
 }
 
 LinuxDetour::~LinuxDetour()
@@ -120,13 +144,25 @@ LinuxDetour::~LinuxDetour()
     Close();
 }
 
+UINT32 LinuxDetour::JenkinsHash(UINT32 a)
+{
+   a = (a+0x7ed55d16) + (a<<12);
+   a = (a^0xc761c23c) ^ (a>>19);
+   a = (a+0x165667b1) + (a<<5);
+   a = (a+0xd3a2646c) ^ (a<<9);
+   a = (a+0xfd7046c5) + (a<<3);
+   a = (a^0xb55a4f09) ^ (a>>16);
+   return a;
+}  // end LinuxDetour::JenkinsHash()
+
 bool LinuxDetour::SetIPTables(UINT16              nfqNum,
                               Action              action,
                               int                 hookFlags ,
                               const ProtoAddress& srcFilterAddr, 
                               unsigned int        srcFilterMask,
                               const ProtoAddress& dstFilterAddr,
-                              unsigned int        dstFilterMask)
+                              unsigned int        dstFilterMask,
+                              int                 dscpValue)
 {
     // 1) IPv4 or IPv6 address family? 
     //    (Note we now use the "mangle" table for our stuf)
@@ -206,6 +242,15 @@ bool LinuxDetour::SetIPTables(UINT16              nfqNum,
             len = strlen(rule);
             sprintf(rule+len, "/%hu ", dstFilterMask);
         }
+        
+        // Add DSCP filter command, if applicable
+        if (dscpValue >= 0)
+        {
+            // TBD - error check dscpValue???
+            size_t len = strlen(rule);
+            sprintf(rule+len, "-m dscp --dscp %d ", dscpValue);
+        }
+        
         // Add redirection so we can get stderr result
         strcat(rule, " 2>&1");
         FILE* p = popen(rule, "r");
@@ -243,7 +288,8 @@ bool LinuxDetour::Open(int                 hookFlags,
                        const ProtoAddress& srcFilterAddr, 
                        unsigned int        srcFilterMask,
                        const ProtoAddress& dstFilterAddr,
-                       unsigned int        dstFilterMask)
+                       unsigned int        dstFilterMask,
+                       int                 dscpValue)
 {
     if (IsOpen()) Close();
     
@@ -311,7 +357,8 @@ bool LinuxDetour::Open(int                 hookFlags,
     // Make sure the "nfnetlink_queue" modules are loaded
     // (We make this non-fatal in the case the operating system has
     //  these compiled-in and they are not used as loadable modules).
-    FILE* p = popen("/sbin/modprobe -l nfnetlink_queue 2>&1", "r");
+    // FILE* p = popen("/sbin/modprobe -l nfnetlink_queue 2>&1", "r");
+    FILE* p = popen("find /lib/modules/$(uname -r) -iname nfnetlink_queue.ko\\* 2>&1", "r");
     if (NULL != p)
     {
         // Read any error information fed back
@@ -334,7 +381,7 @@ bool LinuxDetour::Open(int                 hookFlags,
                 GetErrorString());
     }
     
-    nfq_num = (UINT16) getpid();  // TBD - is there a better way??
+    nfq_num = nfq_num_next++;    // TBD - is there a better way??
     
     // Save parameters for firewall rule removal
     hook_flags = hookFlags;
@@ -342,12 +389,14 @@ bool LinuxDetour::Open(int                 hookFlags,
     src_filter_mask = srcFilterMask;
     dst_filter_addr = dstFilterAddr;
     dst_filter_mask = dstFilterMask;
+    dscp_value = dscpValue;
     // Set up iptables (or ip6tables) if non-zero "hookFlags" are provided
     if (0 != hookFlags)
     {
         if (!SetIPTables(nfq_num, INSTALL, hookFlags, 
                          srcFilterAddr, srcFilterMask,
-                         dstFilterAddr, dstFilterMask))
+                         dstFilterAddr, dstFilterMask,
+                         dscpValue))
         {
             PLOG(PL_ERROR, "LinuxDetour::Open() error: couldn't install firewall rules\n");   
             Close();
@@ -416,7 +465,7 @@ void LinuxDetour::Close()
     {
         SetIPTables(nfq_num, DELETE, hook_flags,
                     src_filter_addr, src_filter_mask,
-                    dst_filter_addr, dst_filter_mask);
+                    dst_filter_addr, dst_filter_mask, dscp_value);
         hook_flags = 0;   
     }
     if (descriptor >= 0)
@@ -542,15 +591,18 @@ int LinuxDetour::NfqCallback(nfq_q_handle*       nfqQueue,
         linuxDetour->nfq_direction = INBOUND;
     
     // Finally record packet length and cache pointer to IP packet data
-    // The "#ifdef aligned_be64" hack here is because the Linux "libnetfilter_queue/libnetfilter_queue.h"
-    // changed the prototype of the "nfq_get_payload()" function to use an "unsigned char*" pointer
-    // circa 2011.  Hopefully this will stabilize and this hack will no longer be needed
-    // (or we use a more sophisticated build system to test for this function prototype disparity)
-#ifdef aligned_be64
+    
+    // A change to the nfq_get_payload() prototype seemed to kick in around Linux header files
+    // version 3.6?  (This will probably need to be fine tuned for the right version threshold.)
+
+#define LINUX_VERSION_MAJOR (LINUX_VERSION_CODE/65536)
+#define LINUX_VERSION_MINOR ((LINUX_VERSION_CODE - (LINUX_VERSION_MAJOR*65536)) / 256)
+
+#if ((LINUX_VERSION_MAJOR > 3) || ((LINUX_VERSION_MAJOR == 3) && (LINUX_VERSION_MINOR > 5)))
     linuxDetour->nfq_pkt_len = nfq_get_payload(nfqData, (unsigned char**)(&linuxDetour->nfq_pkt_data));
 #else
     linuxDetour->nfq_pkt_len = nfq_get_payload(nfqData, &linuxDetour->nfq_pkt_data);
-#endif // if/else aligned_be64 
+#endif //
     return 0;
 }  // end LinuxDetour::NfqCallback()
 

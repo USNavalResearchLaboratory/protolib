@@ -74,7 +74,7 @@ OBJ_PROTOLIB_CPP = \
 	$(PROTOLIB)/src/common/protoSimSocket.o $(PROTOLIB)/src/common/protoAddress.o \
 	$(PROTOLIB)/src/common/protoTimer.o $(PROTOLIB)/examples/protoExample.o \
 	$(PROTOLIB)/src/common/protoDebug.o $(PROTOLIB)/src/common/protoTree.o \
-	$(PROTOLIB)/src/common/protoList.o \
+	$(PROTOLIB)/src/common/protoList.o $(PROTOLIB)/src/common/protoRouteMgr.o \
 	$(PROTOLIB)/src/sim/ns/nsRouteMgr.o $(PROTOLIB)/src/common/protoRouteTable.o \
 	$(PROTOLIB)/src/common/protoPkt.o $(PROTOLIB)/src/manet/manetMsg.o \
 	$(PROTOLIB)/src/common/protoBitmask.o $(PROTOLIB)/src/sim/ns/nsProtoManetKernel.o \

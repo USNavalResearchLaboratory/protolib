@@ -63,26 +63,40 @@ class ProtoTimer
 		 *
 		 * TODO: Update text with new timer functionality
 		 *
-		 * Special notice should be taken of the boolean return value of this function.
-		 * When returning true the number of repeats will be decremented and if below 0
-		 * will deactivate the timer.  If in this function you are setting/changing intervals
-		 * or repetions of the timer which invoked the call, the function should return false
-		 * to avoid standard exit actions.
+		 * IMPORTAN: Special notice should be taken of the boolean return value of this function.
+		 * When returning "true" the number of repeats will be decremented and if below 0
+		 * will deactivate the timer.  If, in this function, you are rescheduling the timer, deleting it,
+		 * or repetions of the timer which invoked the call, the function should return "false"
+		 * to avoid standard exit actions (i.e. the timeout function has overridden usual timer handling).
 
-		 * NOTE: For VC++ Debug builds, you _cannot_ use pre-compiled
+		 * NOTE: For VC++ 6.0 Debug builds, you _cannot_ use pre-compiled
          * headers with this template code.  Also, "/ZI" or "/Z7" compile options 
-         * must NOT be specified.  (or else VC++ experiences an "internal compiler error")
+         * must NOT be specified.  (or else VC++ 6.0 experiences an "internal compiler error")
 		 *
 		 * @param theListener a pointer to the "listening" object
 		 * @param timeoutHandler a pointer to the listener's callback function.
 		 *
 		 */
-
-		template <class listenerType>
-        bool SetListener(listenerType* theListener, bool(listenerType::*timeoutHandler)(ProtoTimer&))
+         
+         
+        // This is our new "ProtoTimer::SetListener()" where the listener timeoutHandler
+        // has a "void" return type instead of the old "bool" since we don't care about
+        // the return type anymore. (yay!) 
+        template <class LTYPE>
+        bool SetListener(LTYPE* theListener, void(LTYPE::*timeoutHandler)(ProtoTimer&))
         {
             if (listener) delete listener;
-            listener = theListener ? new LISTENER_TYPE<listenerType>(theListener, timeoutHandler) : NULL;
+            listener = theListener ? new LISTENER_TYPE<LTYPE>(theListener, timeoutHandler) : NULL;
+            return theListener ? (NULL != theListener) : true;
+        }
+        
+        //  This is the old "ProtoTimer::SetListener()" we keep for backwards-compatibility
+        //  WARNING: This _will_ be deprecated in the future
+		template <class LTYPE>
+        bool SetListener(LTYPE* theListener, bool(LTYPE::*timeoutHandler)(ProtoTimer&))
+        {
+            if (listener) delete listener;
+            listener = theListener ? new OLD_LISTENER_TYPE<LTYPE>(theListener, timeoutHandler) : NULL;
             return theListener ? (NULL != theListener) : true;
         }
        
@@ -93,8 +107,10 @@ class ProtoTimer
          *
          * @param theInterval timer interval in seconds
          */ 
+        // Our ProtoTime class currently only handles 1 usec granularity (for non-zero timeouts)
+        // so we enforce that constraint here.
         void SetInterval(double theInterval) 
-            {interval = (theInterval < 0.0) ? 0.0 : theInterval;}
+            {interval = (theInterval < 0.0) ? 0.0 : ((theInterval < 1.0e-06) ? 1.0e-06 : theInterval);}
         double GetInterval() const {return interval;}
 		/**
         * Timer repetition (0 =  one shot, -1 = infinite repetition)
@@ -158,7 +174,9 @@ class ProtoTimer
 		* @retval Returns the result of the listener's callback function if
 		* a listener exists for the timer.
 		*/
-        bool DoTimeout() {return listener ? listener->on_timeout(*this) : true;}
+        void DoTimeout() 
+            {if (NULL !=  listener) listener->on_timeout(*this);}
+            
 		/**
 		* @class Listener
 		*
@@ -170,14 +188,14 @@ class ProtoTimer
 				/// virtual destructor
                 virtual ~Listener() {}
                 /// virtual on_timeout function
-				virtual bool on_timeout(ProtoTimer& theTimer) = 0;
+				virtual void on_timeout(ProtoTimer& theTimer) = 0;
         };
-		/**
+        /**
 		* @class LISTENER_TYPE
 		*
-		* @brief Template for Listener classes.
+		* @brief Template for Listener classes. (This will be deprecated)
 		*/
-        template <class listenerType>
+        template <class LTYPE>
         class LISTENER_TYPE : public Listener
         {
             public:
@@ -187,23 +205,74 @@ class ProtoTimer
 				* @param theListener pointer to the "listening" object
 				* @param timeoutHandler *pointer to the Listener's callback function.
 				*/
-                LISTENER_TYPE(listenerType* theListener, bool(listenerType::*timeoutHandler)(ProtoTimer&))
+                LISTENER_TYPE(LTYPE* theListener, void(LTYPE::*timeoutHandler)(ProtoTimer&))
                     : listener(theListener), timeout_handler(timeoutHandler) {}
 				/**
 				* @retval Returns the result of the Listeners timeout handler.
                 */
-				bool on_timeout(ProtoTimer& theTimer) 
-                    {return (listener->*timeout_handler)(theTimer);}
+				void on_timeout(ProtoTimer& theTimer) 
+                    {(listener->*timeout_handler)(theTimer);}
                 /**
 				* Duplicates the Listener member and returns a pointer to the new
 				* object.
 				*/
 				Listener* duplicate()
-                    {return (static_cast<Listener*>(new LISTENER_TYPE<listenerType>(listener, timeout_handler)));}
+                    {return (static_cast<Listener*>(new LISTENER_TYPE<LTYPE>(listener, timeout_handler)));}
             private:
-                listenerType* listener;
-                bool (listenerType::*timeout_handler)(ProtoTimer&);
+                LTYPE* listener;
+                void (LTYPE::*timeout_handler)(ProtoTimer&);
+        };  // end class ProtoTimer::OLD_LISTENER_TYPE
+        
+		/**
+		* @class OldListener
+		*
+		* @brief OldListener base class (will be deprecated)
+		*/
+        class OldListener : public Listener
+        {
+            public:
+				/// virtual destructor
+                virtual ~OldListener() {}
+                /// virtual on_timeout function
+				void on_timeout(ProtoTimer& theTimer)
+                        {old_on_timeout(theTimer);}
+            private:
+                virtual bool old_on_timeout(ProtoTimer& theTimer) = 0;   
         };
+        
+        /**
+		* @class OLD_LISTENER_TYPE
+		*
+		* @brief Template for Listener classes. (This will be deprecated)
+		*/
+        template <class LTYPE>
+        class OLD_LISTENER_TYPE : public OldListener
+        {
+            public:
+				/**
+				* Listener contstructor
+				*
+				* @param theListener pointer to the "listening" object
+				* @param timeoutHandler *pointer to the Listener's callback function.
+				*/
+                OLD_LISTENER_TYPE(LTYPE* theListener, bool(LTYPE::*timeoutHandler)(ProtoTimer&))
+                    : listener(theListener), timeout_handler(timeoutHandler) {}
+				/**
+				* @retval Returns the result of the Listeners timeout handler.
+                */
+				bool old_on_timeout(ProtoTimer& theTimer) 
+                    {return (listener->*timeout_handler)(theTimer);}
+                /**
+				* Duplicates the Listener member and returns a pointer to the new
+				* object.
+				*/
+				OldListener* duplicate()
+                    {return (static_cast<OldListener*>(new OLD_LISTENER_TYPE<LTYPE>(listener, timeout_handler)));}
+            private:
+                LTYPE* listener;
+                bool (LTYPE::*timeout_handler)(ProtoTimer&);
+        };  // end class ProtoTimer::OLD_LISTENER_TYPE
+        
         Listener*                   listener;
         
         double                      interval;                
@@ -241,10 +310,16 @@ class ProtoTimerMgr
         virtual void DeactivateTimer(ProtoTimer& theTimer);
         
         /**
+        * @retval Returns "true" if there are any active timers
+        */
+        bool IsActive() const
+            {return (NULL != short_head);}
+        
+        /**
 		* @retval Returns any time remaining for the active short timer or -1
 		*/
         double GetTimeRemaining() const 
-            {return (short_head ? short_head->GetTimeRemaining() : -1.0);}
+            {return ((NULL != short_head) ? short_head->GetTimeRemaining() : -1.0);}
         
         /// Call this when the timer mgr's one-shot system timer fires
         void OnSystemTimeout();
@@ -263,7 +338,7 @@ class ProtoTimerMgr
     protected:
         /// System timer association/management definitions and routines
         virtual bool UpdateSystemTimer(ProtoTimer::Command command,
-                                       double              delay) {return true;}
+                                       double              delay) = 0;// {return true;}
             
     private:
         // Methods used internally 
@@ -328,7 +403,8 @@ class ProtoTimerMgr
         ProtoTimer*     long_head;                                 
         ProtoTimer*     long_tail;                                 
         ProtoTimer*     short_head;                                
-        ProtoTimer*     short_tail;  
+        ProtoTimer*     short_tail; 
+        ProtoTimer*     invoked_timer;  // timer whose listener is being invoked
 };  // end class ProtoTimerMgr
 
 #endif // _PROTO_TIMER

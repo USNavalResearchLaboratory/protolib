@@ -37,16 +37,14 @@ class BpfCap : public ProtoCap
             
         bool Open(const char* interfaceName = NULL);
         void Close();
-        bool Send(const char* buffer, unsigned int buflen);
-        bool Forward(char* buffer, unsigned int buflen);
+        bool Send(const char* buffer, unsigned int& numBytes);
         bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL);
     
     private:
         char*           bpf_buffer;
         unsigned int    bpf_buflen;
         unsigned int    bpf_captured;
-        unsigned int    bpf_index;
-        char            eth_addr[6];    
+        unsigned int    bpf_index;    
 };  // end class BpfCap
 
 
@@ -99,9 +97,7 @@ bool BpfCap::Open(const char* interfaceName)
     }
     
     ProtoAddress macAddr;
-    if (ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, macAddr))
-        memcpy(eth_addr, macAddr.GetRawHostAddress(), 6);   
-    else
+    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
         PLOG(PL_ERROR, "BpfCap::Open() warning: unable to get MAC address for interface \"%s\"\n", interfaceName);
     
     int ifIndex = ProtoSocket::GetInterfaceIndex(interfaceName);
@@ -142,6 +138,7 @@ bool BpfCap::Open(const char* interfaceName)
     unsigned int buflen;
     if ((ioctl(fd, BIOCGBLEN, (caddr_t)&buflen) < 0) || buflen < 32768)
 		buflen = 32768;	
+    
     for ( ; buflen != 0; buflen >>= 1) 
     {
         ioctl(fd, BIOCSBLEN, (caddr_t)&buflen);
@@ -156,7 +153,8 @@ bool BpfCap::Open(const char* interfaceName)
             close(fd);
             return false;
 		}
-	}
+    }
+    
     if (0 == buflen)
     {
         PLOG(PL_ERROR, "BpfCap::Open() unable to set bpf buffer\n");
@@ -262,10 +260,10 @@ void BpfCap::Close()
 
 bool BpfCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
 {
-    if (NULL != direction) *direction = UNSPECIFIED;
+    if (NULL != direction) *direction = INBOUND;
     if (bpf_index >= bpf_captured)
     {
-        while (1)
+        for (;;)
         {
             ssize_t result = read(descriptor, bpf_buffer, bpf_buflen);
             if (result < 0)
@@ -296,7 +294,8 @@ bool BpfCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     // Determine next packet (if applicable)
     if (bpf_captured > bpf_index)
     {
-        struct bpf_hdr* bpfHdr = (struct bpf_hdr*)(bpf_buffer + bpf_index);
+        // The (void*) cast here avoids alignment warnings from the compiler
+        struct bpf_hdr* bpfHdr = (struct bpf_hdr*)((void*)(bpf_buffer + bpf_index));
         if (numBytes >= bpfHdr->bh_caplen)
         {
             memcpy(buffer, bpf_buffer+bpf_index+bpfHdr->bh_hdrlen, bpfHdr->bh_caplen);
@@ -313,9 +312,9 @@ bool BpfCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     {
         numBytes = 0;
     }
-    if ((NULL != direction) && (0 == memcmp(eth_addr, buffer+6, 6)))
+    // TBD - make sure this doesn't screw up inbound multicast/broadcast traffic
+    if ((NULL != direction) && (0 == memcmp(if_addr.GetRawHostAddress(), buffer+6, 6)))
         *direction = OUTBOUND;
-            
     return true;
 }  // end BpfCap::Recv()
 
@@ -330,7 +329,7 @@ bool BpfCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
  * @return success or failure indicator 
  */
 
-bool BpfCap::Send(const char* buffer, unsigned int buflen)
+bool BpfCap::Send(const char* buffer, unsigned int& numBytes)
 {
     // Make sure packet is a type that is OK for us to send
     // (Some packets seem to cause a PF_PACKET socket trouble)
@@ -339,79 +338,33 @@ bool BpfCap::Send(const char* buffer, unsigned int buflen)
     type = ntohs(type);
     if (type <=  0x05dc) // assume it's 802.3 Length and ignore
     {
-            PLOG(PL_DEBUG, "BpfCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
-            return false;
+        PLOG(PL_ERROR, "BpfCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
+        return false;
     }
-    
-    unsigned int put = 0;
-    while (put < buflen)
+    for (;;)
     {
-        ssize_t result = write(descriptor, buffer, buflen);
-        if (result > 0)
+        ssize_t result = write(descriptor, buffer, numBytes);
+        if (result < 0)
         {
-            put += result;
+            switch (errno)
+            {
+                case EINTR:
+                    continue;  // try again
+                case EWOULDBLOCK:
+                    numBytes = 0;
+                case ENOBUFS:
+                    // because this doesn't block write()
+                default:
+                    PLOG(PL_ERROR, "BpfCap::Send() error: %s", GetErrorString());
+                    break;
+            }   
+            return false;              
         }
         else
         {
-            if (EINTR == errno)
-            {
-                continue;  // try again
-            }
-            else
-            {
-                PLOG(PL_ERROR, "BpfCap::Send() error: %s\n", GetErrorString());
-                return false;
-            }           
+            ASSERT(result == (ssize_t)numBytes);
+            break;
         }
     }
     return true;
 }  // end BpfCap::Send()
-/**
- * @brief Changes the mac addr to our own and writes packet to the bpf descriptor.
- *
- * 802.3 frames are not supported
- *
- * @param buffer
- * @param buflen
- *
- * @return success or failure indicator 
- */
-
-bool BpfCap::Forward(char* buffer, unsigned int buflen)
-{
-    // Make sure packet is a type that is OK for us to send
-    // (Some packets seem to cause a PF_PACKET socket trouble)
-    UINT16 type;
-    memcpy(&type, buffer+12, 2);
-    type = ntohs(type);
-    if (type <=  0x05dc) // assume it's 802.3 Length and ignore
-    {
-            PLOG(PL_DEBUG, "BpfCap::Forward() unsupported 802.3 frame (len = %04x)\n", type);
-            return false;
-    }
-    // Change the src MAC addr to our own
-    // (TBD) allow caller to specify dst MAC addr ???
-    memcpy(buffer+6, eth_addr, 6);
-    unsigned int put = 0;
-    while (put < buflen)
-    {
-        ssize_t result = write(descriptor, buffer, buflen);
-        if (result > 0)
-        {
-            put += result;
-        }
-        else
-        {
-            if (EINTR == errno)
-            {
-                continue;  // try again
-            }
-            else
-            {
-                PLOG(PL_ERROR, "BpfCap::Forward() error: %s\n", GetErrorString());
-                return false;
-            }           
-        }
-    }
-    return true;
-}  // end BpfCap::Forward()

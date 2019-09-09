@@ -25,8 +25,9 @@ class ProtoRouteMgr
             ZEBRA
         };     
             
+        
         static ProtoRouteMgr* Create(Type type = SYSTEM);
-        void Init();  //sets up initial state for saved table pointers.
+        
         virtual ~ProtoRouteMgr();
         
         virtual bool Open(const void* userData = NULL) = 0;
@@ -45,9 +46,23 @@ class ProtoRouteMgr
          * Any routes with differing parameters will be updated.
          * @param oldRouteTable The older set of routes which are to be diff'ed against.
          * @param newRouteTable The new/current routes which are to be added. 
+         * @param settedRouteTable If non-null pointer is supplied the list will be populated with routes which were added/updated
+         * @param deletedRouteTable If non-null pointer is supplied the list will be populated with routes which were deleted 
          * @return true upon success.
          */
-        bool UpdateRoutes(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable);
+        bool UpdateRoutes(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable, ProtoRouteTable* settedRouteTable = NULL, ProtoRouteTable* deletedRouteTable = NULL);
+        /**
+         * @brief Entries in the route table will be updated to reflect the new route table*.
+         * Routes which existe in the old route table but not the new one will be removed.
+         * Routes which exist in the new route table but not the old will be added.
+         * Any routes with differing parameters will be updated.
+         * @param oldRouteTable The older set of routes which are to be diff'ed against.
+         * @param newRouteTable The new/current routes which are to be added. 
+         * @param settedRouteTable The list will be populated with routes which should be added
+         * @param deletedRouteTable The list will be populated with routes which should be deleted
+         * @return true upon success.
+         */
+        bool GetDiff(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable, ProtoRouteTable& settedRouteTable, ProtoRouteTable& deletedRouteTable);
 	bool DeleteRoutes(ProtoRouteTable& routeTable);
         /**
          * 
@@ -62,7 +77,7 @@ class ProtoRouteMgr
          */
         bool SaveAllRoutes(ProtoAddress::Type addrType);
         /**
-         * @brife will attempt to restore both IPv4 and IPv6 route tables
+         * @brief will attempt to restore both IPv4 and IPv6 route tables
          * @return true upon success of restoring EITHER IPv4 or IPv6 route tables.
          */
         bool RestoreSavedRoutes();
@@ -72,6 +87,8 @@ class ProtoRouteMgr
          * @return will return true upon success.  Will return false if no route state was previously saved.
          */
         bool RestoreSavedRoutes(ProtoAddress::Type addrType);
+        
+        void ClearSavedRoutes();
         
         virtual bool GetRoute(const ProtoAddress& dst, 
                               unsigned int        prefixLen,
@@ -151,9 +168,13 @@ class ProtoRouteMgr
         virtual bool GetInterfaceAddressList(unsigned int         ifIndex,
                                              ProtoAddress::Type   addrType,
                                              ProtoAddressList&  addrList) = 0;
+        
+    protected:
+        ProtoRouteMgr();
+    
     private:
-        ProtoRouteTable* savedRoutesIPv6;
         ProtoRouteTable* savedRoutesIPv4;
+        ProtoRouteTable* savedRoutesIPv6;
 };  // end class ProtoRouteMgr
 
 

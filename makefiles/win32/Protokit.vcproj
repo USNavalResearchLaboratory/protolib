@@ -392,6 +392,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\src\common\protoQueue.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\src\common\protoRouteMgr.cpp"
 				>
 			</File>
@@ -585,6 +589,10 @@
 				>
 			</File>
 		</Filter>
+		<File
+			RelativePath=".\ClassDiagram1.cd"
+			>
+		</File>
 	</Files>
 	<Globals>
 	</Globals>

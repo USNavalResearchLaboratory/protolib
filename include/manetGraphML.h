@@ -46,8 +46,8 @@ class ManetGraphMLParser
         };
 
         bool Read(const char* path, NetGraph& graph);   // load graph from GraphML file
-        bool Write(NetGraph& graph, const char* path);  // make GraphML file from graph
-
+        bool Write(NetGraph& graph, const char* path, char* buffer=NULL, unsigned int* len_ptr = NULL);  // make GraphML file from graph
+        
         bool SetXMLName(const char* theName);
 
         bool SetAttributeKey(const char* theName,const char* theType, const char* theDomain = NULL, const char* oldIndex = NULL,const char* theDefault = NULL);
@@ -168,8 +168,8 @@ class ManetGraphMLTemplate : public ManetGraphMLParser, public NetGraphTemplate<
         bool Read(const char* path)   // load graph from GraphML file
             {return ManetGraphMLParser::Read(path, *this);}
             
-        bool Write(const char* path)  // make GraphML file from graph
-            {return ManetGraphMLParser::Write(*this, path);}
+        bool Write(const char* path, char* buffer = NULL, unsigned int* len=NULL)  // make GraphML file from graph
+            {return ManetGraphMLParser::Write(*this, path,buffer,len);}
         bool Connect(NetGraph::Interface& iface1,NetGraph::Interface& iface2,NetGraph::Cost& theCost,bool isDuplex)
             {return NetGraph::Connect(iface1,iface2,theCost,isDuplex);}
         virtual bool InsertInterface(NetGraph::Interface& theIface)

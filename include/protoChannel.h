@@ -34,23 +34,17 @@ class ProtoChannel
 #endif // if/else WIN32
         static const Handle INVALID_HANDLE;
         
-        // Derived classes should _end_ their own "Open()" method
+        // Derived classes MUST _end_ their own "Open()" method
         // with a call to this
         bool Open() 
         {
             StartInputNotification();  // enable input notifications by default
             return UpdateNotification();
         }
-        // Derived classes should _begin_ their own "Close()" method
+        // Derived classes MUST _begin_ their own "Close()" method
         // with a call to this
-        void Close() 
-        {
-            if (IsOpen())
-            {
-                StopInputNotification();
-                StopOutputNotification();    
-            }
-        }
+        void Close() ;
+        
         // (TBD) Should this be made virtual???
         bool IsOpen() const
         {
@@ -59,8 +53,7 @@ class ProtoChannel
                     (INVALID_HANDLE != output_handle));
 #else
             return (INVALID_HANDLE != descriptor);
-#endif // if/else WIN32/UNIX            
-            
+#endif // if/else WIN32/UNIX    
         }
         
         // Asynchronous I/O notification stuff
@@ -89,35 +82,16 @@ class ProtoChannel
         bool SetNotifier(ProtoChannel::Notifier* theNotifier);
         bool SetBlocking(bool status);
         
-        bool StartOutputNotification()
-        {
-            notify_flags |= (int)NOTIFY_OUTPUT;
-            bool result = UpdateNotification();
-#ifdef WIN32
-            output_ready = result;
-#endif // WIN32
-            return result;   
-        }
-        void StopOutputNotification()
-        {
-            notify_flags &= ~((int)NOTIFY_OUTPUT);
-            if (notifier) notifier->UpdateChannelNotification(*this, notify_flags);
-        }        
-        bool OutputNotification() {return (0 != (notify_flags & ((int)NOTIFY_OUTPUT)));}
-        
-        bool StartInputNotification()
-        {
-            notify_flags |= (int)NOTIFY_INPUT;
-            bool result = UpdateNotification();
-            return result;
-        }     
-        void StopInputNotification()
-        {
-            notify_flags &= ~((int)NOTIFY_INPUT);
-            if (notifier) notifier->UpdateChannelNotification(*this, notify_flags);
-        }   
-        bool InputNotification() {return (0 != (notify_flags & ((int)NOTIFY_INPUT)));}        
-                
+        bool StartInputNotification();
+        void StopInputNotification();
+        bool InputNotification() 
+            {return (0 != (notify_flags & ((int)NOTIFY_INPUT)));}        
+
+        bool StartOutputNotification();
+        void StopOutputNotification();
+         bool OutputNotification() 
+            {return (0 != (notify_flags & ((int)NOTIFY_OUTPUT)));}
+
         bool UpdateNotification();
         
         void OnNotify(ProtoChannel::Notification theNotification)
@@ -127,15 +101,14 @@ class ProtoChannel
         
         
 #ifdef WIN32
-        Handle GetInputHandle() {return input_handle;}
-        Handle GetOutputHandle() {return output_handle;}
+        Handle GetInputEventHandle() {return input_event_handle;}
+        Handle GetOutputEventHandle() {return output_event_handle;}
         bool IsOutputReady() {return output_ready;}
         bool IsInputReady() {return input_ready;}
         bool IsReady() {return (input_ready || output_ready);}
 #else
-        Handle GetInputHandle() {return descriptor;}
-        Handle GetOutputHandle() {return descriptor;}
-        Handle GetHandle() {return descriptor;}
+        Handle GetInputEventHandle() const {return descriptor;}
+        Handle GetOutputEventHandle() const {return descriptor;}
 #endif  // if/else WIN32/UNIX
         
         // NOTE: For VC++ 6.x Debug builds "/ZI" or "/Z7" compile options must NOT be specified
@@ -183,25 +156,44 @@ class ProtoChannel
                 listenerType* listener;
                 void(listenerType::*event_handler)(ProtoChannel&, Notification);
         };
+
+    protected: 
+#ifdef WIN32
+        // On WIN32, the input/output handles may be different than the 
+        // event handles (but they can be set the same by child classes
+        // if applicable.  (ProtoDispatcher uses the event handles while
+        // read/write calls use the regular handles
+		HANDLE                  input_handle;       // handle used for ReadFile
+        HANDLE                  input_event_handle; // event handle for notification
+        HANDLE                  output_handle;
+        HANDLE                  output_event_handle;
+        bool                    input_ready;        // input_ready helps us get level-triggered nofify behaviors
+        bool                    output_ready;       // output_ready helps us get level-triggered nofify behaviors
+		// The followng stuff facilitates using Win32 overlapped I/O in ProtoChannel subclasses
+		bool InitOverlappedIO();  // must be called before overlapped i/o routines can be used
+		bool StartOverlappedRead();  // use to "kickstart" overlapped I/O aync notifications
+		bool OverlappedRead(char* buffer, unsigned int& numBytes);
+		bool OverlappedWrite(const char* buffer, unsigned int& numBytes);
+		enum {OVERLAPPED_BUFFER_SIZE = 8192};
+		OVERLAPPED				overlapped_read;
+		char*					overlapped_read_buffer;
+		unsigned int			overlapped_read_count;
+		unsigned int			overlapped_read_index;
+		OVERLAPPED				overlapped_write;
+		char*					overlapped_write_buffer;
+		unsigned int			overlapped_write_count;
+		unsigned int			overlapped_write_index;
+#else
+        int                     descriptor;
+#endif // WIN32        
         
+    private:    
+#ifdef UNIX        
+        bool                    blocking_status; 
+#endif // UNIX
         Listener*               listener; 
         Notifier*               notifier;   
         int                     notify_flags; 
-        
-        bool                    blocking_status; 
-          
-    protected: 
-#ifdef WIN32
-		// ljt rework this!!
-		void SetInputHandle(Handle theInputHandle) 
-            {input_handle = theInputHandle;}
-        HANDLE                  input_handle;
-        bool                    input_ready;
-        HANDLE                  output_handle;
-        bool                    output_ready;
-#else
-        int                     descriptor;
-#endif // WIN32
         
 };  // end class ProtoChannel
 

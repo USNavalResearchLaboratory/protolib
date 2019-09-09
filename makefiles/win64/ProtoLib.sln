@@ -1,0 +1,90 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Express 2013 for Windows Desktop
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "protoExample", "protoExample.vcxproj", "{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pipeExample", "pipeExample\pipeExample.vcxproj", "{E03C84C7-19D6-4A2E-94AA-8D303E081475}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "threadExample", "threadExample\threadExample.vcxproj", "{0894EFEA-B785-48A3-AA9F-EB3082E08E07}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "netExample", "netExample\netExample.vcxproj", "{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Protokit", "Protokit.vcxproj", "{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug DLL|Win32 = Debug DLL|Win32
+		Debug DLL|x64 = Debug DLL|x64
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release DLL|Win32 = Release DLL|Win32
+		Release DLL|x64 = Release DLL|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Debug DLL|Win32.ActiveCfg = Debug|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Debug DLL|x64.ActiveCfg = Debug|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Debug|Win32.Build.0 = Debug|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Debug|x64.ActiveCfg = Debug|x64
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Debug|x64.Build.0 = Debug|x64
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Release DLL|Win32.ActiveCfg = Release|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Release DLL|x64.ActiveCfg = Release|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Release|Win32.ActiveCfg = Release|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Release|Win32.Build.0 = Release|Win32
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Release|x64.ActiveCfg = Release|x64
+		{FABA41A7-48C6-4D20-8DD5-5C7BACF26BC6}.Release|x64.Build.0 = Release|x64
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Debug DLL|Win32.ActiveCfg = Debug|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Debug DLL|x64.ActiveCfg = Debug|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Debug|x64.ActiveCfg = Debug|x64
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Debug|x64.Build.0 = Debug|x64
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Release DLL|Win32.ActiveCfg = Release|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Release DLL|x64.ActiveCfg = Release|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Release|Win32.ActiveCfg = Release|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Release|Win32.Build.0 = Release|Win32
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Release|x64.ActiveCfg = Release|x64
+		{E03C84C7-19D6-4A2E-94AA-8D303E081475}.Release|x64.Build.0 = Release|x64
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Debug DLL|Win32.ActiveCfg = Debug|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Debug DLL|x64.ActiveCfg = Debug|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Debug|Win32.Build.0 = Debug|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Debug|x64.ActiveCfg = Debug|x64
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Debug|x64.Build.0 = Debug|x64
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Release DLL|Win32.ActiveCfg = Release|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Release DLL|x64.ActiveCfg = Release|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Release|Win32.ActiveCfg = Release|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Release|Win32.Build.0 = Release|Win32
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Release|x64.ActiveCfg = Release|x64
+		{0894EFEA-B785-48A3-AA9F-EB3082E08E07}.Release|x64.Build.0 = Release|x64
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Debug DLL|Win32.ActiveCfg = Debug|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Debug DLL|x64.ActiveCfg = Debug|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Debug|Win32.Build.0 = Debug|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Debug|x64.ActiveCfg = Debug|x64
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Debug|x64.Build.0 = Debug|x64
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Release DLL|Win32.ActiveCfg = Release|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Release DLL|x64.ActiveCfg = Release|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Release|Win32.ActiveCfg = Release|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Release|Win32.Build.0 = Release|Win32
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Release|x64.ActiveCfg = Release|x64
+		{A3ABFCBE-2EB2-49DB-9811-1A67BB7A1137}.Release|x64.Build.0 = Release|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug DLL|Win32.ActiveCfg = Debug|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug DLL|x64.ActiveCfg = Debug|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug|Win32.Build.0 = Debug|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug|x64.ActiveCfg = Debug|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug|x64.Build.0 = Debug|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release DLL|Win32.ActiveCfg = Release|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release DLL|x64.ActiveCfg = Release|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release|Win32.ActiveCfg = Release|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release|Win32.Build.0 = Release|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release|x64.ActiveCfg = Release|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

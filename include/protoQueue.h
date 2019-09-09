@@ -33,13 +33,19 @@ class ProtoQueue
 
         virtual void Remove(Item& item) = 0;
         
+        // returns true if item is in other queue besides this one
+        bool IsInOtherQueue(Item& item)
+            {return item.IsInOtherQueue(*this);}
+        
+        bool Contains(Item& item) const
+            {return (NULL != item.GetContainer(*this));}
+        
         // Derived classes MUST implement the
         // Empty() method _and_ call it in
         // their destructor!
         virtual void Empty() = 0;
         
-    
-        /** 
+    /** 
          * @class Container
          * 
          * @brief The "ProtoQueue::Container is a base class
@@ -49,6 +55,9 @@ class ProtoQueue
          * the "Container" as needed to keep whatever state is 
          * needed for the given data structure type.
          */ 
+         
+         // TBD - can we make Container _privately_ derive from ProtoTree::Item
+         //       to avoid the need for the "Entry" member (i.e. save some space)
          
         class ContainerPool;
         
@@ -129,6 +138,17 @@ class ProtoQueue
             public:
                 virtual ~Item();
             
+                bool IsInQueue() const
+                    {return (!container_list.IsEmpty());}
+            
+                Container* GetContainer(const ProtoQueue& queue) const
+                {
+                    const ProtoQueue* ptr = &queue;
+                    ProtoQueue::Container::Entry* entry = 
+                        static_cast<ProtoQueue::Container::Entry*>(container_list.Find((const char*)&ptr, sizeof(ProtoQueue*) << 3));
+                    return ((NULL != entry) ? &entry->GetContainer() : NULL);
+                } 
+                
             protected:
                 Item();
             
@@ -142,13 +162,8 @@ class ProtoQueue
                 void Cleanup();
             
             private:
-                Container* GetContainer(const ProtoQueue& queue) const
-                {
-                    const ProtoQueue* ptr = &queue;
-                    ProtoQueue::Container::Entry* entry = 
-                        static_cast<ProtoQueue::Container::Entry*>(container_list.Find((const char*)&ptr, sizeof(ProtoQueue*) << 3));
-                    return ((NULL != entry) ? &entry->GetContainer() : NULL);
-                } 
+                bool IsInOtherQueue(const ProtoQueue& queue);
+            
                 void Reference(ProtoQueue::Container& container)
                     {container_list.Insert(container.AccessEntry());}
                 void Dereference(ProtoQueue::Container& container)
@@ -162,7 +177,7 @@ class ProtoQueue
                 ProtoTree       container_list;
             
         };  // end class ProtoQueue::Item
-
+        
     
         /**
          * @class ProtoQueue::ContainerPool
@@ -206,7 +221,6 @@ class ProtoQueue
 
             Container* GetContainer(const Item& item) const
                 {return item.GetContainer(*this);}
-
             
             Container* GetContainerFromPool()
                 {return ((NULL != container_pool) ? container_pool->Get() : NULL);}
@@ -264,18 +278,16 @@ class ProtoSimpleQueue : public ProtoQueue
         }
         Item* RemoveTail();
         
-        bool IsEmpty()
-        {
-            return (GetHead()) ? false : true;
-        } 
+        bool IsEmpty() const
+            {return (NULL != GetHead()) ? false : true;}
         
         void Empty();  // empties queue, but doesn't delete items
         
         void Destroy();  // empties queue, deleting items
         
         // TBD - add set operations
-        
-        /*const bool Union(ProtoSimpleQueue &unionQueue, const ProtoSimpleQueue &bQueue);
+        /*
+        const bool Union(ProtoSimpleQueue &unionQueue, const ProtoSimpleQueue &bQueue);
         const bool Intersection(ProtoSimpleQueue &intersectionQueue, const ProtoSimpleQueue &bQueue);
         const bool RelativeComplement(ProtoSimpleQueue &rcQueue, const ProtoSimpleQueue &bQueue);//(a - intersection of ab)
         const bool SymmetricDifference(ProtoSimpleQueue &rcQueue, const ProtoSimpleQueue &bQueue);//(union of relative complements)
@@ -315,24 +327,23 @@ class ProtoSimpleQueue : public ProtoQueue
                     Container* nextContainer = static_cast<Container*>(ProtoList::Iterator::PeekPrevItem());
                     return ((NULL != nextContainer) ? nextContainer->GetItem() : NULL);
                 }
-        };  // end class ProtoSimpleQueueTemplate::Iterator  
+        };  // end class ProtoSimpleQueue::Iterator  
         
         class Container : public ProtoQueue::Container, public ProtoList::Item
         {
            public:
                 Container();
                 ~Container();     
-        };  // end class ProtoSimpleQueueTemplate::Container
+        };  // end class ProtoSimpleQueue::Container
         
         class ContainerPool : public ProtoQueue::ContainerPool
         {
             public:
-                ContainerPool();
-                virtual ~ContainerPool();
-                
+                void Put(Container& theContainer)
+                    {ProtoQueue::ContainerPool::Put(theContainer);}
                 Container* Get()
                     {return static_cast<Container*>(ProtoQueue::ContainerPool::Get());}
-        };  // end class ProtoSimpleQueueTemplate::ContainerPool  
+        };  // end class ProtoSimpleQueue::ContainerPool  
         
     private:
         // TBD - do we want to make CreateContainer() virtual so derived classes can do more?
@@ -353,7 +364,7 @@ class ProtoSimpleQueueTemplate : public ProtoSimpleQueue
         ProtoSimpleQueueTemplate(bool usePool = false) 
             : ProtoSimpleQueue(usePool) {}
         ProtoSimpleQueueTemplate(ContainerPool* containerPool) 
-            : ProtoSimpleQueueTemplate(containerPool) {}
+            : ProtoSimpleQueue(containerPool) {}
         virtual ~ProtoSimpleQueueTemplate() {}
         
         ITEM_TYPE* GetHead() const
@@ -408,7 +419,6 @@ MyItem* nextItem = it.GetNextItem() ...
 
 */      
                
-                
 class ProtoIndexedQueue : public ProtoQueue
 {
     public:
@@ -467,6 +477,15 @@ class ProtoIndexedQueue : public ProtoQueue
                 unsigned int GetKeysize() const;
                 
         };  // end class ProtoIndexedQueue::Container  
+        
+        class ContainerPool : public ProtoQueue::ContainerPool
+        {
+            public:
+                void Put(Container& theContainer)
+                    {ProtoQueue::ContainerPool::Put(theContainer);}
+                Container* Get()
+                    {return static_cast<Container*>(ProtoQueue::ContainerPool::Get());}
+        };  // end class ProtoIndexedQueue::ContainerPool  
             
         class Iterator : public ProtoTree::Iterator
         {
@@ -474,8 +493,10 @@ class ProtoIndexedQueue : public ProtoQueue
                 Iterator(ProtoIndexedQueue& theQueue, bool reverse = false);
                 virtual ~Iterator();
                 
-                void Reset(bool reverse = false)
-                    {ProtoTree::Iterator::Reset(reverse);}
+                void Reset(bool reverse = false,
+                           const char*  prefix = NULL,
+                           unsigned int prefixSize = 0)
+                    {ProtoTree::Iterator::Reset(reverse, prefix, prefixSize);}
                 
                 Item* GetNextItem()
                 {
@@ -524,10 +545,11 @@ class ProtoIndexedQueueTemplate : public ProtoIndexedQueue
         virtual unsigned int GetKeysize(const Item& item) const = 0;
         
         // Insert the "item" into the tree (will fail if item with equivalent key already in tree)
-        bool Insert(ITEM_TYPE& item)
-            {return ProtoIndexedQueue::Insert(item);}
+        //bool Insert(ITEM_TYPE& item)
+        //    {return ProtoIndexedQueue::Insert(item);}
         
         // Remove the "item" from the tree
+	// LJT THIS HAD BEEN COMMENTED OUT
         void Remove(ITEM_TYPE& item)
             {return ProtoIndexedQueue::Remove(item);}
         
@@ -552,8 +574,10 @@ class ProtoIndexedQueueTemplate : public ProtoIndexedQueue
                  : ProtoIndexedQueue::Iterator(theQueue, reverse) {}
                 ~Iterator() {}
                 
-                void Reset(bool reverse = false)
-                    {ProtoIndexedQueue::Iterator::Reset(reverse);}
+                void Reset(bool         reverse = false,
+                           const char*  prefix = NULL,
+                           unsigned int prefixSize = 0)
+                    {ProtoIndexedQueue::Iterator::Reset(reverse, prefix, prefixSize);}
                 
                 ITEM_TYPE* GetNextItem()
                     {return static_cast<ITEM_TYPE*>(ProtoIndexedQueue::Iterator::GetNextItem());}
@@ -570,6 +594,9 @@ class ProtoIndexedQueueTemplate : public ProtoIndexedQueue
             : ProtoIndexedQueue(usePool) {}
         ProtoIndexedQueueTemplate(ContainerPool* containerPool)
             : ProtoIndexedQueue(containerPool) {}
+        
+    private:
+        using ProtoIndexedQueue::Remove;   // gets rid of hidden overloaded virtual function warning
            
 };  // end class ProtoIndexedQueueTemplate  
     
@@ -590,10 +617,10 @@ class MyQueue  public ProtoIndexedQueueTemplate<MyItem>
     // 2) MUST implement these required overrides to determine indexing (i.e. sorting)
     //    (Note different ProtoIndexedQueue variants can implement these
     //     differently to have different indexing / sorting behaviors)
-    const char* GetKey(Item& item)
-        {return static_cast<MyItem&>(item).GetKey();}
-    unsigned int GetKeysize(Item& item)
-        {return static_cast<MyItem&>(item).GetKeysize();}
+    const char* GetKey(const Item& item) const
+        {return static_cast<const MyItem&>(item).GetKey();}
+    unsigned int GetKeysize(const Item& item) const
+        {return static_cast<const MyItem&>(item).GetKeysize();}
 };
 
 MyQueue queue;
@@ -613,7 +640,7 @@ class ProtoSortedQueue : public ProtoQueue
     public:
         virtual ~ProtoSortedQueue();
     
-        // Insert the "item" into the tree (will fail if item with equivalent key already in tree)
+        // Insert the "item" into the tree (multiple items with same key is OK)
         bool Insert(Item& item);
         
         // Remove the "item" from the tree
@@ -622,11 +649,23 @@ class ProtoSortedQueue : public ProtoQueue
         bool IsEmpty() const
             {return item_tree.IsEmpty();}
         
-        // Find item with exact match to "key" and "keysize" (keysize is in bits)
+        // Find first item with exact match to "key" and "keysize" (keysize is in bits)
         Item* Find(const char* key, unsigned int keysize) const
         {
             Container* container = item_tree.Find(key, keysize);
             return ((NULL != container) ? container->GetItem() : NULL);
+        }
+        
+        Item* GetHead() const
+        {
+            Container* head = item_tree.GetHead();
+            return ((NULL != head) ? head->GetItem() : NULL);
+        }
+        
+        Item* GetTail() const
+        {
+            Container* tail = item_tree.GetTail();
+            return ((NULL != tail) ? tail->GetItem() : NULL);
         }
         
         void Empty();  // empties queue, but doesn't delete items
@@ -661,6 +700,15 @@ class ProtoSortedQueue : public ProtoQueue
                 
         };  // end class ProtoSortedQueue::Container  
         
+        class ContainerPool : public ProtoQueue::ContainerPool
+        {
+            public:
+                void Put(Container& theContainer)
+                    {ProtoQueue::ContainerPool::Put(theContainer);}
+                Container* Get()
+                    {return static_cast<Container*>(ProtoQueue::ContainerPool::Get());}
+        };  // end class ProtoSortedQueue::ContainerPool  
+        
         class Iterator : public ProtoSortedTree::Iterator
         {
             public:
@@ -674,6 +722,12 @@ class ProtoSortedQueue : public ProtoQueue
                            const char*  keyMin = NULL, 
                            unsigned int keysize = 0)
                     {ProtoSortedTree::Iterator::Reset(reverse, keyMin, keysize);}
+                
+                void SetCursor(ProtoSortedQueue& theQueue, ProtoQueue::Item& theItem)
+                {
+                    Container* container = static_cast<ProtoSortedQueue::Container*>(theItem.GetContainer(theQueue));
+                    ProtoSortedTree::Iterator::SetCursor(container);
+                }
                 
                 Item* GetNextItem()
                 {
@@ -735,11 +789,16 @@ class ProtoSortedQueueTemplate : public ProtoSortedQueue
         
         // Remove the "item" from the tree
         void Remove(ITEM_TYPE& item)
-            {ProtoSortedQueue::Remove(item);}
+            {ProtoSortedQueue::Remove(static_cast<Item&>(item));}
         
-        // Find item with exact match to "key" and "keysize" (keysize is in bits)
+        // Find firat item with exact match to "key" and "keysize" (keysize is in bits)
         ITEM_TYPE* Find(const char* key, unsigned int keysize) const
             {return static_cast<ITEM_TYPE*>(ProtoSortedQueue::Find(key, keysize));}
+        
+        ITEM_TYPE* GetHead() const
+            {return static_cast<ITEM_TYPE*>(ProtoSortedQueue::GetHead());}
+        ITEM_TYPE* GetTail() const
+            {return static_cast<ITEM_TYPE*>(ProtoSortedQueue::GetTail());}
         
         class Iterator : public ProtoSortedQueue::Iterator
         {
@@ -767,6 +826,9 @@ class ProtoSortedQueueTemplate : public ProtoSortedQueue
             : ProtoSortedQueue(usePool) {}
         ProtoSortedQueueTemplate(ContainerPool* containerPool)
             : ProtoSortedQueue(containerPool) {}
-           
+    
+    private:
+        using ProtoSortedQueue::Remove;   // gets rid of hidden overloaded virtual function warning   
+        
 };  // end class ProtoSortedQueueTemplate          
 #endif // _PROTO_QUEUE

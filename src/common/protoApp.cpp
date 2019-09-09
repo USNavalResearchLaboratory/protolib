@@ -318,6 +318,11 @@ int ProtoMain(int argc, char* argv[], bool pauseForUser)
 #endif // if/else _WIN32_WCE
     }
     //TRACE("ProtoMain() exiting with code %d...\n", exitCode);
+    
+#ifdef USE_PROTO_CHECK
+    ProtoCheckLogAllocations(stderr);  // TBD - output to proto debug log?
+#endif  // USE_PROTO_CHECK     
+    
     return exitCode;  // exitCode contains "signum" causing exit
 }  // end ProtoMain();
 

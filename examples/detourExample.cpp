@@ -254,13 +254,13 @@ void DetourExample::DetourEventHandler(ProtoChannel&               theChannel,
         unsigned int numBytes = 8192; 
         if (detour->Recv((char*)buffer, numBytes))
         {
-            //TRACE("detour recv'd packet ...\n");
+            TRACE("detour recv'd packet ...\n");
             if (0 != numBytes)
             {
                 allow = true;
                 if (allow)
                 {
-                    //TRACE("detour allowing packet len:%u\n", numBytes);
+		  TRACE("detour allowing packet len:%u\n", numBytes);
                     
                     ProtoPktIP ipPkt(buffer, numBytes);
                     ipPkt.InitFromBuffer(numBytes);
@@ -290,8 +290,8 @@ void DetourExample::DetourEventHandler(ProtoChannel&               theChannel,
                     {
                         if (udpPkt.ChecksumIsValid(ipPkt))
                         {
-                            //TRACE("   UDP with valid checksum %04x (computed: %04x)\n", 
-                            //        udpPkt.GetChecksum(), udpPkt.ComputeChecksum(ipPkt)); 
+                            TRACE("   UDP with valid checksum %04x (computed: %04x)\n", 
+                                    udpPkt.GetChecksum(), udpPkt.ComputeChecksum(ipPkt)); 
                         }
                         else
                         {
@@ -306,11 +306,11 @@ void DetourExample::DetourEventHandler(ProtoChannel&               theChannel,
                             ProtoPktIPv4 ipv4Pkt(ipPkt);
                             TRACE("   proto:%d\n", ipv4Pkt.GetProtocol());
                             
+                            /*
                             char base64Buffer[8192];
-                            
                             unsigned int length = ProtoBase64::Encode((char*)buffer, numBytes, base64Buffer, 8192);
-                            //TRACE("packet =\n %s\n", base64Buffer);
-                            
+                            TRACE("packet(base64)=\n %s\n", base64Buffer);
+                            */
                             for (unsigned int i = 0; i < numBytes; i++)
                             {
                                 if (0 == i)

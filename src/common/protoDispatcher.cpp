@@ -29,12 +29,12 @@
  * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  ********************************************************************/
- /**
+
+/**
 * @file protoDispatcher.cpp
 * 
 * @brief This class provides a core around which Unix and Win32 applications using Protolib can be implemented 
 */
-
 
 #include "protoDispatcher.h"
 
@@ -62,11 +62,10 @@ const ProtoDispatcher::Descriptor ProtoDispatcher::INVALID_DESCRIPTOR = -1;
 
 
 ProtoDispatcher::Stream::Stream(Type theType)
- :  type(theType), flags(0), 
+ :  type(theType), flags(0) 
 #ifdef WIN32
-    index(-1), outdex(-1),
+    ,index(-1), outdex(-1)
 #endif // WIN32
-    prev(NULL), next(NULL)
 {
 }
 
@@ -80,35 +79,73 @@ ProtoDispatcher::ChannelStream::ChannelStream(ProtoChannel& theChannel)
 {
 }
 
+ProtoDispatcher::TimerStream::TimerStream()
+ : Stream(TIMER), descriptor(INVALID_DESCRIPTOR)
+{
+}
+
+ProtoDispatcher::TimerStream::~TimerStream()
+{
+#ifdef UNIX
+    if (INVALID_DESCRIPTOR != descriptor)
+    {
+        close(descriptor);    
+        descriptor = INVALID_DESCRIPTOR;
+    }
+#endif // UNIX
+}
+
+ProtoDispatcher::EventStream::EventStream()
+ : Stream(EVENT), descriptor(INVALID_DESCRIPTOR)
+{
+}
+
+ProtoDispatcher::EventStream::~EventStream()
+{
+#ifdef UNIX
+    if (INVALID_DESCRIPTOR != descriptor)
+    {
+        close(descriptor);    
+        descriptor = INVALID_DESCRIPTOR;
+    }
+#endif // UNIX
+}
+
 ProtoDispatcher::GenericStream::GenericStream(Descriptor theDescriptor)
- : Stream(GENERIC), descriptor(theDescriptor), callback(NULL), client_data(NULL)
+ : Stream(GENERIC), myself(this), descriptor(theDescriptor), callback(NULL), client_data(NULL)
 {
 }
             
 ProtoDispatcher::ProtoDispatcher()
-    : socket_stream_pool(NULL), socket_stream_list(NULL),
-      channel_stream_pool(NULL), channel_stream_list(NULL),
-      generic_stream_pool(NULL), generic_stream_list(NULL),  
-      run(false), wait_status(-1), exit_code(0), timer_delay(-1), precise_timing(false),
-      thread_id((ThreadId)(NULL)), priority_boost(false), thread_started(false),
+    : run(false), wait_status(-1), exit_code(0), timer_delay(-1), precise_timing(false),
+      thread_id((ThreadId)(NULL)), priority_boost(false), thread_started(false), thread_signaled(false),
       thread_master((ThreadId)(NULL)), suspend_count(0), signal_count(0),
       controller(NULL), 
       prompt_set(false), prompt_callback(NULL), prompt_client_data(NULL)
-#ifdef USE_TIMERFD
-      ,timer_fd(8)
-#endif
-#ifdef WIN32
-      ,stream_array_size(DEFAULT_ITEM_ARRAY_SIZE), 
-      stream_handles_array(stream_handles_default), 
-      stream_ptrs_array(stream_ptrs_default), 
-      stream_count(0), msg_window(NULL),
-      break_event(NULL), break_event_stream(NULL),
-      socket_io_pending(false)
-{
+#if defined(WIN32)
+      ,stream_handles_array(NULL), stream_ptrs_array(NULL),
+      stream_array_size(0), stream_count(0), msg_window(NULL),
+	  actual_thread_handle(NULL)
+    //#ifdef USE_TIMERFD - from merge not sure we need?
+    //  ,timer_fd(8)
+    //#endif
+
+#ifdef USE_WAITABLE_TIMER
+	  ,timer_active(false)
+#endif // USE_WAITABLE_TIMER
+#elif defined(USE_SELECT)
+      // no special initialization required
+#elif defined(USE_KQUEUE)
+      ,kevent_queue(-1)
+#elif defined(USE_EPOLL)
+      ,epoll_fd(-1)
 #else
+#error "undefined async i/o mechanism"  // to make sure we implement something
+#endif  // !WIN32 && !USE_SELECT && !USE_KQUEUE
 {    
+#if !defined(USE_EVENTFD) && (defined(USE_SELECT) || defined(USE_EPOLL))
     break_pipe_fd[0] = break_pipe_fd[1] = INVALID_DESCRIPTOR;
-#endif // if/else WIN32/UNIX
+#endif // UNIX
 }
 
 ProtoDispatcher::~ProtoDispatcher()
@@ -119,42 +156,41 @@ ProtoDispatcher::~ProtoDispatcher()
 void ProtoDispatcher::Destroy()
 {
     Stop();
-    while (channel_stream_list) 
+    
+    // Iterate through stream_table and disable notification
+    // (TBD - could we skip this and just call stream_list.Destroy()?)
+    Stream* stream;
+    StreamTable::Iterator iterator(stream_table);
+    while (NULL != (stream = iterator.GetNextItem()))
     {
-        channel_stream_list->GetChannel().SetNotifier(NULL);
-        //ReleaseSocketStream(socket_stream_list);
+        switch (stream->GetType())
+        {
+            case Stream::CHANNEL:
+                static_cast<ChannelStream*>(stream)->GetChannel().SetNotifier(NULL);
+                break;
+            case Stream::SOCKET:
+                static_cast<SocketStream*>(stream)->GetSocket().SetNotifier(NULL);
+                break;
+            case Stream::GENERIC:
+                ReleaseGenericStream(static_cast<GenericStream&>(*stream));
+                break;
+            case Stream::TIMER:
+            case Stream::EVENT:
+                // No timer or event streams are put in the stream_table (yet)
+                break;
+        }
     }
-    while (channel_stream_pool)
-    {
-        ChannelStream* channelStream = channel_stream_pool;
-        channel_stream_pool = (ChannelStream*)channelStream->GetNext();
-        delete channelStream;   
-    }   
-    while (socket_stream_list) 
-    {
-        socket_stream_list->GetSocket().SetNotifier(NULL);
-    }
-    while (socket_stream_pool)
-    {
-        SocketStream* socketStream = socket_stream_pool;
-        socket_stream_pool = (SocketStream*)socketStream->GetNext();
-        delete socketStream;   
-    }   
-    while (generic_stream_list) RemoveGenericStream(generic_stream_list);    
-    while (generic_stream_pool)
-    {
-        GenericStream* stream = (GenericStream*)generic_stream_pool;
-        generic_stream_pool = (GenericStream*)stream->GetNext();
-        delete stream;   
-    }
+    ASSERT(stream_table.IsEmpty());
+    channel_stream_pool.Destroy();
+    socket_stream_pool.Destroy();
+    generic_stream_pool.Destroy();
+    
 #ifdef WIN32
-    if (DEFAULT_ITEM_ARRAY_SIZE != stream_array_size)
+    if (NULL != stream_handles_array)
     {
         delete[] stream_handles_array;
-        stream_handles_array = stream_handles_default;
         delete[] stream_ptrs_array;
-        stream_ptrs_array = stream_ptrs_default;
-        stream_array_size = DEFAULT_ITEM_ARRAY_SIZE;
+        stream_array_size = 0;
     }
     stream_count = 0;
     Win32Cleanup();
@@ -165,79 +201,115 @@ bool ProtoDispatcher::UpdateChannelNotification(ProtoChannel&   theChannel,
                                                 int             notifyFlags)
 {
     SignalThread();
+
     // Find stream in our "wait" list, or add it to the list ...
     ChannelStream* channelStream = GetChannelStream(theChannel);
-    if (channelStream)
+
+    if (NULL != channelStream)
     {
-        if (0 != notifyFlags)
+        
+        if ((channelStream->GetFlags() == notifyFlags) && (0 != notifyFlags))
         {
-#ifdef WIN32
-            // Deal with input aspect
-            int index = channelStream->GetIndex();
-            if (index < 0)
-            {
-                // Not yet installed for input notification, so install if needed
-                if (0 != (notifyFlags & ProtoChannel::NOTIFY_INPUT))
-                {
-                    if ((index = Win32AddStream(*channelStream, theChannel.GetInputHandle())) < 0)
-                    {
-                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error adding input stream\n");
-                        if (channelStream->GetOutdex() < 0)
-                            ReleaseChannelStream(channelStream);
-                        UnsignalThread();
-                        return false;
-                    }
-                    channelStream->SetIndex(index);
-                }
-            }
-            else if (0 == (notifyFlags & ProtoChannel::NOTIFY_INPUT))
-            {
-                Win32RemoveStream(index);
-                channelStream->SetIndex(-1);
-            }
-            else
-            {
-                // Update handle in case it has changed
-                stream_handles_array[index] = theChannel.GetInputHandle();
-            }
-            // Deal with output aspect
-            int outdex = channelStream->GetOutdex();
-            if (outdex < 0)
-            {
-                if (0 != (notifyFlags & ProtoChannel::NOTIFY_OUTPUT))
-                {
-                    if ((outdex = Win32AddStream(*channelStream, theChannel.GetOutputHandle())) < 0)
-                    {
-                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error adding output stream\n");
-                        if (channelStream->GetIndex() < 0)
-                            ReleaseChannelStream(channelStream);
-                        UnsignalThread();
-                        return false;
-                    }
-                    channelStream->SetOutdex(outdex);
-                }
-            }
-            else if (0 == (notifyFlags & ProtoChannel::NOTIFY_OUTPUT))
-            {
-                Win32RemoveStream(outdex);
-                channelStream->SetOutdex(-1);
-            }
-            else
-            {
-                // Update handle in case it has changed
-                stream_handles_array[outdex] = theChannel.GetOutputHandle();
-            }
-#endif // WIN32
-            channelStream->SetFlags(notifyFlags); 
-            UnsignalThread();    
-            return true;  
+            // no notification change needed, but maybe input/output ready change below
+            ASSERT(0 != notifyFlags); 
         }
-        else
+        else if (0 != notifyFlags)
         {
-            ReleaseChannelStream(channelStream);  // remove channel from our "wait" list
+            // Determine what notification changes are needed for this stream and make them
+            if (0 != (notifyFlags & ProtoChannel::NOTIFY_INPUT)) 
+            {
+                if (!channelStream->IsInput())  // Enable system-specific  input notification 
+                {
+                    if (!UpdateStreamNotification(*channelStream, ENABLE_INPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error: unable to ENABLE_INPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            }   
+            else
+            {
+                if (channelStream->IsInput())  // Disable system-specific  input notification 
+                {
+                    if (!UpdateStreamNotification(*channelStream, DISABLE_INPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error: unable to DISABLE_INPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            }         
+            if (0 != (notifyFlags & ProtoChannel::NOTIFY_OUTPUT)) 
+            {
+                if (!channelStream->IsOutput())  // Enable system-specific  input notification 
+                {
+                    if (!UpdateStreamNotification(*channelStream, ENABLE_OUTPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error: unable to ENABLE_OUTPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            }   
+            else
+            {
+                if (channelStream->IsOutput())  // Disable system-specific  output notification 
+                {
+                    if (!UpdateStreamNotification(*channelStream, DISABLE_OUTPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error: unable to DISABLE_OUTPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            }  
+            // TBD - support exception notification ???   
+        }
+        else  // 0 == notifyFlags
+        {
+            if (channelStream->HasFlags())
+            {
+                if (!UpdateStreamNotification(*channelStream, DISABLE_ALL))
+                {
+                    PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error: unable to DISABLE_ALL!\n");
+                    UnsignalThread();
+                    return false;
+                }
+            }
+            ReleaseChannelStream(*channelStream);
             UnsignalThread();
             return true;
+        }  // end if/else 0 != notifyFlags
+        
+#ifdef WIN32
+        // Add or remove channelStream from "ready_stream_list" as appropriate
+        // Note input/output readiness may have changed even if notification did not
+        if ((theChannel.IsInputReady() && channelStream->IsInput()) ||
+            (theChannel.IsOutputReady() && channelStream->IsOutput()))   
+        {
+            // Make sure our "ready" socket is in the "ready_stream_list"
+            if (!ready_stream_list.Contains(*channelStream))
+            {
+                if (!ready_stream_list.Append(*channelStream))
+                {
+                    ReleaseChannelStream(*channelStream);
+                    PLOG(PL_ERROR, "ProtoDispatcher::UpdateChannelNotification() error: unable to append ready channel!\n");
+                    UnsignalThread();
+                    return false;
+
+                }
+            }
         }
+        else if (ready_stream_list.Contains(*channelStream))
+        {
+            // Remove from "ready_socket_list"
+            ready_stream_list.Remove(*channelStream);
+        }
+#endif // WIN32
+        
+        UnsignalThread();
+        return true;
     }
     else
     {
@@ -245,119 +317,161 @@ bool ProtoDispatcher::UpdateChannelNotification(ProtoChannel&   theChannel,
                 GetErrorString());
         UnsignalThread();
         return false;   
-    }   
+    }  
 }  // end ProtoDispatcher::UpdateChannelNotification()
-
 
 bool ProtoDispatcher::UpdateSocketNotification(ProtoSocket& theSocket, 
                                                int          notifyFlags)
 {
-	SignalThread();
+	SignalThread();  // TBD - check result?
     SocketStream* socketStream = GetSocketStream(theSocket);
-    if (socketStream)
+    if (NULL != socketStream)
     {
-        if (0 != notifyFlags)
+        if (socketStream->GetFlags() == notifyFlags)
+        {
+            // nothing to do up here, notification unchanged  
+            // (but for WIN32, socket "readiness" may have changed)
+            // _unless_ it's a new (closed) socket or idle tcp socket
+            // TBD - should prob not be calling "UpdateSocketNotification()" in this case
+            if (0 == notifyFlags)  
+            {
+                
+                ReleaseSocketStream(*socketStream);
+                UnsignalThread();
+                return true;
+            }
+        }
+        else if (0 != notifyFlags)
         {
 #ifdef WIN32
-            if (ProtoSocket::LOCAL != theSocket.GetDomain())
+            // WIN32 Sockets are handled differently
+			int index = socketStream->GetIndex();
+            if (index < 0)
             {
-                int index = socketStream->GetIndex();
-                if (index < 0)
+                if ((index = Win32AddStream(*socketStream, theSocket.GetInputEventHandle())) < 0)
                 {
-                    if ((index = Win32AddStream(*socketStream, theSocket.GetInputEventHandle())) < 0)
-                    {
-                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error adding handle\n");
-                        ReleaseSocketStream(socketStream);
-                        UnsignalThread();
-                        return false;     
-                    }
-                    socketStream->SetIndex(index);
-                }
-                long eventMask = 0;
-                if (0 != (notifyFlags & ProtoSocket::NOTIFY_INPUT))
-                    eventMask |= (FD_READ | FD_ACCEPT | FD_CLOSE);
-                if (0 != (notifyFlags & ProtoSocket::NOTIFY_OUTPUT))
-                    eventMask |= (FD_WRITE | FD_CONNECT | FD_CLOSE);
-                if (0 != (notifyFlags & ProtoSocket::NOTIFY_EXCEPTION))
-                    eventMask |= FD_ADDRESS_LIST_CHANGE;
-                // Note for IPv4/IPv6 sockets, the "input event handle" is used for both input & output
-                if (0 != WSAEventSelect(theSocket.GetHandle(), theSocket.GetInputEventHandle(), eventMask))
-                {
-                    ReleaseSocketStream(socketStream);
-                    PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() WSAEventSelect(0x%x) error: %s\n",
-                            eventMask, ProtoSocket::GetErrorString());
+                    PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error adding handle\n");
+                    ReleaseSocketStream(*socketStream);
                     UnsignalThread();
-                    return false;
+                    return false;     
                 }
+                socketStream->SetIndex(index);
             }
+            long eventMask = 0;
+            if (0 != (notifyFlags & ProtoSocket::NOTIFY_INPUT))
+                eventMask |= (FD_READ | FD_ACCEPT | FD_CLOSE);
+            if (0 != (notifyFlags & ProtoSocket::NOTIFY_OUTPUT))
+			{
+				eventMask |= (FD_WRITE | FD_CONNECT | FD_CLOSE);
+			}
+            if (0 != (notifyFlags & ProtoSocket::NOTIFY_EXCEPTION))
+                eventMask |= FD_ADDRESS_LIST_CHANGE;
+            // Note for IPv4/IPv6 sockets, the "input event handle" is used for both input & output
+            if (0 != WSAEventSelect(theSocket.GetHandle(), theSocket.GetInputEventHandle(), eventMask))
+            {
+                ReleaseSocketStream(*socketStream);
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() WSAEventSelect(0x%x) error: %s\n",
+                        eventMask, ProtoSocket::GetErrorString());
+                UnsignalThread();
+                return false;
+            }
+			socketStream->SetFlags(notifyFlags);
+#else // UNIX    
+            // Determine what notification changes are needed for this stream and make them
+            if (0 != (notifyFlags & ProtoSocket::NOTIFY_INPUT)) 
+            {
+                if (!socketStream->IsInput())  // Enable system-specific  input notification 
+                {
+                    if (!UpdateStreamNotification(*socketStream, ENABLE_INPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error: unable to ENABLE_INPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            }   
             else
             {
-                // For "LOCAL" Win32 ProtoSockets (i.e. ProtoPipes) we manage separate input/output
-                // event handles for asynchronous I/O
-                int index = socketStream->GetIndex();
-                if (index < 0)
+                if (socketStream->IsInput())  // Disable system-specific  input notification 
                 {
-                    if (0 != (notifyFlags & ProtoSocket::NOTIFY_INPUT))
+                    if (!UpdateStreamNotification(*socketStream, DISABLE_INPUT))
                     {
-                        if ((index = Win32AddStream(*socketStream, theSocket.GetInputEventHandle())) < 0)
-                        {
-                            PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error adding input stream\n");
-                            ReleaseSocketStream(socketStream);
-                            UnsignalThread();
-                            return false;
-                        }
-                        socketStream->SetIndex(index);
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error: unable to DISABLE_INPUT!\n");
+                        UnsignalThread();
+                        return false;
                     }
                 }
-                else if (0 == (notifyFlags & ProtoSocket::NOTIFY_INPUT))
-                {
-                    Win32RemoveStream(index);
-                    socketStream->SetIndex(-1);
-                }
-                else
-                {
-                    stream_handles_array[index] = theSocket.GetInputEventHandle();
-                }
-                int outdex = socketStream->GetOutdex();
-                if (outdex < 0)
-                {
-                    if (0 != (notifyFlags & ProtoSocket::NOTIFY_OUTPUT))
-                    {
-                        if ((outdex = Win32AddStream(*socketStream, theSocket.GetOutputEventHandle())) < 0)
-                        {
-                            PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error adding output stream\n");
-                            ReleaseSocketStream(socketStream);
-                            UnsignalThread();
-                            return false;
-                        }
-                        socketStream->SetOutdex(index);
-                    }
-                }
-                else if (0 == (notifyFlags & ProtoSocket::NOTIFY_OUTPUT))
-                {
-                    Win32RemoveStream(outdex);
-                    socketStream->SetOutdex(-1);
-                }
-                else
-                {
-                    stream_handles_array[outdex] = theSocket.GetOutputEventHandle();
-                }
-            }
-#endif // WIN32
-            socketStream->SetFlags(notifyFlags);
-        }
-        else
-        {
-#ifdef WIN32
-            if (socketStream->HasFlags() && ProtoSocket::LOCAL != theSocket.GetDomain())
+            }         
+            if (0 != (notifyFlags & ProtoSocket::NOTIFY_OUTPUT)) 
             {
-                if (0 != WSAEventSelect(theSocket.GetHandle(), theSocket.GetInputEventHandle(), 0))
-                     PLOG(PL_WARN, "ProtoDispatcher::UpdateSocketNotification() WSAEventSelect(0) warning: %s\n",
-                              ProtoSocket::GetErrorString());
-            }
-#endif // WIN32  
-            ReleaseSocketStream(socketStream);
+                if (!socketStream->IsOutput())  // Enable system-specific  input notification 
+                {
+                    if (!UpdateStreamNotification(*socketStream, ENABLE_OUTPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error: unable to ENABLE_OUTPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            }   
+            else
+            {
+                if (socketStream->IsOutput())  // Disable system-specific  output notification 
+                {
+                    if (!UpdateStreamNotification(*socketStream, DISABLE_OUTPUT))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error: unable to DISABLE_OUTPUT!\n");
+                        UnsignalThread();
+                        return false;
+                    }
+                }
+            } 
+            // TBD - support exception notification ??? 
+#endif  // if/else WIN32/UNIX
         }
+        else  // 0 == notifyFlags
+        {
+            ASSERT(socketStream->HasFlags());
+#ifdef WIN32
+            if (0 != WSAEventSelect(theSocket.GetHandle(), theSocket.GetInputEventHandle(), 0))
+                 PLOG(PL_WARN, "ProtoDispatcher::UpdateSocketNotification() WSAEventSelect(0) warning: %s\n",
+                          ProtoSocket::GetErrorString());
+#endif // WIN32  
+            if (!UpdateStreamNotification(*socketStream, DISABLE_ALL))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error: unable to DISABLE_ALL!\n");
+                UnsignalThread();
+                return false;
+            }
+            ReleaseSocketStream(*socketStream);
+            UnsignalThread();
+            return true;
+        }  // end if/else 0 != notifyFlags
+#ifdef WIN32
+        // Add or remove socketStream from "ready_socket_list" as appropriate
+        // Note input/output readiness may have changed even if notification did not
+        if ((theSocket.IsInputReady() && socketStream->IsInput()) ||
+            (theSocket.IsOutputReady() && socketStream->IsOutput()))   
+        {
+            // Make sure our "ready" socket is in the "ready_stream_list"
+            if (!ready_stream_list.Contains(*socketStream))
+            {
+				if (!ready_stream_list.Append(*socketStream))
+                {
+                    ReleaseSocketStream(*socketStream);
+                    PLOG(PL_ERROR, "ProtoDispatcher::UpdateSocketNotification() error: unable to append ready socket!\n");
+                    UnsignalThread();
+                    return false;
+
+                }
+            }
+        }
+        else if (ready_stream_list.Contains(*socketStream))
+        {
+			// Remove from "ready_stream_list"
+            ready_stream_list.Remove(*socketStream);
+        }
+#endif // WIN32
         UnsignalThread();
         return true;
     }
@@ -373,21 +487,15 @@ bool ProtoDispatcher::UpdateSocketNotification(ProtoSocket& theSocket,
 ProtoDispatcher::SocketStream* ProtoDispatcher::GetSocketStream(ProtoSocket& theSocket)
 {
     // First, search our list of active sockets
-    SocketStream* socketStream = socket_stream_list;
-    while (NULL != socketStream)
-    {
-        if (&theSocket == &socketStream->GetSocket())
-            break;
-        else
-            socketStream = (SocketStream*)socketStream->GetNext();  
-    }
+    ProtoSocket* socketPtr = &theSocket;
+    SocketStream* socketStream = 
+        static_cast<SocketStream*>(stream_table.Find((const char*)&socketPtr, sizeof(ProtoSocket*) << 3));
     if (NULL == socketStream)
     {
         // Get one from the pool or create a new one
-        socketStream = socket_stream_pool;
+        socketStream = socket_stream_pool.Get();
         if (NULL != socketStream)
         {
-            socket_stream_pool = (SocketStream*)socketStream->GetNext();
             socketStream->ClearFlags();
             socketStream->SetSocket(theSocket);
         }
@@ -399,215 +507,230 @@ ProtoDispatcher::SocketStream* ProtoDispatcher::GetSocketStream(ProtoSocket& the
                 return NULL;   
             }
         }
-        // Prepend to "active" socket stream list
-        socketStream->SetPrev(NULL);
-        socketStream->SetNext(socket_stream_list);
-        if (socket_stream_list) 
-            socket_stream_list->SetPrev(socketStream);
-        socket_stream_list = socketStream;
+        // Insert into "active" stream list
+        stream_table.Insert(*socketStream);
     }
     return socketStream;
 }  // end ProtoDispatcher::GetSocketStream()
 
-void ProtoDispatcher::ReleaseSocketStream(SocketStream* socketStream)
-{
-    socketStream->ClearFlags();
-    SocketStream* prevStream = (SocketStream*)socketStream->GetPrev();
-    SocketStream* nextStream = (SocketStream*)socketStream->GetNext();
-    if (prevStream)
-        prevStream->SetNext(nextStream);
-    else
-        socket_stream_list = nextStream;
-    if (nextStream) nextStream->SetPrev(prevStream);
-    socketStream->SetNext(socket_stream_pool);
-    socket_stream_pool = socketStream;
+void ProtoDispatcher::ReleaseSocketStream(SocketStream& socketStream)
+{  
 #ifdef WIN32
-    if (socketStream->GetIndex() >= 0)
+    if (ready_stream_list.Contains(socketStream)) 
+        ready_stream_list.Remove(socketStream);
+    // Makes sure the channel input/output event HANDLE is removed from array
+    // (This removes it from list passed to MsgWaitForMultipleObjectsEx() call)
+    if (socketStream.GetIndex() >= 0)
     {
-        Win32RemoveStream(socketStream->GetIndex());
-        socketStream->SetIndex(-1);
+        Win32RemoveStream(socketStream.GetIndex());
+        socketStream.SetIndex(-1);
     }
-    if (socketStream->GetOutdex() >= 0)
+    if (socketStream.GetOutdex() >= 0)
     {
-        Win32RemoveStream(socketStream->GetOutdex());
-        socketStream->SetOutdex(-1);
+        Win32RemoveStream(socketStream.GetOutdex());
+        socketStream.SetOutdex(-1);
     }
 #endif // WIN32
+    if (socketStream.HasFlags())
+    {
+        if (!UpdateStreamNotification(socketStream, DISABLE_ALL))
+            PLOG(PL_ERROR, "ProtoDispatcher::ReleaseSocketStream() error: UpdateStreamNotification(DISABLE_ALL) failure!\n");
+        socketStream.ClearFlags();
+    }
+    stream_table.Remove(socketStream);
+	socket_stream_pool.Put(socketStream);
 }  // end ProtoDispatcher::ReleaseSocketStream()
 
 
 ProtoDispatcher::ChannelStream* ProtoDispatcher::GetChannelStream(ProtoChannel& theChannel)
 {
+
     // First, search our list of active channels
-    ChannelStream* channelStream = channel_stream_list;
-    while (channelStream)
-    {
-        if (&theChannel == &channelStream->GetChannel())
-            break;
-        else
-            channelStream = (ChannelStream*)channelStream->GetNext();  
-    }
-    if (!channelStream)
+    ProtoChannel* channelPtr = &theChannel;
+    ChannelStream* channelStream = 
+        static_cast<ChannelStream*>(stream_table.Find((const char*)&channelPtr, sizeof(ProtoChannel*) << 3));
+
+    if (NULL == channelStream)
     {
         // Get one from the pool or create a new one
-        channelStream = channel_stream_pool;
-        if (channelStream)
+        channelStream = channel_stream_pool.Get();
+        if (NULL != channelStream)
         {
-            channel_stream_pool = (ChannelStream*)channelStream->GetNext();
             channelStream->ClearFlags();
             channelStream->SetChannel(theChannel);
         }
         else
         {
-            if (!(channelStream = new ChannelStream(theChannel)))
+            if (NULL == (channelStream = new ChannelStream(theChannel)))
             {
                 PLOG(PL_ERROR, "ProtoDispatcher::GetChannelStream() new ChannelStream error: %s\n", GetErrorString());
                 return NULL;   
             }
         }
-        // Prepend to "active" channel stream list
-        channelStream->SetPrev(NULL);
-        channelStream->SetNext(channel_stream_list);
-        if (channel_stream_list) 
-            channel_stream_list->SetPrev(channelStream);
-        channel_stream_list = channelStream;
+        // Insert into "active"  stream table
+        stream_table.Insert(*channelStream);
     }
     return channelStream;
 }  // end ProtoDispatcher::GetChannelStream()
 
-void ProtoDispatcher::ReleaseChannelStream(ChannelStream* channelStream)
+void ProtoDispatcher::ReleaseChannelStream(ChannelStream& channelStream)
 {
-    channelStream->ClearFlags();
-    ChannelStream* prevStream = (ChannelStream*)channelStream->GetPrev();
-    ChannelStream* nextStream = (ChannelStream*)channelStream->GetNext();
-    if (prevStream)
-        prevStream->SetNext(nextStream);
-    else
-        channel_stream_list = nextStream;
-    if (nextStream) nextStream->SetPrev(prevStream);
-    channelStream->SetNext(channel_stream_pool);
-    channel_stream_pool = channelStream;
 #ifdef WIN32
-    if (channelStream->GetIndex() >= 0)
+    if (ready_stream_list.Contains(channelStream)) 
+        ready_stream_list.Remove(channelStream);
+    // Makes sure the channel input/output event HANDLE is removed from array
+    // (This removes it from list passed to MsgWaitForMultipleObjectsEx() call)
+    if (channelStream.GetIndex() >= 0)
     {
-        Win32RemoveStream(channelStream->GetIndex());
-        channelStream->SetIndex(-1);
+        Win32RemoveStream(channelStream.GetIndex());
+        channelStream.SetIndex(-1);
     }
-    if (channelStream->GetOutdex() >= 0)
+    if (channelStream.GetOutdex() >= 0)
     {
-        Win32RemoveStream(channelStream->GetOutdex());
-        channelStream->SetOutdex(-1);
+        Win32RemoveStream(channelStream.GetOutdex());
+        channelStream.SetOutdex(-1);
     }
 #endif // WIN32
+    stream_table.Remove(channelStream);
+    channelStream.ClearFlags();
+    channel_stream_pool.Put(channelStream);
 }  // end ProtoDispatcher::ReleaseChannelStream()
 
-bool ProtoDispatcher::InstallGenericStream(ProtoDispatcher::Descriptor descriptor, 
-                                           Callback*                   callback, 
-                                           const void*                 userData,
-                                           Stream::Flag                flag)
-{   
+bool ProtoDispatcher::InstallGenericInput(ProtoDispatcher::Descriptor descriptor, 
+                                          ProtoDispatcher::Callback*  callback, 
+                                          const void*                 clientData)
+{
+    SignalThread();
     GenericStream* stream = GetGenericStream(descriptor);
-    if (stream)
+    if (NULL != stream)
     {
-#ifdef WIN32
-        int index = stream->GetIndex();
-        if (index < 0)
+        if (!stream->IsInput())  // Enable system-specific input notification 
         {
-            if ((index = Win32AddStream(*stream, descriptor)) < 0)
+            if (!UpdateStreamNotification(*stream, ENABLE_INPUT))
             {
-                PLOG(PL_ERROR, "ProtoDispatcher::InstallGenericStream() error adding stream\n");
-                ReleaseGenericStream(stream);
-                return false;   
-            }   
-            stream->SetIndex(index);
+                PLOG(PL_ERROR, "ProtoDispatcher::InstallGenericInput() error: unable to ENABLE_INPUT!\n");
+                if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+                UnsignalThread();
+                return false;
+            }
         }
-        else
-        {
-            stream_handles_array[index] = descriptor;
-        }
-#endif // WIN32
-        stream->SetCallback(callback, userData);
-        stream->SetFlag(flag);
-        return true;
     }
-    else
+    stream->SetFlag(Stream::INPUT);
+    stream->SetCallback(callback, clientData);
+    UnsignalThread();
+    return true;;  
+}  // end ProtoDispatcher::InstallGenericInput()
+
+void ProtoDispatcher::RemoveGenericInput(Descriptor descriptor)
+{
+    SignalThread();
+    GenericStream* stream = FindGenericStream(descriptor);
+    if (NULL != stream)
     {
-        PLOG(PL_ERROR, "ProtoDispatcher::InstallGenericStream() error getting GenericStream\n");
-        return false;
+        if (stream->IsInput())
+        {
+            if (!UpdateStreamNotification(*stream, DISABLE_INPUT))
+                PLOG(PL_ERROR, "ProtoDispatcher::RemoveGenericInput() error: UpdateStreamNotification(DISABLE_INPUT) failure!\n"); 
+            stream->UnsetFlag(Stream::INPUT);
+        }
+        if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+    }   
+    UnsignalThread(); 
+}  // end ProtoDispatcher::RemoveGenericInput()
+
+bool ProtoDispatcher::InstallGenericOutput(ProtoDispatcher::Descriptor descriptor, 
+                                           ProtoDispatcher::Callback*  callback, 
+                                           const void*                 clientData)
+{
+    SignalThread();
+    GenericStream* stream = FindGenericStream(descriptor);
+    if (NULL != stream)
+    {
+        if (!stream->IsOutput())  // Enable system-specific output notification 
+        {
+            if (!UpdateStreamNotification(*stream, ENABLE_OUTPUT))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::InstallGenericOutput() error: unable to ENABLE_OUTPUT!\n");
+                if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+                UnsignalThread();
+                return false;
+            }
+        }
     }
-}  // end ProtoDispatcher::InstallGenericStream()
+    stream->SetFlag(Stream::OUTPUT);
+    stream->SetCallback(callback, clientData);
+    UnsignalThread();
+    return true;  
+}  // end ProtoDispatcher::InstallGenericOutput()
+
+void ProtoDispatcher::RemoveGenericOutput(Descriptor descriptor)
+{
+    SignalThread();
+    GenericStream* stream = FindGenericStream(descriptor);
+    if (NULL != stream)
+    {
+        if (stream->IsOutput())
+        {
+            if (!UpdateStreamNotification(*stream, DISABLE_OUTPUT))
+                PLOG(PL_ERROR, "ProtoDispatcher::RemoveGenericOutput() error: UpdateStreamNotification(DISABLE_OUTPUT) failure!\n"); 
+            stream->UnsetFlag(Stream::OUTPUT);
+        }
+        if (!stream->HasFlags()) ReleaseGenericStream(*stream);
+    }   
+    UnsignalThread();
+}  // end ProtoDispatcher::RemoveGenericOutput()
 
 ProtoDispatcher::GenericStream* ProtoDispatcher::GetGenericStream(Descriptor descriptor)
 {
     // First, search our list of active generic streams
-    GenericStream* stream = generic_stream_list;
-    while (stream)
-    {
-        if (descriptor == stream->GetDescriptor())
-            break;
-        else
-            stream = (GenericStream*)stream->GetNext();   
-    }
-    if (!stream)
+    GenericStream* genericStream = generic_stream_table.FindByDescriptor(descriptor);
+    if (NULL == genericStream)
     {
         // Get one from the pool or create a new one
-        stream = generic_stream_pool;
-        if (stream)
+        genericStream = generic_stream_pool.Get();
+        if (NULL != genericStream)
         {
-            generic_stream_pool = (GenericStream*)stream->GetNext();
-            stream->ClearFlags();
-            stream->SetDescriptor(descriptor);
+            genericStream->ClearFlags();
+            genericStream->SetDescriptor(descriptor);
         }
         else
         {
-            if (!(stream = new GenericStream(descriptor)))
+            if (NULL == (genericStream = new GenericStream(descriptor)))
             {
                 PLOG(PL_ERROR, "ProtoDispatcher::GetGenericStream() new GenericStream error: %s\n", GetErrorString());
                 return NULL;   
             }
         }
-        // Add to "active" generic stream list
-        stream->SetPrev(NULL);
-        stream->SetNext(generic_stream_list);
-        if (generic_stream_list) generic_stream_list->SetPrev(stream);
-        generic_stream_list = stream;
+        // Insert into "active"  stream table
+        stream_table.Insert(*genericStream);
+        // Insert into generic_stream_table (indexed by descriptor)
+        if (!generic_stream_table.Insert(*genericStream))
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::GetGenericStream() error: unable to add to table: %s\n", GetErrorString());
+            ReleaseGenericStream(*genericStream);
+            return NULL;
+        }
     }
-    return stream;
+    return genericStream;
 }  // end ProtoDispatcher::GetGenericStream()
 
-ProtoDispatcher::GenericStream* ProtoDispatcher::FindGenericStream(Descriptor descriptor) const
+void ProtoDispatcher::ReleaseGenericStream(GenericStream& genericStream)
 {
-    GenericStream* next = generic_stream_list;
-    while (next)
+    // First, disable system-specific notifications for stream
+    if (genericStream.IsInput()) 
     {
-        if (next->GetDescriptor() == descriptor)
-            return next;
-        else
-            next = (GenericStream*)next->GetNext();
+        if (!UpdateStreamNotification(genericStream, DISABLE_INPUT))
+                PLOG(PL_ERROR, "ProtoDispatcher::ReleaseGenericStream() error: UpdateStreamNotification(DISABLE_INPUT) failure!\n"); 
     }
-    return NULL;
-}  // end ProtoDispatcher::FindGenericStream()
-
-void ProtoDispatcher::ReleaseGenericStream(GenericStream* stream)
-{
-    stream->ClearFlags();
-    // Move from "active" generic stream list to generic stream "pool"
-    GenericStream* prevStream = (GenericStream*)stream->GetPrev();
-    GenericStream* nextStream = (GenericStream*)stream->GetNext();
-    if (prevStream)
-        prevStream->SetNext(nextStream);
-    else
-        generic_stream_list = nextStream;
-    if (nextStream) nextStream->SetPrev(prevStream);
-    stream->SetNext(generic_stream_pool);
-    generic_stream_pool = stream;
-#ifdef WIN32
-    if (stream->GetIndex() >= 0)
+    if (genericStream.IsOutput()) 
     {
-        Win32RemoveStream(stream->GetIndex());
-        stream->SetIndex(-1);
+        if (!UpdateStreamNotification(genericStream, DISABLE_OUTPUT))
+                PLOG(PL_ERROR, "ProtoDispatcher::ReleaseGenericStream() error: UpdateStreamNotification(DISABLE_OUTPUT) failure!\n"); 
     }
-#endif // WIN32
+    genericStream.ClearFlags();
+    stream_table.Remove(genericStream);
+    generic_stream_table.Remove(genericStream);
+    generic_stream_pool.Put(genericStream);
 }  // end ProtoDispatcher::ReleaseGenericStream()
 
 
@@ -642,14 +765,19 @@ bool ProtoDispatcher::BoostPriority()
     struct sched_param schp;
     memset(&schp, 0, sizeof(schp));
     schp.sched_priority =  sched_get_priority_max(SCHED_FIFO);
-    if (sched_setscheduler(0, SCHED_FIFO, &schp))
+    if (0 != sched_setscheduler(0, SCHED_FIFO, &schp))
     {
         schp.sched_priority =  sched_get_priority_max(SCHED_OTHER);
-        if (sched_setscheduler(0, SCHED_OTHER, &schp))
+        if (0 != sched_setscheduler(0, SCHED_OTHER, &schp))
         {
             PLOG(PL_ERROR, "ProtoDispatcher::BoostPriority() error: sched_setscheduler() error: %s\n", GetErrorString());
             return false;
         }   
+        else
+        {
+            PLOG(PL_WARN, "ProtoDispatcher::BoostPriority() warning: unable to set SCHED_FIFO boost, SCHED_OTHER set.\n"
+                          "                  (run as root or sudofor full SCHED_FIFO priority boost)\n");
+        }
     }
 #else
     // (TBD) Do something differently if "pthread sched param"?
@@ -673,14 +801,36 @@ int ProtoDispatcher::Run(bool oneShot)
     wait_status = -1;  
     if (priority_boost) BoostPriority();
     
-#ifdef USE_TIMERFD
-    timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
-    if (timer_fd < 0)
+#ifdef USE_TIMERFD  // LINUX-only
+    int tfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (tfd < 0)
     {
         PLOG(PL_ERROR, "ProtoDispatcher::Run() timerfd_create() error: %s\n", GetErrorString());
         return -1;  // TBD - is there a more specific exitCode we should use instead???
     }
-#endif // USE_TIMERFD    
+#ifdef USE_EPOLL   
+    if (!EpollChange(tfd, EPOLLIN, EPOLL_CTL_ADD, &timer_stream))
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::Run() error EpolLChange(timer_fd) failed!\n");
+        close(tfd);
+        return -1;  // TBD - is there a more specific exitCode we should use instead???
+    }
+#endif    
+    timer_stream.SetDescriptor(tfd);
+#endif // USE_TIMERFD  
+
+#ifdef USE_WAITABLE_TIMER  // WIN32-only
+	HANDLE wtm = CreateWaitableTimer(NULL, TRUE, NULL);
+	if (INVALID_HANDLE_VALUE == wtm)
+	{
+		PLOG(PL_ERROR, "ProtoDispatcher::Run() CreateWaitableTimer() error: %s\n", GetErrorString());
+		return -1;
+	}
+	timer_stream.SetDescriptor(wtm);
+	timer_stream.SetIndex(-1);  // the timer_stream will added when activated
+	timer_active = false;
+#endif // USE_WAITABLE_TIMER   
+      
     // TBD - should we keep "run" true while in the do loop so "IsRunning()" 
     //       can be interpreted properly (or just deprecate IsRunning() ???
     run = oneShot ? false : true;
@@ -690,13 +840,23 @@ int ProtoDispatcher::Run(bool oneShot)
         {
             // Here we "latch" the next timeout _before_
             // we open the suspend window to be safe
-            timer_delay =  ProtoTimerMgr::GetTimeRemaining();
+            timer_delay = ProtoTimerMgr::GetTimeRemaining();
             if (IsThreaded())
             {
                 Lock(signal_mutex);
                 Unlock(suspend_mutex);
                 Wait();
                 Unlock(signal_mutex);
+
+                // <-- this is where a dispatcher rests after SignalThread() call
+                
+                // what if another thread calls SignalThread() at this exact moment?
+                // and gets the suspend and signal mutexes ...
+                // a) WasSignaled() will be false on Unix (break_pipe fd not set)
+                // b) then Dispatch() will be called ... but only valid descriptors, etc are checked
+                //    as Wait resets/builds the FD_SET
+                // c) next time WasSignaled() will be true, but no big deal
+                
                 Lock(suspend_mutex);
                 
                 if (prompt_set)
@@ -706,14 +866,19 @@ int ProtoDispatcher::Run(bool oneShot)
                          prompt_callback(prompt_client_data);
                     prompt_set = false;
                 }
-                
-                if (WasSignaled())
+                /*
+                if (WasSignaled())  // true" if was signaled via ProtoDispatcher::SignalThread()
                 {
+                    // We "continue" here in case i/o or timeout status 
+                    // was changed during signal suspend
                     continue;
                 }
-                else if (controller)
+                else */
+                if (NULL != controller)
                 {
                     // Relinquish to controller thread
+                    // Note this assumes the controller thread is the _only_
+                    // other thread vying for control of this dispatcher thread
                     Unlock(suspend_mutex);
                     controller->DoDispatch();
                     Lock(suspend_mutex);   
@@ -737,10 +902,25 @@ int ProtoDispatcher::Run(bool oneShot)
         }
     }  while (run);
 #ifdef USE_TIMERFD
-    close(timer_fd);
-    timer_fd = INVALID_DESCRIPTOR;
+    // Note if USE_EPOLL, closing the "timer_fd" automatically deletes the event
+    close(timer_stream.GetDescriptor());
+    timer_stream.SetDescriptor(INVALID_DESCRIPTOR);
 #endif // USE_TIMERFD
-    return exit_code;
+#ifdef USE_WAITABLE_TIMER
+	if (timer_active)
+	{
+		CancelWaitableTimer(timer_stream.GetDescriptor());
+		timer_active = false;
+	}
+	if (timer_stream.GetIndex() >= 0)
+	{
+		Win32RemoveStream(timer_stream.GetIndex());
+		timer_stream.SetIndex(-1);
+	}
+	CloseHandle(timer_stream.GetDescriptor());
+	timer_stream.SetDescriptor(INVALID_DESCRIPTOR);
+#endif // USE_WAITABLE_TIMER
+	return exit_code;
 }  // end ProtoDispatcher::Run()
 
 void ProtoDispatcher::Stop(int exitCode)
@@ -824,14 +1004,54 @@ bool ProtoDispatcher::StartThread(bool                         priorityBoost,
     return true;
 }  // end ProtoDispatcher::StartThread()
 
+
+/**
+ * This wakes up the thread, makes a call to the installed prompt_callback
+ * and the thread goes back to waiting.  This is the way to have a ProtoDispatcher
+ * thread perform some "work" function.  It currently does not have a means to
+ * signal when the work is completed other than this call (due to SuspendThread() call)
+ * will block until the work is done.  TBD - provide a method to access/monitor/wait on
+ * the "suspend_mutex" that will be unlocked when the thread goes back to "sleep"
+ */
+bool ProtoDispatcher::PromptThread()
+{
+    // Make sure thread is asleep before setting prompt
+    if (SuspendThread())
+    {
+        prompt_set = true;  // indicate prompt_callback should be called
+        // Now explicitly wake the thread that the prompt is set
+        if (!SignalThread()) 
+        {
+            ResumeThread();
+            return false; // suspend/signal thread
+        }
+        UnsignalThread();
+        ResumeThread();
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}  // end ProtoDispatcher::PromptThread()
+
+
 /**
  * This brings the thread to a suspended state _outside_ 
- * of _its_ ProtoDispatcher::Wait() state
+ * of _its_ ProtoDispatcher::Wait() state.  A call to
+ * SignalThread() followed by UnsignalThread() will make
+ * the thread break from waiting and dispatch timers, pending I/O, etc
+ *  The caller can safely do things in between signal/unsignal like
+ *  add/remove descriptors, etc and this is used by internal ProtoDispatcher
+ * code to do this safely for threaded dispatcher instances.  Any call to SignalThread()
+ * MUST be mirrored with an UnsignalThread() call and it is OK for it to be re-entrantly
+ * called (that is what the "signal_count" is for).
  */
 bool ProtoDispatcher::SignalThread()
 {
     SuspendThread();
-    if (IsThreaded() && !IsMyself())
+    ThreadId currentThread = GetCurrentThread();    
+    if (IsThreaded() && (currentThread != thread_id))
     {
         if (signal_count > 0)
         {
@@ -840,39 +1060,19 @@ bool ProtoDispatcher::SignalThread()
         }
         else
         {
-#ifdef WIN32
-            if (0 == SetEvent(break_event))
+            if (!SetBreak())
             {
-                PLOG(PL_ERROR, "ProtoDispatcher::SignalThread() SetEvent(break_event) error\n");
+                PLOG(PL_ERROR, "ProtoDispatcher::SignalThread() error: SetBreak() failed!\n");
                 ResumeThread();
                 return false;
-            }
-#else
-            while (1)
-            {
-                char byte;
-                int result = write(break_pipe_fd[1], &byte, 1);
-                if (1 == result)
-                {
-                    break;
-                }
-                else if (0 == result)
-                {
-                    PLOG(PL_ERROR, "ProtoDispatcher::SignalThread() warning: write() returned zero\n");
-                    continue;
-                }
-                else
-                {
-                    if (EINTR == errno) continue;  // (TBD) also for EAGAIN ???
-                    PLOG(PL_ERROR, "ProtoDispatcher::SignalThread() write() error: %s\n",
-                            GetErrorString());
-                    ResumeThread();
-                    return false;
-                }
-            }
-#endif // if/else WIN32/UNIX
+            } 
+            // Attempting to lock the "signal_mutex" blocks until the thread
+            // is "outside" its "ProtoDispatcher::Wait()" stage
+            // (thread can't reenter wait stage until "UnsignalThread()" is 
+            //  called and the "signal_mutex" is unlocked)
             Lock(signal_mutex);
             signal_count = 1;
+            thread_signaled = true;
         }
     }
     return true;   
@@ -880,7 +1080,8 @@ bool ProtoDispatcher::SignalThread()
 
 void ProtoDispatcher::UnsignalThread()
 {
-    if (IsThreaded() && !IsMyself() && (thread_master == GetCurrentThread()))
+    ThreadId currentThread = GetCurrentThread();
+    if (IsThreaded() && (currentThread != thread_id) && (thread_master == currentThread))
     {
         ASSERT(0 != signal_count);
         signal_count--;
@@ -890,11 +1091,21 @@ void ProtoDispatcher::UnsignalThread()
     ResumeThread(); 
 }  // end ProtoDispatcher::UnsignalThread()
 
+/*
+ * This makes sure the thread is asleep (i.e. waiting) or stopped
+ * until ResumeThread() is called (unlocks the suspend_mutex so
+ * thread can proceed)  Note that SuspendThread() will block
+ * until the thread gets to the waiting state.  Any call to SuspendThread()
+ * MUST be mirrored with an ResumeThread() call and it is OK for it to 
+ * be re-entrantly called (that is what the "suspend_count" is for).
+ * 
+ */
 bool ProtoDispatcher::SuspendThread()
 {
-    if (IsThreaded() && !IsMyself())
+    ThreadId currentThread = GetCurrentThread();
+    if (IsThreaded() && (currentThread != thread_id))
     {
-        if (GetCurrentThread() == thread_master)
+        if (currentThread == thread_master)
         {
             suspend_count++;
             return true;   
@@ -903,7 +1114,7 @@ bool ProtoDispatcher::SuspendThread()
         // (TBD) use a spin_count to limit iterations as safeguard
         while (!thread_started);
         Lock(suspend_mutex);  // TBD - check result of "Lock()" 
-        thread_master = GetCurrentThread();
+        thread_master = currentThread;
         suspend_count = 1;
     }
     return true;
@@ -911,9 +1122,10 @@ bool ProtoDispatcher::SuspendThread()
 
 void ProtoDispatcher::ResumeThread()
 {
-    if (IsThreaded() && !IsMyself())
+    ThreadId currentThread = GetCurrentThread();
+    if (IsThreaded() && (currentThread != thread_id))
     {
-        if (GetCurrentThread() == thread_master)
+        if (currentThread == thread_master)
         {
             if (suspend_count > 1)
             {
@@ -955,16 +1167,338 @@ void ProtoDispatcher::DestroyThread()
 // Unix-specific methods and implementation
 #ifdef UNIX
 
-/** 
- * (TBD) It would be nice to use something like SIGUSR or something to break
- * out of the select() (or pselect()) call in ProtoDispatcher::Wait()
- * instead of a pipe() ... but to support threaded operation and do
- * it right, we would need something like pthread-sigsetjmp() to deal
- * with the "edge-triggered" nature issue of signals, and/or we
- * might wish to consider kevent() for systems like BSD, etc
- */
+
+
+#if defined(USE_SELECT)
+// USE_SELECT implementation of ProtoDispatcher::UpdateStreamNotification()
+bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationCommand cmd)
+{
+    // ProtoDispatcher currently builds its "struct fdsets" by iterating through
+    // the "stream_list" each time ProtoDispatcher::Wait() is called
+    // TBD - we should use FD_CLR here to make sure our current input_set and
+    // output_set are in the proper state for when a stream's notification
+    // is disabled (e.g. due to deletion or other)
+    
+    switch (cmd)
+    {
+        case ENABLE_INPUT:
+            stream.SetFlag(Stream::INPUT);
+            break;
+        case DISABLE_INPUT:
+            stream.UnsetFlag(Stream::INPUT);
+            if (INVALID_DESCRIPTOR != stream.GetInputHandle())
+                FD_CLR(stream.GetInputHandle(), &input_set);
+            break;
+        case ENABLE_OUTPUT:
+            stream.SetFlag(Stream::OUTPUT);
+            break;
+        case DISABLE_OUTPUT:
+            stream.UnsetFlag(Stream::OUTPUT);
+            if (INVALID_DESCRIPTOR != stream.GetOutputHandle())
+                FD_CLR(stream.GetOutputHandle(), &output_set);
+            break;
+        case DISABLE_ALL:
+            stream.ClearFlags();
+            if (INVALID_DESCRIPTOR != stream.GetInputHandle())
+                FD_CLR(stream.GetInputHandle(), &input_set);
+            if (INVALID_DESCRIPTOR != stream.GetOutputHandle())
+                FD_CLR(stream.GetOutputHandle(), &output_set);
+            break;
+    }
+    
+    return true;  
+}  // end ProtoDispatcher::UpdateStreamNotification() [USE_SELECT]
+
+#elif defined(USE_KQUEUE)
+
+// USE_KQUEUE implementation of ProtoDispatcher::UpdateStreamNotification()
+bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationCommand cmd)
+{
+    switch (cmd)
+    {
+        case ENABLE_INPUT:
+            if (!KeventChange(stream.GetInputHandle(), EVFILT_READ, EV_ADD | EV_ENABLE, &stream))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(ENABLE_INPUT) KeventChange() error!\n");
+                return false;
+            }
+            stream.SetFlag(Stream::INPUT);
+            break;  
+                
+        case DISABLE_INPUT:
+            if (!KeventChange(stream.GetInputHandle(), EVFILT_READ, EV_DISABLE, &stream))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) KeventChange() error!\n");
+                return false;
+            }
+            stream.UnsetFlag(Stream::INPUT);
+            break;
+            
+        case ENABLE_OUTPUT:
+            if (!KeventChange(stream.GetOutputHandle(), EVFILT_WRITE, EV_ADD | EV_ENABLE, &stream))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) KeventChange() error!\n");
+                return false;
+            }
+            stream.SetFlag(Stream::OUTPUT);
+            break;
+            
+        case DISABLE_OUTPUT:
+            if (!KeventChange(stream.GetOutputHandle(), EVFILT_WRITE, EV_DISABLE, &stream))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) KeventChange() error!\n");
+                return false;
+            }
+            stream.UnsetFlag(Stream::OUTPUT);
+            break;
+            
+        case DISABLE_ALL:
+            if (stream.IsInput() && !KeventChange(stream.GetInputHandle(), EVFILT_READ, EV_DISABLE, &stream))
+            {
+                PLOG(PL_WARN, "ProtoDispatcher::UpdateStreamNotification(DISABLE_ALL) KeventChange(EVFILT_READ) error!\n");
+                //return false;
+            }
+            if (stream.IsOutput() && !KeventChange(stream.GetOutputHandle(), EVFILT_WRITE, EV_DISABLE, &stream))
+            {
+                PLOG(PL_WARN, "ProtoDispatcher::UpdateStreamNotification(DISABLE_ALL) KeventChange(EVFILT_WRITE) error!\n");
+                //return false;
+            }
+            stream.ClearFlags();
+            // TBD - support exceptions ??
+            break;
+    }
+    return true;
+}  // end ProtoDispatcher::UpdateStreamNotification() [USE_KQUEUE]
+
+bool ProtoDispatcher::KeventChange(uintptr_t ident, int16_t filter, uint16_t flags, void* udata)
+{
+    // This simply sets a new "struct kevent" in our "kevent_array"
+    if (-1 == kevent_queue)
+    {
+        if (-1 == (kevent_queue = kqueue()))
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::KeventChange() kqueue() error: %s\n", GetErrorString());
+            return false;
+        }
+    }
+    struct kevent kvt;
+    kvt.ident = ident;
+    kvt.filter = filter;
+    kvt.flags = flags;
+    kvt.fflags = 0;
+    kvt.data = 0;
+    kvt.udata = udata;
+    
+    // On EV_DISABLE, go through the current kevent_array and make 
+    // sure this "ident::filter" is nullified to avoid undesired
+    // notification attempts (i.e. disable current, pending notification, if any)
+    //  (i.e., set the "filter" to harmless EVFILT_USER value)
+    if (0 != (flags & EV_DISABLE))
+    {
+        struct kevent* kep = kevent_array;
+        for (int i = 0; i < wait_status; i++)
+        {
+            if ((ident == kep->ident) && (filter == kep->filter))
+            {
+                kep->ident = 0;  // different than our "break" EVFILT_USER if ever needed
+                kep->filter = EVFILT_USER;
+            }
+        }
+    }
+    // This call enables/disables future notifications as desired
+    if (kevent(kevent_queue, &kvt, 1, NULL, 0, NULL) < 0)
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::KeventChange() kevent() error: %s\n", GetErrorString());
+        return false;
+    }
+    else
+    {
+        return true;
+    }
+}  // end ProtoDispatcher::KeventChange()
+
+#elif USE_EPOLL
+
+// USE_EPOLL implementation of ProtoDispatcher::UpdateStreamNotification()
+bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationCommand cmd)
+{
+    // Note for ProtoChannel it is possible that separate input and output descriptors may
+    // be used and so the code below checks for this condition
+    switch (cmd)
+    {
+        case ENABLE_INPUT:
+            ASSERT(!stream.IsInput());
+            if (!((stream.IsOutput() && (stream.GetInputHandle() == stream.GetOutputHandle())) ?
+                    EpollChange(stream.GetInputHandle(), EPOLLIN | EPOLLOUT, EPOLL_CTL_MOD, &stream) :
+                    EpollChange(stream.GetInputHandle(), EPOLLIN, EPOLL_CTL_ADD, &stream)))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(ENABLE_INPUT) error: EpollChange() failed!\n");
+                return false;
+            }
+            stream.SetFlag(Stream::INPUT);
+            break;
+                
+        case DISABLE_INPUT:
+            ASSERT(stream.IsInput());
+            if (!((stream.IsOutput() && (stream.GetInputHandle() == stream.GetOutputHandle())) ?
+                    EpollChange(stream.GetInputHandle(), EPOLLOUT, EPOLL_CTL_MOD, &stream) :
+                    EpollChange(stream.GetInputHandle(), 0, EPOLL_CTL_DEL, NULL)))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_INPUT) error: EpollChange() failed!\n");
+                return false;
+            }
+            stream.UnsetFlag(Stream::INPUT);
+            break;
+            
+        case ENABLE_OUTPUT:
+            ASSERT(!stream.IsOutput());
+            if (!((stream.IsInput() && (stream.GetInputHandle() == stream.GetOutputHandle())) ?
+                    EpollChange(stream.GetOutputHandle(), EPOLLIN | EPOLLOUT, EPOLL_CTL_MOD, &stream) :
+                    EpollChange(stream.GetOutputHandle(), EPOLLOUT, EPOLL_CTL_ADD, &stream)))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(ENABLE_OUTPUT) error: EpollChange() failed!\n");
+                return false;
+            }
+            stream.SetFlag(Stream::OUTPUT);
+            break;
+            
+        case DISABLE_OUTPUT:
+            ASSERT(stream.IsOutput());
+            if (!((stream.IsInput() && (stream.GetInputHandle() == stream.GetOutputHandle())) ?
+                    EpollChange(stream.GetOutputHandle(), EPOLLIN, EPOLL_CTL_MOD, &stream) :
+                    EpollChange(stream.GetOutputHandle(), 0, EPOLL_CTL_DEL, NULL)))
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_OUTPUT) error: EpollChange() failed!\n");
+                return false;
+            }
+            stream.UnsetFlag(Stream::OUTPUT);
+            break;
+            
+        case DISABLE_ALL:
+            ASSERT(stream.IsInput() || stream.IsOutput());
+            if (stream.GetInputHandle() == stream.GetOutputHandle())
+            {
+                if (!EpollChange(stream.GetInputHandle(), 0, EPOLL_CTL_DEL, NULL))
+                {
+                    PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_ALL) error: EpollChange() failed!\n");
+                    return false;
+                }
+            }
+            else
+            {
+                if (stream.IsInput())
+                {
+                    if (!EpollChange(stream.GetInputHandle(), 0, EPOLL_CTL_DEL, NULL))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_ALL) error: EpollChange(input) failed!\n");
+                        return false;
+                    }
+                }
+                if (stream.IsOutput())
+                {
+                    if (!EpollChange(stream.GetOutputHandle(), 0, EPOLL_CTL_DEL, NULL))
+                    {
+                        PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification(DISABLE_ALL) error: EpollChange(output) failed!\n");
+                        return false;
+                    }
+                }
+            }
+            stream.ClearFlags();
+            // TBD - support exceptions ??
+            break;
+    }
+    return true;
+}  // end ProtoDispatcher::UpdateStreamNotification() [USE_EPOLL]
+
+bool ProtoDispatcher::EpollChange(int fd, int events, int op, void* udata)
+{
+    if (-1 == epoll_fd)
+    {
+        if (-1 == (epoll_fd = epoll_create1(0)))
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification() epoll_create() error: %s\n",
+                           GetErrorString());
+            return false;
+        }
+    }
+    // Go through the current "epoll_event_array" and trim down or nullify
+    // applicable current pending events for this "fd"
+    // (So we don't get undesired notification dispatches)
+    switch (op)
+    {
+        case EPOLL_CTL_MOD:
+        {
+            struct epoll_event* evp = epoll_event_array;
+            for (int i = 0; i < wait_status; i++)
+            {
+                if (evp->data.ptr == udata)
+                    evp->events &= events;  // mask out events no longer wanted
+                evp++;
+            }
+            break;
+        }
+        case EPOLL_CTL_DEL:
+        {
+            struct epoll_event* evp = epoll_event_array;
+            for (int i = 0; i < wait_status; i++)
+            {
+                if (evp->data.ptr == udata)
+                {
+                    evp->events = 0;        // no events wanted
+                    evp->data.ptr = NULL;  // make sure no dereference is attempted
+                }
+                evp++;
+            }
+            break;
+        }
+        default:
+            break;
+    }  // end switch(op)
+    // Set or disable future events for this descriptor
+    struct epoll_event event;
+    event.events = events;
+    event.data.ptr = udata;
+    if (-1 == epoll_ctl(epoll_fd, op, fd, &event))
+    {
+#ifdef USE_TIMERFD
+        PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification() epoll_ctl() error: %s (timer_fd:%d epoll_fd:%d)\n",
+                           GetErrorString(), timer_stream.GetDescriptor(), epoll_fd);
+#else
+        PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification() epoll_ctl() error: %s (epoll_fd:%d)\n",
+                           GetErrorString(), epoll_fd);
+#endif
+        return false;
+    }
+    return true;
+}  // end ProtoDispatcher::EpollChange()
+
+#else
+#error "undefined async i/o mechanism"  // to make sure we implement something
+#endif // !USE_SELECT && !USE_KQUEUE
+
 bool ProtoDispatcher::InstallBreak()
-{    
+{ 
+#if defined(USE_SELECT) || defined(USE_EPOLL)
+#ifdef USE_EVENTFD
+    // Create eventfd() descriptor
+    int efd = eventfd(0, 0);  // TBD - should we set the flag "EFD_NONBLOCK"???
+    if (-1 == efd)
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() eventfd() error: %s\n", GetErrorString());
+        return false;
+    }
+    break_stream.SetDescriptor(efd);
+#ifdef USE_EPOLL
+    if (!EpollChange(efd, EPOLLIN, EPOLL_CTL_ADD, &break_stream))
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: EpollChange() failed!\n");
+        close(efd);
+        break_stream.SetDescriptor(INVALID_DESCRIPTOR);
+        return false;
+    }
+#endif // USE_EPOLL    
+#else
+    // Create a "self pipe" for thread awakening purposes
     if (0 != pipe(break_pipe_fd))
     {
         PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() pipe() error: %s\n",
@@ -977,132 +1511,235 @@ bool ProtoDispatcher::InstallBreak()
         PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() fcntl(F_SETFL(O_NONBLOCK)) error: %s\n", GetErrorString());
         return false;
     }
+    break_stream.SetDescriptor(break_pipe_fd[0]);
+#ifdef USE_EPOLL
+    if (!EpollChange(break_pipe_fd[0], EPOLLIN, EPOLL_CTL_ADD, &break_stream))
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: EpollChange() failed!\n");
+        close(break_pipe_fd[0]);
+        close(break_pipe_fd[1]);
+        break_pipe_fd[0] = break_pipe_fd[1] = INVALID_DESCRIPTOR;
+        return false;
+    }
+#endif // USE_EPOLL    
+#endif // if/else USE_EVENTFD    
+#elif defined(USE_KQUEUE)
+    if (!KeventChange(1, EVFILT_USER, EV_ADD | EV_ENABLE | EV_CLEAR, NULL))
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() KeventChange(EVFILT_USER) error: %s\n", GetErrorString());
+        return false;
+    }
+#else
+#error "undefined async i/o mechanism"  // to make sure we implement something
+#endif // !USE_SELECT && !USE_KQUEUE
     return true;
 }  // end ProtoDispatcher::InstallBreak()
 
+bool ProtoDispatcher::SetBreak()
+{      
+#if defined(USE_SELECT) || defined(USE_EPOLL)
+#ifdef USE_EVENTFD
+    uint64_t value = 1;
+    if (write(break_stream.GetDescriptor(), &value, sizeof(uint64_t)) < 0)
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() write(eventfd) error: %s\n", GetErrorString());
+        return false;
+    }
+#else
+    while (1)
+    {
+        char byte = 0;
+        int result = write(break_pipe_fd[1], &byte, 1);
+        if (1 == result)
+        {
+            break;
+        }
+        else if (0 == result)
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() warning: write() returned zero\n");
+            continue;
+        }
+        else
+        {
+            if (EINTR == errno) continue;  // (TBD) also for EAGAIN ???
+            PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() write(break_pipe) error: %s\n", GetErrorString());
+            return false;
+        }
+    }
+#endif  // end if/else USE_EVENTFD
+#elif defined(USE_KQUEUE)
+    struct kevent kev;
+    EV_SET(&kev, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0, NULL);
+    if (-1 == kevent(kevent_queue, &kev, 1, NULL, 0, NULL))
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() kevent() error: %s\n", GetErrorString());
+        return false;
+    }
+#else
+#error "undefined async i/o mechanism"  // to make sure we implement something 
+#endif // !USE_SELECT && !USE_KQUEUE
+    return true;
+}  // end ProtoDispatcher::SetBreak()
+
 void ProtoDispatcher::RemoveBreak()
 {
-    if (INVALID_DESCRIPTOR != break_pipe_fd[0])
+#if defined(USE_SELECT) || defined(USE_EPOLL)
+    if (INVALID_DESCRIPTOR != break_stream.GetDescriptor())
     {
-        close(break_pipe_fd[0]);
+#ifdef USE_EPOLL
+        if (!EpollChange(break_stream.GetDescriptor(), EPOLLIN, EPOLL_CTL_DEL, &break_stream))  
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::RemoveBreak() error: EpollChange() failed!\n");
+        }
+#endif // USE_EPOLL
+        // Close down the break_stream pipe or eventfd
+        close(break_stream.GetDescriptor());
+        break_stream.SetDescriptor(INVALID_DESCRIPTOR);
+#ifndef USE_EVENTFD
+        // We're using the break_pipe, so close() the extra descriptor
         close(break_pipe_fd[1]);
-        break_pipe_fd[0] = INVALID_DESCRIPTOR;
+        break_pipe_fd[0] = break_pipe_fd[1] = INVALID_DESCRIPTOR;       
+#endif
     }
+    
+#elif defined(USE_KQUEUE)
+    struct kevent kev;
+    EV_SET(&kev, 1, EVFILT_USER, EV_DELETE, 0, 0, NULL);
+    if (-1 == kevent(kevent_queue, &kev, 1, NULL, 0, NULL))
+        PLOG(PL_ERROR, "ProtoDispatcher::RemoveBreak() kevent() error: %s\n", GetErrorString());
+#else
+#error "undefined async i/o mechanism"  // to make sure we implement something 
+#endif
 }  // end ProtoDispatcher::RemoveBreak()
 
+
 /**
- * Warning! This may block indefinitely iF !IsPending() ...
+ * Warning! This may block indefinitely if !IsPending() ...
  */
 void ProtoDispatcher::Wait()
 {
     // (TBD) We could put some code here to protect this from
     // being called by the wrong thread?
     
-#ifdef USE_TIMERFD
-#define HAVE_PSELECT // so we can use the "struct timespec" created here
-#endif  // USE_TIMERFD    
+#if defined(USE_KQUEUE) || defined(HAVE_PSELECT) || defined(USE_TIMERFD)
+#define USE_TIMESPEC 1 // so we can use the "struct timespec" created here
+#endif  // USE_KQUEUE || HAVE_PSELECT || USE_TIMERFD    
     
-#ifdef HAVE_PSELECT
+    
+#ifdef USE_SELECT
+    int maxDescriptor = -1;   
+    FD_ZERO(&input_set);
+    FD_ZERO(&output_set); 
+#endif // USE_SELECT
+    
+#ifdef USE_TIMESPEC
     struct timespec timeout;
-    struct timespec* timeoutPtr;
+    struct timespec* timeoutPtr = NULL;
 #else
     struct timeval timeout;
-    struct timeval* timeoutPtr;
-#endif // if/else HAVE_PSELECT
+    struct timeval* timeoutPtr = NULL;
+#endif // if/else USE_TIMESPEC
     //double timerDelay = ProtoTimerMgr::GetTimeRemaining();
     double timerDelay = timer_delay;
+    //TRACE("Wait() timerDelay:%lf\n", timerDelay);
+
     if (timerDelay < 0.0)
     {
-        timeoutPtr = NULL; 
 #ifdef USE_TIMERFD
         timeout.tv_sec = 0;
         timeout.tv_nsec = 0;
-#endif // USE_TIMERFD     
+#endif //USE_TIMERFD
+
     }
     else
     {
+// We have observed some different thresholds on "precise timing" for
+// for different systems and APIs
+#if defined(MACOSX)
+#define PRECISE_THRESHOLD 1.0e-05  // about 10 microseconds for MacOS whether select(), kevent(), etc
+#elif defined(LINUX)
+#ifdef USE_TIMERFD
+#define PRECISE_THRESHOLD 2.0e-05  // about 20 microseconds for Linux timerfd usage
+#else
+#define PRECISE_THRESHOLD 2.0e-03  // about 2 msec for Linux select()
+#endif  // if/else USE_TIMERFD
+#else
+#define PRECISE_THRESHOLD 2.0e-03  // assume 2 msec for other Unix
+#endif  // if/else MACOSX / LINUX / OTHER           
+                      
         // If (true == precise_timing) essentially force polling for small delays
         // (Note this will consume CPU resources)
-        if (precise_timing && (timerDelay < 0.010)) timerDelay = 0.0;
+        if (precise_timing && (timerDelay < PRECISE_THRESHOLD)) timerDelay = 0.0;
         timeout.tv_sec = (unsigned long)timerDelay;
-#ifdef HAVE_PSELECT
+#ifdef USE_TIMESPEC
         timeout.tv_nsec = 
             (unsigned long)(1.0e+09 * (timerDelay - (double)timeout.tv_sec));
 #else
         timeout.tv_usec = 
             (unsigned long)(1.0e+06 * (timerDelay - (double)timeout.tv_sec));
-#endif // if/else HAVE_PSELECT
+#endif // if/else USE_TIMESPEC
         timeoutPtr = &timeout;
-    }
-    
-    FD_ZERO(&input_set);
-    FD_ZERO(&output_set);
-    int maxDescriptor = -1;
-    
-    
 #ifdef USE_TIMERFD
-    if ((0 != timeout.tv_nsec) || (0 != timeout.tv_sec))
-    {
-        // Install the timerfd descriptor to our "input_set"
-        // configured with an appropriate one-shot timeout
-        struct itimerspec timerSpec;
-        timerSpec.it_interval.tv_sec =  timerSpec.it_interval.tv_nsec = 0;  // non-repeating timeout?
-        timerSpec.it_value = timeout;
-        if (0 == timerfd_settime(timer_fd, 0, &timerSpec, 0))
+        if ((0 != timeout.tv_nsec) || (0 != timeout.tv_sec))
         {
-            //TRACE("putting timer_fd %d input input_set with sec:%d nsec:%d\n", 
-            //        timer_fd, timerSpec.it_value.tv_sec, timerSpec.it_value.tv_nsec);
-            FD_SET(timer_fd, &input_set);
-            maxDescriptor = timer_fd;
-            timeoutPtr = NULL;  // select() will be using "timer_fd" instead
+            // Install the timerfd descriptor to our "input_set"
+            // configured with an appropriate one-shot timeout
+            struct itimerspec timerSpec;
+            timerSpec.it_interval.tv_sec =  timerSpec.it_interval.tv_nsec = 0;  // non-repeating timeout?
+            timerSpec.it_value = timeout;
+            if (0 == timerfd_settime(timer_stream.GetDescriptor(), 0, &timerSpec, 0))
+            {
+#ifdef USE_SELECT
+            FD_SET(timer_stream.GetDescriptor(), &input_set);
+            if (timer_stream.GetDescriptor() > maxDescriptor) 
+                maxDescriptor = timer_stream.GetDescriptor();
+#endif  // USE_SELECT
+            timeoutPtr = NULL;  // select() (or pselect()) will be using "timer_fd" instead
+            }
+            else
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::Wait() timerfd_settime() error: %s\n", GetErrorString());
+
+            }
         }
-        else
-        {
-            PLOG(PL_ERROR, "ProtoDispatcher::Wait() timerfd_settime() error: %s\n", GetErrorString());
-        }
-    }
 #endif // USE_TIMERFD
+    }
     
-    
+#if defined(USE_SELECT)  
     // Monitor "break_pipe" if we are a threaded dispatcher
     // TBD - change this to use "eventfd()" on Linux
     if (IsThreaded())
     {
+#ifdef USE_EVENTFD
+        FD_SET(break_stream.GetDescriptor(), &input_set);  
+        if (break_stream.GetDescriptor() > maxDescriptor)
+            maxDescriptor = break_stream.GetDescriptor();
+#else
         FD_SET(break_pipe_fd[0], &input_set);  
-        maxDescriptor = break_pipe_fd[0];
-    }
-    // Monitor socket streams ...
-    SocketStream* nextSocket = socket_stream_list;
-    while (nextSocket)
-    {
-        Descriptor descriptor = nextSocket->GetSocket().GetHandle();
-        if (nextSocket->IsInput()) FD_SET(descriptor, &input_set);
-        if (nextSocket->IsOutput()) FD_SET(descriptor, &output_set);
-        if (descriptor > maxDescriptor) maxDescriptor = descriptor;
-        nextSocket = (SocketStream*)nextSocket->GetNext();    
-    }
-    // Monitor channel streams ...
-    ChannelStream* nextChannel = channel_stream_list;
-    while (nextChannel)
-    {
-        Descriptor descriptor = nextChannel->GetChannel().GetHandle();
-        if (nextChannel->IsInput()) FD_SET(descriptor, &input_set);
-        if (nextChannel->IsOutput()) FD_SET(descriptor, &output_set);
-        if (descriptor > maxDescriptor) maxDescriptor = descriptor;
-        nextChannel = (ChannelStream*)nextChannel->GetNext();    
-    }
-    // Monitor generic streams ...
-    GenericStream* nextStream = generic_stream_list;
-    while (nextStream)
-    {
-        Descriptor descriptor = nextStream->GetDescriptor();
-        if (nextStream->IsInput()) FD_SET(descriptor, &input_set);
-        if (nextStream->IsOutput()) FD_SET(descriptor, &output_set);
-        if (descriptor > maxDescriptor) maxDescriptor = descriptor;
-        nextStream = (GenericStream*)nextStream->GetNext();    
+        if (break_pipe_fd[0] > maxDescriptor)
+            maxDescriptor = break_pipe_fd[0];
+#endif // if/else USE_EVENTFD
     }
     
-    // (TBD) It might be nice to use "pselect()" here someday
+    // Iterate through and add streams to our FD_SETs
+    StreamTable::Iterator iterator(stream_table);
+    Stream* stream;
+    while (NULL != (stream = iterator.GetNextItem()))
+    {
+        if (stream->IsInput()) 
+        {
+            Descriptor descriptor = stream->GetInputHandle();
+            FD_SET(descriptor, &input_set);
+            if (descriptor > maxDescriptor) maxDescriptor = descriptor;
+        }
+        if (stream->IsOutput()) 
+        {
+            Descriptor descriptor = stream->GetOutputHandle();
+            FD_SET(descriptor, &output_set);
+            if (descriptor > maxDescriptor) maxDescriptor = descriptor;
+        }
+        // TBD - handle exception notification ???
+    }
 #ifdef HAVE_PSELECT
     wait_status = pselect(maxDescriptor+1, 
                          (fd_set*)&input_set, 
@@ -1115,13 +1752,50 @@ void ProtoDispatcher::Wait()
                          (fd_set*)&input_set, 
                          (fd_set*)&output_set, 
                          (fd_set*) NULL, 
-                         timeoutPtr);
+                         (timeval*)timeoutPtr);
 #endif  // if/else HAVE_PSELECT
+    
+#elif defined(USE_EPOLL)
+    
+    // If no sockets were installed yet, create epoll_fd early
+    if (-1 == epoll_fd)
+    {
+        if (-1 == (epoll_fd = epoll_create1(0)))
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::Wait() epoll_create() error: %s\n",
+                           GetErrorString());
+            return;
+        }
+    }
+
+    // Note if (NULL == timeoutPtr), then the timer_fd has been set up with the proper timeout value
+    // (otherwise we convert "timerDelay" to milliseconds)
+  	wait_status = epoll_wait(epoll_fd, epoll_event_array, EPOLL_ARRAY_SIZE, (NULL != timeoutPtr) ? (int)(timerDelay*1000.0) : -1);
+     
+#elif defined(USE_KQUEUE)
+    if (-1 == kevent_queue)
+    {
+        // Need to create our kqueue instance
+        if (-1 == (kevent_queue = kqueue()))
+        {
+            PLOG(PL_ERROR, "ProtoDispatcher::Wait() kqueue() error: %s\n", GetErrorString());
+            // TBD - should we set "run" to false here???
+            wait_status = -1;
+            return;
+        }
+    }
+    wait_status = kevent(kevent_queue, NULL, 0, kevent_array, KEVENT_ARRAY_SIZE, timeoutPtr);
+    // TBD - should we print a message here on error? (Dispatch() does this for us)
+#else
+#error "undefined async i/o mechanism"  // to make sure we implement something    
+#endif // !USE_SELECT && !USE_KQUEUE
+    
 }  // end ProtoDispatcher::Wait()
 
 void ProtoDispatcher::Dispatch()
 {
-    
+#if defined(USE_SELECT)
+    // Here the "wait_status" is the return value from the select() call
     switch (wait_status)
     {
         case -1:
@@ -1136,78 +1810,332 @@ void ProtoDispatcher::Dispatch()
             break;
 
         default:
-            // (TBD) make this safer (we need a safe iterator for these)...
-            // Check socket streams ...
-            SocketStream* nextSocketStream = socket_stream_list;
-            while (nextSocketStream)
+            // Iterate through and check/dispatch streams 
+            StreamTable::Iterator iterator(stream_table);
+            Stream* stream;
+            while (NULL != (stream = iterator.GetNextItem()))
             {
-                SocketStream* savedNext = (SocketStream*)nextSocketStream->GetNext();
-                ProtoSocket& theSocket = nextSocketStream->GetSocket();
-                Descriptor descriptor = theSocket.GetHandle();
-                if (nextSocketStream->IsInput() && FD_ISSET(descriptor, &input_set))
+                switch (stream->GetType())
                 {
-                    theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
-                    //break;
-                }
-                if (nextSocketStream->IsOutput() && FD_ISSET(descriptor, &output_set))
-                {
-                    theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
-                    //break;
-                }
-                nextSocketStream = savedNext;
+                    case Stream::CHANNEL:
+                    {
+                        ProtoChannel& theChannel = static_cast<ChannelStream*>(stream)->GetChannel();
+                        // A channel _might_ be implemented with separate input/output descriptors
+                        if (stream->IsInput())
+                        {
+                            if (FD_ISSET(theChannel.GetInputEventHandle(), &input_set))
+                                theChannel.OnNotify(ProtoChannel::NOTIFY_INPUT);
+                        }
+                        // Note that if the input notification handling caused the
+                        // channel to even be deleted, because the stream is "pooled"
+                        // and its flags zero, we're safe. If the channel is removed
+                        // and the stream repurposed, we could throw a false notification
+                        // here, but no big deal (same is true for socket handling
+                        // immediately below). TBD - use FD_CLR in "UpdateChannelNotification()" 
+                        // to avoid this possibility
+                        if (stream->IsOutput())
+                        {
+                            if (FD_ISSET(theChannel.GetOutputEventHandle(), &output_set))
+                                theChannel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
+                        }
+                        break;
+                    }
+                    case Stream::SOCKET:
+                    {
+                        // A socket has a single input/output descriptor
+                        ProtoSocket& theSocket = static_cast<SocketStream*>(stream)->GetSocket();
+                        Descriptor descriptor = theSocket.GetHandle();
+                        if (stream->IsInput() && FD_ISSET(descriptor, &input_set))
+                            theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
+                        // TBD - what if stream and/or theSocket was deleted?
+                        if (stream->IsOutput() && FD_ISSET(descriptor, &output_set))
+                            theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+                        break;
+                    }
+                    case Stream::GENERIC:
+                    {
+                        // A generic stream has a single input/output descriptor
+                        Descriptor descriptor = static_cast<GenericStream*>(stream)->GetDescriptor();
+                        if (stream->IsInput() && FD_ISSET(descriptor, &input_set))
+                            static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
+                        if (stream->IsOutput() && FD_ISSET(descriptor, &output_set))
+                            static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
+                        break;
+                    }
+                    
+                    case Stream::TIMER:
+                    case Stream::EVENT:
+                    {
+                        // No timer or event stream is put in the stream_table
+                        break;
+                    }
+                }  // end switch (stream->GetType())
             }
-            // Check channel streams ...
-            ChannelStream* nextChannelStream = channel_stream_list;
-            while (nextChannelStream)
+            if (break_stream.GetDescriptor() != INVALID_DESCRIPTOR && 
+                FD_ISSET(break_stream.GetDescriptor(), &input_set))
             {
-                ChannelStream* savedNext = (ChannelStream*)nextChannelStream->GetNext();
-                ProtoChannel& theChannel = nextChannelStream->GetChannel();
-                Descriptor descriptor = theChannel.GetHandle();
-                if (nextChannelStream->IsInput() && FD_ISSET(descriptor, &input_set))
-                {
-                    theChannel.OnNotify(ProtoChannel::NOTIFY_INPUT);
-                    //break;
-                }
-                if (nextChannelStream->IsOutput() && FD_ISSET(descriptor, &output_set))
-                {
-                    theChannel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
-                    //break;
-                }
-                nextChannelStream = savedNext;
-            }
-            // Check generic streams ...
-            GenericStream* nextStream = generic_stream_list;
-            while (nextStream)
-            {
-                GenericStream* savedNext = (GenericStream*)nextStream->GetNext(); 
-                Descriptor descriptor = nextStream->GetDescriptor();
-                if (nextStream->IsInput() && FD_ISSET(descriptor, &input_set))
-                {
-                    nextStream->OnEvent(EVENT_INPUT);
-                    //break;
-                }
-                if (nextStream->IsOutput() && FD_ISSET(descriptor, &output_set))
-                {
-                    nextStream->OnEvent(EVENT_OUTPUT);
-                    //break;
-                }
-                nextStream = savedNext; 
+                // We were signaled so reset our break_pipe or eventfd
+#ifdef USE_EVENTFD
+                // Reset "signal" by reading eventfd count
+                uint64_t counter = 0;
+                if (read(break_stream.GetDescriptor(), &counter, sizeof(counter)) < 0)
+                    PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() read(event_fd) error: %s\n", GetErrorString());
+            
+#else
+                // Reset "signal" by emptying break_pipe
+                char byte[32];
+                while (read(break_pipe_fd[0], byte, 32) > 0);
+#endif // if/else USE_EVENTFD
             }
 #ifdef USE_TIMERFD
             // TBD - should we put this code up at the top as the first check
-            // intead of checking all descriptors, all the time (maybe "epoll()" will help?)
-            if (FD_ISSET(timer_fd, &input_set))
+            // instead of checking all descriptors, all the time (maybe "epoll()" will help?)
+            if (timer_stream.GetDescriptor() != INVALID_DESCRIPTOR &&
+                FD_ISSET(timer_stream.GetDescriptor(), &input_set))
             {
-                //TRACE("timer_fd was set\n");
-                // clear the timer_fd status by reading from it
                 uint64_t expirations = 0;
-                if (read(timer_fd, &expirations, sizeof(expirations)) < 0)
+                if (read(timer_stream.GetDescriptor(), &expirations, sizeof(expirations)) < 0)
                     PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() read(timer_fd) error: %s\n", GetErrorString());
             }
 #endif // USE_TIMERFD
             OnSystemTimeout();
             break;
-    }  // end switch(status)
+    }  // end switch(wait_status) [USE_SELECT]
+    
+#elif defined(USE_EPOLL)
+    
+    switch(wait_status)
+    {
+        case -1:
+            if (EINTR != errno)
+                PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() epoll_wait() error: %s\n", GetErrorString());
+            break;
+            
+        case 0: 
+            // timeout only
+            OnSystemTimeout(); 
+            break;
+            
+        default:
+            struct epoll_event* evp = epoll_event_array;
+            for (int i = 0; i < wait_status; i++)
+            {
+                // First check for an error condition
+                /*if (0 != (EPOLLERR & evp->events))
+                {
+                    // We don't check for EPOLLHUP since ProtoSocket handles that
+                    PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() epoll event error: %s\n", GetErrorString());
+                }
+                else */
+                if (NULL != evp->data.ptr)
+                {
+                    // TBD - process EPOLLHUP events?
+                    Stream* stream = (Stream*)evp->data.ptr;
+                    switch (stream->GetType())
+                    {
+                        case Stream::CHANNEL:
+                        {
+                            ProtoChannel& channel = static_cast<ChannelStream*>(stream)->GetChannel();
+                            if (0 != (EPOLLIN & evp->events))
+                            {
+                                if (stream->IsInput())
+                                    channel.OnNotify(ProtoChannel::NOTIFY_INPUT);
+                            }
+                            if (0 != (EPOLLOUT & evp->events))
+                            {
+                                if (stream->IsOutput())
+                                    channel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
+                            }
+                            if (0 != (EPOLLERR & evp->events))
+                            {
+                                PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() ProtoChannel epoll event error: %s\n", GetErrorString());
+                                // Throw a notification so error will be detected by app???
+                                if (stream->IsInput())
+                                    channel.OnNotify(ProtoChannel::NOTIFY_INPUT);
+                                else if (stream->IsOutput())
+                                    channel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
+                            }
+                            break;
+                        }
+                        case Stream::SOCKET:
+                        {
+                            ProtoSocket& socket = static_cast<SocketStream*>(stream)->GetSocket();
+                            if (0 != (EPOLLIN & evp->events))
+                            {
+                                if (stream->IsInput())
+                                    socket.OnNotify(ProtoSocket::NOTIFY_INPUT);
+                            }
+                            if (0 != (EPOLLOUT & evp->events))
+                            {
+                                if (stream->IsOutput())
+                                    socket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+                            }
+                            if (0 != (EPOLLERR & evp->events))
+                            {
+                                socket.OnNotify(ProtoSocket::NOTIFY_ERROR);
+                                // Alternatively throw an input or output notification so app gets notified?
+                                //if (stream->IsInput())
+                                //    socket.OnNotify(ProtoSocket::NOTIFY_INPUT);
+                                //else if (stream->IsOutput())
+                                //    socket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+                            }
+                            break;
+                        }
+                        case Stream::GENERIC:
+                        {
+                            if (0 != (EPOLLIN & evp->events))
+                            {
+                                if (stream->IsInput())
+                                    static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
+                            }
+                            if (0 != (EPOLLOUT & evp->events))
+                            {
+                                if (stream->IsOutput())
+                                    static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
+                            }
+                            if (0 != (EPOLLERR & evp->events))
+                            {
+                                // Throw an input or output notification so app gets notified?
+                                if (stream->IsInput())
+                                    static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
+                                else if (stream->IsOutput())
+                                    static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
+                            }
+                            break;
+                        }
+                        case Stream::TIMER:
+                        {
+#ifdef USE_TIMERFD
+                            // This _should_ only be our ProtoDispatcher::timer_stream
+                            // Clear the timerfd with a read() call (timeout dispatched below)
+                            uint64_t expirations = 0;
+                            if (read(static_cast<TimerStream*>(stream)->GetDescriptor(), &expirations, sizeof(expirations)) < 0)
+                                PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() read(timer_fd) error: %s\n", GetErrorString());
+#endif // USE_TIMERFD
+                            break;
+                        }
+                        case Stream::EVENT:
+                        {
+#ifdef USE_EVENTFD
+                            uint64_t counter = 0;
+                            if (read(static_cast<EventStream*>(stream)->GetDescriptor(), &counter, sizeof(counter)) < 0)
+                                PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() read(event_fd) error: %s\n", GetErrorString());
+#else
+                            // Reset "signal" by emptying pipe
+                            char byte[32];
+                            while (read(break_pipe_fd[0], byte, 32) > 0);
+#endif // if/else USE_EVENTFD        
+                            break;
+                        }
+                    }  // end switch(stream->GetType()) [USE_EPOLL]
+                }
+                else
+                {
+                    // This must be a nullified event so do nothing
+                }
+                evp++;               
+            }  // end for (i = 0..wait_status)
+            OnSystemTimeout();
+            break;
+    }  // end switch(wait_status) [USE_EPOLL]   
+    
+#elif defined(USE_KQUEUE)
+    // Here the "wait_status" is the return value from the kevent() call
+    switch (wait_status)
+    {
+        case -1:
+            if (EINTR != errno)
+                PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() kevent() error: %s\n", GetErrorString());
+            //OnSystemTimeout();
+            break;
+            
+        case 0:
+            // timeout only
+            OnSystemTimeout();
+            break;
+            
+        default:
+        {
+            // The return value is the number of events available
+            // (Note "wait_status" may change on the fly, here if
+            //  notification results in stream removal)
+            struct kevent* kep = kevent_array;
+            for (int i = 0; i < wait_status; i++)
+            {
+                // First check if there was an error for the event
+                if (0 != (EV_ERROR & kep->flags))
+                {
+                    PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() kqueue event error: %s\n", GetErrorString((int)(kep->data)));
+                    kep++;
+                    continue;
+                }
+                Stream* stream = (Stream*)kep->udata;
+                switch (kep->filter)
+                {
+                    case EVFILT_READ:
+                        ASSERT(NULL != stream);
+                        if (!stream->IsInput()) break;
+                        switch (stream->GetType())
+                        {
+                            case Stream::CHANNEL:
+                                static_cast<ChannelStream*>(stream)->GetChannel().OnNotify(ProtoChannel::NOTIFY_INPUT);
+                                break;
+                            case Stream::SOCKET:
+                                static_cast<SocketStream*>(stream)->GetSocket().OnNotify(ProtoSocket::NOTIFY_INPUT);
+                                break;
+                            case Stream::GENERIC:
+                                static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
+                                break;
+                            case Stream::TIMER:
+                            case Stream::EVENT:
+                                // No Stream::TIMER or Stream::EVENT is used eith EVFILT_READ for now
+                                break;
+                        }
+                        break;
+                        
+                    case EVFILT_WRITE:
+                        ASSERT(NULL != stream);
+                        if (!stream->IsOutput()) break;
+                        switch (stream->GetType())
+                        {
+                            case Stream::CHANNEL:
+                                static_cast<ChannelStream*>(stream)->GetChannel().OnNotify(ProtoChannel::NOTIFY_OUTPUT);
+                                break;
+                            case Stream::SOCKET:
+                                static_cast<SocketStream*>(stream)->GetSocket().OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+                                break;
+                            case Stream::GENERIC:
+                                static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
+                                break;
+                            case Stream::TIMER:
+                            case Stream::EVENT:
+                                // No Stream::TIMER or Stream::EVENT is used with EVFILT_WRITE
+                                break;
+                        }
+                        break;
+                    
+                    case EVFILT_USER:
+                        // Nothing to be done since EVFILT_USER w/ EV_CLEAR resets itself
+                        // (or was nullified event)
+                        break;
+                    
+                    case EVFILT_TIMER:
+                        // We found that "EVFILT_TIMER" was not as precise as the kevent() timeout, so we don't use it
+                    default:
+                        PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() error: unexpected event filter type %d\n", kep->filter);
+                        break;
+                        
+                }  // switch(kep->filter)
+                kep++;
+            }
+            OnSystemTimeout();  // called to service timers in case one or more is ready
+            break;
+        }   
+    }  // end switch(wait_status) [USE_KQUEUE]
+#else // !USE_SELECT && !USE_KQUEUE   
+#error "undefined async i/o mechanism"  // to make sure we implement something
+#endif  // end if/else USE_SELECT, USE_KQUEUE, ...
+    wait_status = 0;  // reset "wait_status" since we're done
 }  // end ProtoDispatcher::Dispatch()
 
 #endif // UNIX
@@ -1217,35 +2145,46 @@ void ProtoDispatcher::Dispatch()
 
 bool ProtoDispatcher::InstallBreak()
 {
+	ASSERT(INVALID_DESCRIPTOR == break_stream.GetDescriptor());
     // The break_event used to break the MsgWaitForMultipleObjectsEx() call
     // This needs to be manual reset?
-    if (!(break_event = CreateEvent(NULL, TRUE, FALSE, NULL)))
+	HANDLE brk = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (INVALID_HANDLE_VALUE == brk)
     {
         PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() CreateEvent() error\n");
         return false;
     }
-    if (InstallGenericStream(break_event, NULL, NULL, Stream::INPUT))
-    {
-        break_event_stream = GetGenericStream(break_event);   
-    }
-    else
-    {
-        PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() CreateEvent() error\n");
-        CloseHandle(break_event);
-        break_event = NULL;
+	break_stream.SetDescriptor(brk);
+	int index = Win32AddStream(break_stream, brk);
+	if (index < 0)
+	{
+		PLOG(PL_ERROR, "ProtoDispatcher::InstallBreak() error: add break_stream failed!\n");
+        CloseHandle(brk);
+		break_stream.SetDescriptor(INVALID_DESCRIPTOR);
         return false;
     }
+	break_stream.SetIndex(index);
     return true;
 }  // end ProtoDispatcher::InstallBreak()
 
+bool ProtoDispatcher::SetBreak()
+{
+	if (0 == SetEvent(break_stream.GetDescriptor()))
+    {
+        PLOG(PL_ERROR, "ProtoDispatcher::SetBreak() SetEvent(break_event) error: %s\n", GetErrorString());
+        return false;
+    }
+    return true;
+}  // end ProtoDispatcher::SetBreak()
+
 void ProtoDispatcher::RemoveBreak()
 {
-    if (NULL != break_event)
+	if (INVALID_DESCRIPTOR != break_stream.GetDescriptor())
     {
-        RemoveGenericStream(break_event_stream);
-        break_event_stream = NULL;
-        CloseHandle(break_event);
-        break_event = NULL;
+		Win32RemoveStream(break_stream.GetIndex());
+		break_stream.SetIndex(-1);
+		CloseHandle(break_stream.GetDescriptor());
+		break_stream.SetDescriptor(INVALID_DESCRIPTOR);
     }
 }  // end ProtoDispatcher::RemoveBreak()
 
@@ -1281,7 +2220,7 @@ bool ProtoDispatcher::Win32Init()
         return false;
     }
 
-    // Create msg_window to receive event messages
+    // Create hidden "msg_window" to receive event window messages
     HWND parent = NULL;
 #ifdef HWND_MESSAGE
     parent = HWND_MESSAGE;    
@@ -1297,7 +2236,7 @@ bool ProtoDispatcher::Win32Init()
                               NULL,          // menu handle or child identifier
                               theInstance,  // handle to application instance
                               this);        // window-creation data
-    if (msg_window)
+    if (NULL != msg_window)
     {
         ShowWindow(msg_window, SW_HIDE);
         return true;
@@ -1312,17 +2251,84 @@ bool ProtoDispatcher::Win32Init()
 
 void ProtoDispatcher::Win32Cleanup()
 {
-    if (msg_window)
+    if (NULL != msg_window)
     {
         DestroyWindow(msg_window);
         msg_window = NULL;
     }
 }  // end Win32Cleanup()
 
+
+// WIN32 implementation of ProtoDispatcher::UpdateStreamNotification()
+bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationCommand cmd)
+{
+    switch (cmd)
+    {
+        case ENABLE_INPUT:
+        {
+			ASSERT(stream.GetIndex() < 0);  // input already enabled?!
+			int index = Win32AddStream(stream, stream.GetInputHandle());
+            if (index < 0)
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification() error adding input stream\n");
+                return false;
+            }
+            stream.SetIndex(index);
+            stream.SetFlag(Stream::INPUT);
+            break;          
+        }
+        case DISABLE_INPUT:
+        {
+			ASSERT(stream.GetIndex() >= 0);
+            Win32RemoveStream(stream.GetIndex());
+            stream.SetIndex(-1);
+            stream.UnsetFlag(Stream::INPUT);
+            break;
+        }
+		case ENABLE_OUTPUT:
+        {
+			ASSERT(stream.GetOutdex() < 0);  // output already enabled?!
+            int outdex = Win32AddStream(stream, stream.GetOutputHandle());
+            if (outdex < 0)
+            {
+                PLOG(PL_ERROR, "ProtoDispatcher::UpdateStreamNotification() error adding output stream\n");
+                return false;
+            }
+            stream.SetOutdex(outdex);
+            stream.SetFlag(Stream::OUTPUT);
+            break;          
+        }
+        case DISABLE_OUTPUT:
+        {
+            ASSERT(stream.GetOutdex() >= 0);
+            Win32RemoveStream(stream.GetOutdex());
+            stream.SetOutdex(-1);
+            stream.UnsetFlag(Stream::OUTPUT);
+            break;
+        }
+        case DISABLE_ALL:
+        {       
+			if (stream.GetIndex() >= 0) 
+            {
+                Win32RemoveStream(stream.GetIndex());
+                stream.SetIndex(-1);
+            }
+            if (stream.GetOutdex() >= 0)
+            {
+                Win32RemoveStream(stream.GetOutdex());
+                stream.SetIndex(-1);
+            }  
+            stream.ClearFlags();
+            break;
+        }
+    }
+    return true;
+}  // end ProtoDispatcher::UpdateStreamNotification() [WIN32]
+
 int ProtoDispatcher::Win32AddStream(Stream& stream, HANDLE handle)
 {
-    int index = stream_count;
-    if (stream_count >= stream_array_size)
+    DWORD index = stream_count;
+    if (index >= stream_array_size)
     {
         if (!Win32IncreaseStreamArraySize())
         {
@@ -1351,25 +2357,31 @@ void ProtoDispatcher::Win32RemoveStream(int index)
 
 bool ProtoDispatcher::Win32IncreaseStreamArraySize()
 {
-    unsigned int newSize = 2 * stream_array_size;
+    unsigned int newSize = (0 != stream_array_size) ? (2 * stream_array_size) : DEFAULT_STREAM_ARRAY_SIZE;
     HANDLE* hPtr = new HANDLE[newSize];
     Stream** iPtr = new Stream*[newSize];
-    if (hPtr && iPtr)
+    if ((NULL != hPtr) && (NULL != iPtr))
     {
-        memcpy(hPtr, stream_handles_array, stream_count*sizeof(HANDLE));
-        memcpy(iPtr, stream_ptrs_array, stream_count*sizeof(Stream*));
-        if (stream_handles_default != stream_handles_array)
+        if (0 != stream_count)
+        {
+            memcpy(hPtr, stream_handles_array, stream_count*sizeof(HANDLE));
+            memcpy(iPtr, stream_ptrs_array, stream_count*sizeof(Stream*));
+        }
+        if (NULL != stream_handles_array)
+        {
             delete[] stream_handles_array;
-        if (stream_ptrs_default != stream_ptrs_array)
             delete[] stream_ptrs_array;
+        }
         stream_handles_array = hPtr;
         stream_ptrs_array = iPtr;
         return true;
     }
     else
     {
-        if (hPtr) delete[] hPtr;
-        if (iPtr) delete[] iPtr;
+        PLOG(PL_ERROR, "ProtoDispatcher::Win32IncreaseStreamArraySize() new stream_array error: %s\n", 
+                       GetErrorString());
+        if (NULL != hPtr) delete[] hPtr;
+        if (NULL != iPtr) delete[] iPtr;
         return false;    
     }        
 }  // end ProtoDispatcher::Win32IncreaseStreamArraySize()
@@ -1377,28 +2389,84 @@ bool ProtoDispatcher::Win32IncreaseStreamArraySize()
 void ProtoDispatcher::Wait()
 {
     double timerDelay = timer_delay;
+	// Don't wait if we have "ready" streams pending
+	if (!ready_stream_list.IsEmpty()) timerDelay = 0.0;
+
+
+#ifdef USE_WAITABLE_TIMER
+	DWORD msec = INFINITE;
+	if (timerDelay < 0.0)
+	{
+		if (timer_active)
+		{
+			CancelWaitableTimer(timer_stream.GetDescriptor());
+			timer_active = false;
+		}
+		if (timer_stream.GetIndex() >= 0)
+		{
+			Win32RemoveStream(timer_stream.GetIndex());
+			timer_stream.SetIndex(-1);
+		}
+	}
+	else if (0.0 == timerDelay)
+	{
+		if (timer_active)
+		{
+			CancelWaitableTimer(timer_stream.GetDescriptor());
+			timer_active = false;
+		}
+		if (timer_stream.GetIndex() >= 0)
+		{
+			Win32RemoveStream(timer_stream.GetIndex());
+			timer_stream.SetIndex(-1);
+		}
+		msec = 0;
+	}
+	else
+	{
+		// The "negative" dueTime makes a "relative" waitable timer
+		LARGE_INTEGER dueTime;
+		dueTime.QuadPart = (LONGLONG)(-(timerDelay * 1.0e+07));  // convert to 100 nsec ticks
+		LONG period = 0;
+		if (0 == SetWaitableTimer(timer_stream.GetDescriptor(), &dueTime, 0, NULL, NULL, FALSE))
+		{
+			PLOG(PL_ERROR, "ProtoDispatcher::Wait() SetWaitableTimer() error: %s\n", GetErrorString());
+			msec = (DWORD)(1000.0 * timerDelay);
+			if ((timerDelay > 0.0) && (0 == msec) && !precise_timing) msec = 1;
+			timer_active = false;
+		}
+		else
+		{
+			if (timer_stream.GetIndex() < 0)
+			{
+				int index = Win32AddStream(timer_stream, timer_stream.GetDescriptor());
+				if (index < 0)
+				{
+					PLOG(PL_ERROR, "ProtoDispatcher::Wait() error: unable to insert timer_stream\n");
+					msec = (DWORD)(1000.0 * timerDelay);
+					if ((timerDelay > 0.0) && (0 == msec) && !precise_timing) msec = 1;
+					timer_active = false;
+				}
+				else
+				{
+					timer_stream.SetIndex(index);
+					timer_active = true;
+				}
+			}
+			else
+			{
+				timer_active = true;
+			}
+		}
+	}
+#else
     DWORD msec = (timerDelay < 0.0) ? INFINITE : ((DWORD)(1000.0 * timerDelay));
-
     // If (false == precise_timing) enforce minimum delay of 1 msec
-    // (Note "precise_timing" will consume additional CPU resources)
+    // (Note the busy-wait "precise_timing" will consume additional CPU resources)
     if ((timerDelay > 0.0) && (0 == msec) && !precise_timing) msec = 1;
-
-    // Don't wait if any sockets are still "OutputReady()"
-    // Monitor socket streams ...
-    SocketStream* nextSocket = socket_stream_list;
-    while (nextSocket)
-    {
-        ProtoSocket& theSocket = nextSocket->GetSocket();
-        if (theSocket.IsInputReady() ||
-           (theSocket.NotifyOutput() && theSocket.IsOutputReady()))
-        {
-            msec = 0;
-            socket_io_pending = true;
-            break;
-        }
-        nextSocket = (SocketStream*)nextSocket->GetNext();    
-    }
-    // Set some waitFlags
+#endif  // else/if USE_WAITABLE_TIMER
+	
+	// Set some waitFlags
     DWORD waitFlags = 0;
     // on WinNT 4.0, getaddrinfo() doesn't work, so we check the OS version
     // to decide what to do.  Try "gethostbyaddr()" if it's an old OS (e.g. NT 4.0 or earlier)
@@ -1437,26 +2505,43 @@ void ProtoDispatcher::Dispatch()
             PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() MsgWaitForMultipleObjectsEx() error: %s\n", errorString);
             break;
         }
-        
-        //case WAIT_TIMEOUT:  // timeout condition
         default:
-            // Handle any sockets that are "io_pending"
-            // (WIN32 only does "edge triggering" on sockets)
-            if (socket_io_pending)
-            {
-                SocketStream* nextSocketStream = socket_stream_list;
-                while (nextSocketStream)
+		{
+            // Handle any "ready" sockets that are "io_pending"
+            // (e.g., WIN32 only does "edge triggering" on sockets)
+            // TBD - keep a separate list of io_pending socket streams?
+			StreamList::Iterator sit(ready_stream_list);
+			Stream* nextStream;
+			while (NULL != (nextStream = sit.GetNextItem()))
+			{
+                switch (nextStream->GetType())
                 {
-                    ProtoSocket& theSocket = nextSocketStream->GetSocket();
-                    nextSocketStream = (SocketStream*)nextSocketStream->GetNext(); 
-
-                    // (TBD) Make this safer (i.e. if notification destroys socket)
-                    if (theSocket.IsInputReady())
-                        theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
-                    if (theSocket.NotifyOutput() && theSocket.IsOutputReady())
-                        theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+					case Stream::CHANNEL:
+                    {
+                        ProtoChannel& theChannel = static_cast<ChannelStream*>(nextStream)->GetChannel();
+                        // (TBD) Make this safer (i.e. if notification destroys channel)
+                        if (theChannel.InputNotification())
+                            theChannel.OnNotify(ProtoChannel::NOTIFY_INPUT);
+                        if (theChannel.OutputNotification())
+                            theChannel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
+                        break;
+                    }
+                    case Stream::SOCKET:
+                    {
+						ProtoSocket& theSocket = static_cast<SocketStream*>(nextStream)->GetSocket();
+                        // (TBD) Make this safer (i.e. if notification destroys socket)
+                        if (theSocket.InputNotification())
+                            theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
+                        if (theSocket.OutputNotification())
+                            theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+                        break;
+                    }
+                    default:
+                    {
+                        ASSERT(0);
+                        break;
+                    }
                 }
-                socket_io_pending = false;
             }
             if (WAIT_TIMEOUT == wait_status) 
             {
@@ -1465,75 +2550,84 @@ void ProtoDispatcher::Dispatch()
             else if ((WAIT_OBJECT_0 <= wait_status) && (wait_status < (WAIT_OBJECT_0 + stream_count)))
             {
                 unsigned int index = wait_status - WAIT_OBJECT_0;
-                Stream* stream = stream_ptrs_array[index];
-                if (Stream::SOCKET == stream->GetType())
-                {
-                    ProtoSocket& theSocket = static_cast<SocketStream*>(stream)->GetSocket();
-                    if (ProtoSocket::LOCAL != theSocket.GetDomain())
-                    {
-                        WSANETWORKEVENTS event;
-                        if (0 == WSAEnumNetworkEvents(theSocket.GetHandle(), stream_handles_array[index], &event))
-                        {
-                            if (0 != (event.lNetworkEvents & (FD_READ | FD_ACCEPT)))
-                                theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
+				Stream* stream = stream_ptrs_array[index];
+				switch (stream->GetType())
+				{
+					case Stream::SOCKET:
+					{
+						ProtoSocket& theSocket = static_cast<SocketStream*>(stream)->GetSocket();
+						WSANETWORKEVENTS event;
+						if (0 == WSAEnumNetworkEvents(theSocket.GetHandle(), stream_handles_array[index], &event))
+						{
+							if (0 != (event.lNetworkEvents & (FD_READ | FD_ACCEPT)))
+								theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
 
-                            if (0 != (event.lNetworkEvents & FD_WRITE)) 
-                                theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+							if (0 != (event.lNetworkEvents & FD_WRITE)) 
+								theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
 
-                            if (0 != (event.lNetworkEvents & FD_CLOSE)) 
-                            {
-                                theSocket.SetClosing(true);
-
-                                if (0 == event.iErrorCode[FD_CLOSE_BIT])
-                                    theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
-                                else
-                                    theSocket.OnNotify(ProtoSocket::NOTIFY_ERROR);
-                            }
-                            if (0 != (event.lNetworkEvents & FD_CONNECT))
-                            {
-                                if (0 == event.iErrorCode[FD_CONNECT_BIT])
-                                    theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
-                                else 
-                                    theSocket.OnNotify(ProtoSocket::NOTIFY_ERROR);
-                            }
-                            if (0 != (event.lNetworkEvents & FD_ADDRESS_LIST_CHANGE))
-                            {
-                              if (0 == event.iErrorCode[FD_ADDRESS_LIST_CHANGE_BIT])
-                                theSocket.OnNotify(ProtoSocket::NOTIFY_EXCEPTION);
-                              else
-                                theSocket.OnNotify(ProtoSocket::NOTIFY_ERROR);
-                            }
-                        }
-                        else
-                        {
-                            PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() WSAEnumNetworkEvents() error\n");
-                        }
-                    }
-                    else
-                    {
-                        // "LOCAL" domain ProtoSockets are really ProtoPipes in Win32
-                        if (index == (unsigned int)stream->GetIndex())
-                            theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
-                         else // (index == stream->GetOutdex())
-                            theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
-                    }
-                }
-                else if (Stream::CHANNEL == stream->GetType())
-                {
-                    ProtoChannel& theChannel = static_cast<ChannelStream*>(stream)->GetChannel();
-                    if (index == (unsigned int)stream->GetIndex())
-                        theChannel.OnNotify(ProtoChannel::NOTIFY_INPUT);
-                    else // (index == stream->GetOutdex())
-                        theChannel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
-                }
-                else
-                {
-                    // (TBD) Can we test the handle for input/output readiness?
-                    if (stream->IsInput()) 
-                        static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
-                    if (stream->IsOutput()) 
-                        static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
-                }
+							if (0 != (event.lNetworkEvents & FD_CLOSE)) 
+							{
+								theSocket.SetClosing(true);
+								if (0 == event.iErrorCode[FD_CLOSE_BIT])
+								  theSocket.OnNotify(ProtoSocket::NOTIFY_INPUT);
+								else
+								  theSocket.OnNotify(ProtoSocket::NOTIFY_ERROR);
+							}
+							if (0 != (event.lNetworkEvents & FD_CONNECT))
+							{
+								if (0 == event.iErrorCode[FD_CONNECT_BIT])
+									theSocket.OnNotify(ProtoSocket::NOTIFY_OUTPUT);
+								else 
+									theSocket.OnNotify(ProtoSocket::NOTIFY_ERROR);
+							}
+							if (0 != (event.lNetworkEvents & FD_ADDRESS_LIST_CHANGE))
+							{
+							  if (0 == event.iErrorCode[FD_ADDRESS_LIST_CHANGE_BIT])
+								theSocket.OnNotify(ProtoSocket::NOTIFY_EXCEPTION);
+							  else
+								theSocket.OnNotify(ProtoSocket::NOTIFY_ERROR);
+							}
+						}
+						else
+						{
+							PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() WSAEnumNetworkEvents() error\n");
+						}
+						break;
+					}  // end case Stream::SOCKET
+					case Stream::CHANNEL:
+					{
+						ProtoChannel& theChannel = static_cast<ChannelStream*>(stream)->GetChannel();
+						if (index == (unsigned int)stream->GetIndex())
+							theChannel.OnNotify(ProtoChannel::NOTIFY_INPUT);
+						else // (index == stream->GetOutdex())
+							theChannel.OnNotify(ProtoChannel::NOTIFY_OUTPUT);
+						break;
+					}
+					case Stream::TIMER:
+					{
+#ifdef USE_WAITABLE_TIMER
+						// Our one and only "timer_stream"
+						ResetEvent(timer_stream.GetDescriptor());
+						timer_active = false;
+#endif // USE_WAITABLE_TIMER
+						break;
+					}
+					case Stream::EVENT:
+					{
+						// our one and only "break" event
+						ResetEvent(break_stream.GetDescriptor());
+						break;
+					}
+					case Stream::GENERIC:
+					{
+						// (TBD) Can we test the handle for input/output readiness?
+						if (stream->IsInput()) 
+							static_cast<GenericStream*>(stream)->OnEvent(EVENT_INPUT);
+						if (stream->IsOutput()) 
+							static_cast<GenericStream*>(stream)->OnEvent(EVENT_OUTPUT);
+						break;
+					}
+				}  // end switch (stream->GetType())
             }
             else if ((WAIT_OBJECT_0 + stream_count) == wait_status)
             {
@@ -1562,6 +2656,7 @@ void ProtoDispatcher::Dispatch()
                 // WAIT_ABANDONED or WAIT_IO_COMPLETION
             } 
             break;
+		}  // end case default
     }  // end switch(status)
     OnSystemTimeout();
 }  // end ProtoDispatcher::Dispatch() 
@@ -1599,7 +2694,7 @@ LRESULT CALLBACK ProtoDispatcher::MessageHandler(HWND hwnd, UINT message, WPARAM
 #endif // WIN32
 
 /**
- * UNIX ProtoDispatcher::Controller implementation
+ * ProtoDispatcher::Controller implementation
  */
 ProtoDispatcher::Controller::Controller(ProtoDispatcher& theDispatcher)
  : dispatcher(theDispatcher), use_lock_a(true)

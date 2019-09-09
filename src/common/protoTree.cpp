@@ -125,7 +125,7 @@ bool ProtoTree::PrefixIsEqual(const char*  key,
                               unsigned int keysize,
                               const char*  prefix, 
                               unsigned int prefixSize,
-                              Endian       keyEndian) const
+                              Endian       keyEndian)
 {
     if (prefixSize > keysize) return false;
     unsigned int fullByteCount = (prefixSize >> 3);
@@ -178,7 +178,7 @@ bool ProtoTree::PrefixIsEqual(const char*  key,
 bool ProtoTree::KeysAreEqual(const char*  key1, 
                              const char*  key2, 
                              unsigned int keysize,
-                             Endian       keyEndian) const
+                             Endian       keyEndian)
 {
     unsigned int fullByteCount = keysize >> 3;
     unsigned int remBitCount = keysize & 0x07;
@@ -212,7 +212,7 @@ bool ProtoTree::KeysAreEqual(const char*  key1,
         return true;
 }  // end ProtoTree::KeysAreEqual()
 
-bool ProtoTree::ItemsAreEqual(const Item& item1, const Item& item2) const
+bool ProtoTree::ItemsAreEqual(const Item& item1, const Item& item2)
 {
     unsigned int keysize = item1.GetKeysize();
     if (item2.GetKeysize() != keysize) return false;
@@ -226,13 +226,13 @@ bool ProtoTree::ItemsAreEqual(const Item& item1, const Item& item2) const
     return KeysAreEqual(item1.GetKey(), item2.GetKey(), keysize, keyEndian);   
 }  // end ProtoTree::ItemsAreEqual()
 
-bool ProtoTree::ItemIsEqual(const Item& item, const char* key, unsigned int keysize) const
+bool ProtoTree::ItemIsEqual(const Item& item, const char* key, unsigned int keysize)
 {
     if (item.GetKeysize() != keysize) return false;
     return KeysAreEqual(item.GetKey(), key, keysize, item.GetEndian());   
 }  // end ProtoTree::ItemIsEqual()
 
-bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian) const
+bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian)
 {
     if (index < keysize)
     {
@@ -404,7 +404,7 @@ bool ProtoTree::Insert(ProtoTree::Item& item)
     }
     else
     {
-        // Subtree is empty, so make "item" the subtree root
+        // tree is empty, so make "item" the tree root
         root = &item;
         item.parent = (Item*)NULL;
         item.left = item.right = &item;
@@ -605,7 +605,7 @@ ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key,
                                              unsigned int keysize) const
 {
     Item* x = root;
-    if (x)
+    if (NULL != x)
     {
         Endian keyEndian = x->GetEndian();
         Item* p;
@@ -613,7 +613,7 @@ ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key,
         { 
             p = x;
             x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;   
-        } while (x->parent == p);
+        } while ((x->parent == p) && (x->bit < keysize));
         return x;   
     }    
     else
@@ -656,7 +656,7 @@ ProtoTree::Item* ProtoTree::FindPrefixSubtree(const char*  prefix,
 {
     // (TBD) Retest this code more with new "size-agnostic" ProtoTree implementation
     Item* x = root;
-    if (x)
+    if (NULL != x)
     {
         Endian keyEndian = x->GetEndian();
         Item* p;
@@ -740,7 +740,6 @@ void ProtoTree::Iterator::Reset(bool                reverse,
     
     if (reverse)
     {
-        TRACE("resetting iterator to reversed state ...\n");
         // This code is basically the same as ProtoTree::GetLastItem()
         if (NULL != tree->root)
         {
@@ -893,7 +892,11 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
             // This iterator has been moving forward
             // so we need to turn it around.
             reversed = true;
+            // temporarily suspend prefix matching (if applicable) to allow turn-around
+            unsigned savePrefixSize = prefix_size;
+            prefix_size = 0;
             GetPrevItem();
+            prefix_size = savePrefixSize;
         }
         Item* item = prev;
         Endian keyEndian = item->GetEndian();
@@ -1204,6 +1207,8 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
         }
         case REMOVE:
         {
+            // NOTE - This doesn't work quite right for prefix iterators 
+            // (mid-iteration removal of items can break comprehensive prefix iteration)
             // Save our current iterator state
             Item* oldPrev = prev;
             Item* oldNext = next;
@@ -1223,12 +1228,14 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                     if (NULL == oldNext)
                     {
                         // tree is now empty?
-                        ASSERT(NULL == prefix_item);
-                        prev = next = NULL;
+                        //ASSERT(NULL == prefix_item);
+                        if (NULL == prefix_item)
+                            prev = next = NULL;
+                        else
+                            Reset(reversed, prefix_item->GetKey(), prefix_size);
                     }
                     else
                     {   
-                        TRACE("update restoring cursor to oldNext ...\n");
                         SetCursor(*oldNext);
                     }
                 }
@@ -1242,13 +1249,23 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                     if (NULL == oldPrev)
                     {
                         // tree is now empty?
-                        ASSERT(NULL == prefix_item);
-                        prev = next = NULL;
+                        //ASSERT(NULL == prefix_item);
+                        if (NULL == prefix_item)
+                            prev = next = NULL;
+                        else
+                            Reset(reversed, prefix_item->GetKey(), prefix_size);
                     }
                     else
                     {
-                        SetCursor(*oldPrev);
-                        prev = oldPrev;
+                        if (NULL == prefix_item)
+                        {
+                            SetCursor(*oldPrev);
+                            prev = oldPrev;
+                        }
+                        else
+                        {
+                            Reset(reversed, prefix_item->GetKey(), prefix_size);
+                        }
                     }
                 }
             }
@@ -1260,8 +1277,11 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                     if (NULL == oldPrev)
                     {
                         // tree is now empty?   
-                        ASSERT(NULL == prefix_item);
-                        prev = next = NULL;
+                        //ASSERT(NULL == prefix_item);
+                        if (NULL == prefix_item)
+                            prev = next = NULL;
+                        else
+                            Reset(reversed, prefix_item->GetKey(), prefix_size);
                     }
                     else
                     {
@@ -1273,13 +1293,23 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                     if (NULL == oldNext)
                     {
                         // tree is now empty?   
-                        ASSERT(NULL == prefix_item);
-                        prev = next = NULL;
+                        //ASSERT(NULL == prefix_item);
+                        if (NULL == prefix_item)
+                            prev = next = NULL;
+                        else
+                            Reset(reversed, prefix_item->GetKey(), prefix_size);
                     }
                     else
                     {
-                        SetCursor(*oldNext);
-                        next = oldNext;
+                        if (NULL == prefix_item)
+                        {
+                            SetCursor(*oldNext);
+                            next = oldNext;
+                        }
+                        else
+                        {
+                            Reset(reversed, prefix_item->GetKey(), prefix_size);
+                        }
                     }
                 }
             }
@@ -1674,9 +1704,12 @@ ProtoSortedTree::Iterator::~Iterator()
 
 void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned int keysize)
 {
+    list_iterator.Reset(reverse); // put the iterator in the right direction
     if ((NULL != keyMin) && list_iterator.IsValid() && !tree.IsEmpty())
     {
-        Item* match = tree.Find(keyMin, keysize); //static_cast<Item*>(tree.GetItemTree().Find(keyMin, keysize));
+        // refine if a "keyMin" start point was provided
+        // (note for "reverse" == true, "keyMin" is really a "keyMax"
+        Item* match = tree.Find(keyMin, keysize); 
         if (NULL == match)
         {
             // There was no exact match to "keyMin", so look for next item (or prev if reverse == true)
@@ -1696,21 +1729,8 @@ void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned
                 match = tree.item_list.GetHead();    
             else
                 match = static_cast<Item*>(tree.item_list.GetNextItem(*prev));
-            /*
-            // Rewind to first matching item in linked list
-            Item* prevItem = match->GetPrev();
-            while ((NULL != prevItem) && (!prevItem->IsInTree()))
-            {
-                match = prevItem;
-                prevItem = prevItem->GetPrev();
-            }
-            */
         }
         list_iterator.SetCursor(match);
-    }
-    else
-    {
-        list_iterator.Reset(reverse);
     }
 }  // end ProtoSortedTree::Iterator::Reset()
                 

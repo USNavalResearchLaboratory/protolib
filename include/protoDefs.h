@@ -71,7 +71,7 @@ inline void ProtoSystemTime(struct timeval& theTime)
 //       because of various issues with the performance counter stuff,
 //       but on certain systems may be useful to achieve high clock
 //       granularity.  Uncomment the following line if desired:
-//#define USE_PERFORMANCE_COUNTER 1
+#define USE_PERFORMANCE_COUNTER 1
 
 #ifdef _WIN32_WCE
 #define USE_PERFORMANCE_COUNTER 1
@@ -93,12 +93,17 @@ inline LARGE_INTEGER ProtoGetPerformanceCounterFrequency()
         extern long proto_performance_counter_offset;
         if (0 != proto_performance_counter_frequency.QuadPart)
         {
-            SYSTEMTIME st;
-            GetSystemTime(&st);
             LARGE_INTEGER count;
-            QueryPerformanceCounter(&count);
             FILETIME ft;
-            SystemTimeToFileTime(&st, &ft);
+#ifdef _WIN32_WCE       
+			SYSTEMTIME st;
+			QueryPerformanceCounter(&count);
+			GetSystemTime(&st);
+			SystemTimeToFileTime(&st, &ft);
+#else
+			QueryPerformanceCounter(&count);
+			GetSystemTimeAsFileTime(&ft);
+#endif // if/else _WIN32_WCE
             ULARGE_INTEGER systemTime = {ft.dwLowDateTime, ft.dwHighDateTime};
             // Convert system time to Jan 1, 1970 epoch
             const ULARGE_INTEGER epochTime = {0xD53E8000, 0x019DB1DE};
@@ -138,12 +143,17 @@ inline void ProtoSystemTime(struct timeval& theTime)
         extern unsigned long proto_system_count_roll_sec;
         extern LARGE_INTEGER proto_system_count_last;
         // 1) Get current system time and performance counter count
-        SYSTEMTIME st;
-        GetSystemTime(&st);
-        LARGE_INTEGER count;
-        QueryPerformanceCounter(&count);
+		LARGE_INTEGER count;
         FILETIME ft;
+#ifdef _WIN32_WCE       
+        SYSTEMTIME st;
+		QueryPerformanceCounter(&count);
+        GetSystemTime(&st);
         SystemTimeToFileTime(&st, &ft);
+#else
+		QueryPerformanceCounter(&count);
+        GetSystemTimeAsFileTime(&ft);
+#endif // if/else _WIN32_WCE
         ULARGE_INTEGER usec = {ft.dwLowDateTime, ft.dwHighDateTime};
         const ULARGE_INTEGER epochTime = {0xD53E8000, 0x019DB1DE};
         usec.QuadPart -= epochTime.QuadPart;
@@ -272,5 +282,7 @@ typedef uint32_t UINT32;
 #ifndef MIN
 #define MIN(X,Y) ((X<Y)?(X):(Y))
 #endif //!MIN
+
+#include "protoCheck.h"
 
 #endif // _PROTO_DEFS

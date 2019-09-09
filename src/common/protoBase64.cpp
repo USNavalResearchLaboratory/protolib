@@ -181,7 +181,7 @@ unsigned int ProtoBase64::DetermineDecodedSize(const char* input, unsigned int n
     }
     // For every 4 "valid encoded bytes", 3 output bytes are generated
     unsigned int quads = validBytes / 4;
-    unsigned size = 3 * quads;
+    unsigned int size = 3 * quads;
     unsigned int remainder = validBytes % 4;
     // Note "remainder" _should_ only be 0, 2, or 3
     if (remainder > 1)

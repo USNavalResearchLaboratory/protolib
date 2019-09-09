@@ -23,7 +23,8 @@ class BsdDetour : public ProtoDetour
                   const ProtoAddress& srcFilterAddr = PROTO_ADDR_NONE, 
                   unsigned int        srcFilterMask = 0,
                   const ProtoAddress& dstFilterAddr = PROTO_ADDR_NONE,
-                  unsigned int        dstFilterMask = 0);
+                  unsigned int        dstFilterMask = 0,
+                  int                 dscpValue     = -1);
         void Close();
         bool Recv(char*         buffer, 
                   unsigned int& numBytes, 
@@ -115,7 +116,7 @@ bool BsdDetour::SetIPFirewall(Action              action,
                               const ProtoAddress& srcFilterAddr, 
                               unsigned int        srcFilterMask,
                               const ProtoAddress& dstFilterAddr,
-                              unsigned int        dstFilterMask)
+                              unsigned int        dstFilterMask) 
 {
     // 1) IPv4 or IPv6 address family?
     const char* cmd;
@@ -178,7 +179,7 @@ bool BsdDetour::SetIPFirewall(Action              action,
             // cmd  = "ipfw" or "ip6fw"
             const char* f = (ProtoAddress::IPv4 == srcFilterAddr.GetType()) ? 
                     "ip" : "ipv6";
-            sprintf(rule, "%s add divert %hu %s ", cmd, DIVERT_PORT, f);
+            sprintf(rule, "%s add divert %hu %s ", cmd, (UINT16)DIVERT_PORT, f);
             if (0 != srcFilterMask)
             {
                 strcat(rule, "from ");
@@ -189,7 +190,7 @@ bool BsdDetour::SetIPFirewall(Action              action,
                     return false;
                 } 
                 len = strlen(rule);
-                sprintf(rule+len, "/%hu ", srcFilterMask);
+                sprintf(rule+len, "/%u ", srcFilterMask);
             }
             else
             {
@@ -206,7 +207,7 @@ bool BsdDetour::SetIPFirewall(Action              action,
                     return false;
                 } 
                 len = strlen(rule);
-                sprintf(rule+len, "/%hu ", dstFilterMask);
+                sprintf(rule+len, "/%u ", dstFilterMask);
             }
             else
             {
@@ -219,7 +220,7 @@ bool BsdDetour::SetIPFirewall(Action              action,
         }
         else  // (DELETE == action)
         {
-            sprintf(rule, "%s delete %hu\n", cmd, hookFlags - 1);
+            sprintf(rule, "%s delete %d\n", cmd, hookFlags - 1);
             hookFlags = 0;
         }
                    
@@ -268,7 +269,8 @@ bool BsdDetour::Open(int                 hookFlags,
                      const ProtoAddress& srcFilterAddr, 
                      unsigned int        srcFilterMask,
                      const ProtoAddress& dstFilterAddr,
-                     unsigned int        dstFilterMask)
+                     unsigned int        dstFilterMask,
+                     int                 /*dscpValue*/)  // TBD - support DSCP
 {
     if (IsOpen()) Close();
     
@@ -409,14 +411,7 @@ bool BsdDetour::Open(int                 hookFlags,
     }
     unsigned int ifIndexArray[256];
     unsigned int ifCount = ProtoSocket::GetInterfaceIndices(ifIndexArray, 256);
-    if (ifCount < 0)
-    {
-        PLOG(PL_ERROR, "BsdDetour::Open(): error: unable to retrieve list of network interface indices\n");
-        delete rtMgr;
-        Close();
-        return false;
-    }
-    else if (0 == ifCount)
+    if (0 == ifCount)
     {
         PLOG(PL_ERROR, "BsdDetour::Open(): warning: no network interface indices were found.\n");
     }
@@ -530,7 +525,7 @@ bool BsdDetour::Recv(char*          buffer,
     
     struct sockaddr_storage sockAddr;
     socklen_t addrLen = sizeof(sockAddr);
-    size_t result = recvfrom(descriptor, buffer, numBytes, 0, 
+    ssize_t result = recvfrom(descriptor, buffer, numBytes, 0, 
                              (struct sockaddr*)&sockAddr, &addrLen);
     if (result < 0)
     {
@@ -587,7 +582,7 @@ bool BsdDetour::Allow(const char* buffer, unsigned int numBytes)
     {
         socklen_t addrSize = (ProtoAddress::IPv6 == pkt_addr.GetType()) ?
                                 sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
-        size_t result = sendto(descriptor, buffer, (size_t)numBytes, 0, 
+        ssize_t result = sendto(descriptor, buffer, (size_t)numBytes, 0, 
                                &pkt_addr.GetSockAddr(), addrSize);
         if (result < 0)
         {

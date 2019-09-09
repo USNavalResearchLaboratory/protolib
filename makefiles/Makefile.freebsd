@@ -42,14 +42,15 @@ SYSTEM_LIBS = -pthread
 
 SYSTEM_HAVES =  -DHAVE_IPV6 -DHAVE_ASSERT -DHAVE_GETLOGIN -DHAVE_FLOCK -DHAVE_DIRFD $(DNETSEC)
 
-SYSTEM_SRC = ../src/bsd/bsdRouteMgr.cpp
+SYSTEM_SRC = ../src/bsd/bsdRouteMgr.cpp ../src/bsd/bsdNet.cpp ../src/unix/unixNet.cpp
 
 SYSTEM_SRC_EX = ../src/unix/bpfCap.cpp ../src/bsd/bsdDetour.cpp
 
 SYSTEM = freebsd
-CC = g++
+CC = c++
 SYSTEM_CFLAGS = -Wall -Wcast-align -pedantic -fPIC 
 SYSTEM_SOFLAGS = -shared 
+SYSTEM_SOEXT = so
 RANLIB = ranlib
 AR = ar
 

@@ -128,7 +128,7 @@ double ProtoTimer::GetTimeRemaining() const
  */
 ProtoTimerMgr::ProtoTimerMgr()
 : update_pending(false), timeout_scheduled(false),
-  long_head(NULL), long_tail(NULL), short_head(NULL), short_tail(NULL)
+  long_head(NULL), long_tail(NULL), short_head(NULL), short_tail(NULL), invoked_timer(NULL)
 {
     pulse_timer.SetListener(this, &ProtoTimerMgr::OnPulseTimeout);
     pulse_timer.SetInterval(1.0);
@@ -154,6 +154,7 @@ const double ProtoTimerMgr::PRECISION_TIME_THRESHOLD = 8.0;
 */
 void ProtoTimerMgr::OnSystemTimeout()
 {
+    //TRACE("enter OnSystemTimeout() short_head interval:%lf ...\n", short_head ? short_head->GetInterval() : -1.0);
     timeout_scheduled = false;
     bool updateStatus = update_pending;
     update_pending = true;
@@ -163,12 +164,15 @@ void ProtoTimerMgr::OnSystemTimeout()
     while (next)
     {
         double delta = ProtoTime::Delta(next->timeout, now);
+        //TRACE("  delta = %lf\n", delta);
         // We limit to within a microsecond of accuracy on 
         // real-world systems to avoid overzealous attempts
         // at scheduling
         if (delta < 1.0e-06)
         {
-            if(next->DoTimeout())
+            invoked_timer = next;
+            next->DoTimeout();
+            if(invoked_timer== next)
             {
                 if (next->IsActive())
                 {
@@ -182,6 +186,8 @@ void ProtoTimerMgr::OnSystemTimeout()
                     }
                 }
             }
+            // else timer got deleted or otherwise rescheduled, etc
+            invoked_timer = NULL;
             next = short_head;
         } 
         else
@@ -255,15 +261,17 @@ void ProtoTimerMgr::ActivateTimer(ProtoTimer& theTimer)
 
 void ProtoTimerMgr::ReactivateTimer(ProtoTimer& theTimer, const ProtoTime& now)
 {
-    double timerInterval = theTimer.interval;
+    double timerInterval = theTimer.GetInterval();
     if (PRECISION_TIME_THRESHOLD > timerInterval)
     {
+        //TRACE("incrementing timer timeout %lu:%lu by %lf\n", theTimer.timeout.sec(), theTimer.timeout.usec(), timerInterval);
         theTimer.timeout += timerInterval;
+        //TRACE("   new timeout %lu:%lu\n",  theTimer.timeout.sec(), theTimer.timeout.usec());
         double delta = ProtoTime::Delta(theTimer.timeout, now);
-        if (delta < -1.0)
+        if (delta < -0.01 )
         {
             GetCurrentProtoTime(theTimer.timeout);
-            PLOG(PL_ERROR, "ProtoTimerMgr: Warning! real time failure interval:%lf (delta:%lf)\n", 
+            PLOG(PL_DEBUG, "ProtoTimerMgr: Warning! real time failure interval:%lf (delta:%lf)\n", 
                            timerInterval, delta);
         }   
         InsertShortTimer(theTimer);
@@ -291,6 +299,9 @@ void ProtoTimerMgr::DeactivateTimer(ProtoTimer& theTimer)
     {
         if (theTimer.is_precise)
         {
+            // See if timer being removed is currently being "invoked"
+            if (&theTimer == invoked_timer)
+                invoked_timer = NULL;
             RemoveShortTimer(theTimer);
         }
         else
@@ -384,7 +395,7 @@ void ProtoTimerMgr::InsertShortTimer(ProtoTimer& theTimer)
                 return;
             }
         }
-        ASSERT(breakCount < 5000);
+	//ASSERT(breakCount < 5000);
     }
     if (NULL != (theTimer.prev = short_tail))
         short_tail->next = &theTimer;

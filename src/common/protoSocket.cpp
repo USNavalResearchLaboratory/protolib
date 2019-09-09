@@ -1,30 +1,37 @@
+
+/**
+* @file protoSocket.cpp
+* 
+* @brief Network socket container class that provides consistent interface for use of operating system (or simulation environment) transport sockets.
+*/
+
 #ifdef UNIX
 
 #include <unistd.h>
 #include <stdlib.h>  // for atoi()
 #ifdef HAVE_IPV6
 #ifdef MACOSX
-#include <arpa/nameser.h>
+#define __APPLE_USE_RFC_3542 1  // needed to invoke IPV6_PKTINFO
 #endif // MACOSX
-#include <resolv.h>
+#include <netinet/in.h>
 #endif  // HAVE_IPV6
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 #include <errno.h>
 #include <fcntl.h>
 
 #ifndef SIOCGIFHWADDR
 #if defined(SOLARIS) || defined(IRIX)
 #include <sys/sockio.h> // for SIOCGIFADDR ioctl
-#include <netdb.h>      // for rest_init()
+#include <netdb.h>      // for res_init()
 #include <sys/dlpi.h>
 #include <stropts.h>
 #else
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
-#include <ifaddrs.h> 
 #endif  // if/else (SOLARIS || IRIX)
 #endif  // !SIOCGIFHWADDR
 
@@ -34,12 +41,6 @@
 #include <winsock2.h>
 #include <WS2tcpip.h>  // for extra socket options
 #include <Windows.h>
-/**
-* @file protoSocket.cpp
-* 
-* @brief Network socket container class that provides consistent interface for use of operating system (or simulation environment) transport sockets.
-*/
-
 #include <Iphlpapi.h>
 #include <Iptypes.h>
 #endif  // WIN32
@@ -51,11 +52,12 @@
 #define IPV6_FLOWINFO_SEND 33 // from linux/in6.h
 #endif // !IPV6_FLOWINFO_SEND
 
-#include "protoSocket.h"
-#include "protoDebug.h"
-
 #include <stdio.h>
 #include <string.h>
+
+#include "protoSocket.h"
+#include "protoDebug.h"
+#include "protoNet.h"  // needed for Android getifaddrs()
 
 // Hack for using with NRL IPSEC implementation
 #ifdef HAVE_NETSEC
@@ -77,23 +79,23 @@ extern int netsec_requestlen;
 
 #ifdef WIN32
 const ProtoSocket::Handle ProtoSocket::INVALID_HANDLE = INVALID_SOCKET;
+LPFN_WSARECVMSG ProtoSocket::WSARecvMsg = NULL;
 #else
 const ProtoSocket::Handle ProtoSocket::INVALID_HANDLE = -1;
 #endif  // if/else WIN32
 
+ProtoSocket::IPv6SupportStatus ProtoSocket::ipv6_support_status = IPV6_UNKNOWN;
+
 ProtoSocket::ProtoSocket(ProtoSocket::Protocol theProtocol)
-    : domain(IPv4), protocol(theProtocol), state(CLOSED), 
-      handle(INVALID_HANDLE), port(-1), tos(0), ecn_capable(false),
+    : domain(IPv4), protocol(theProtocol), raw_protocol(RAW), state(CLOSED), 
+      handle(INVALID_HANDLE), port(-1), tos(0), ecn_capable(false), ip_recvdstaddr(false),
 #ifdef HAVE_IPV6
       flow_label(0),
 #endif // HAVE_IPV6
-      notifier(NULL), notify_output(false), 
-      notify_input(true), 
-      notify_exception(false),
+      notifier(NULL), notify_output(false), notify_input(true), notify_exception(false),
 #ifdef WIN32
       input_event_handle(NULL), output_event_handle(NULL), 
-      output_ready(false), input_ready(false),
-      closing(false),
+      input_ready(false), output_ready(false), closing(false),
 #endif // WIN32
       listener(NULL), user_data(NULL)
 {
@@ -109,7 +111,6 @@ ProtoSocket::~ProtoSocket()
         listener = NULL; 
     }
 }
-
 
 bool ProtoSocket::SetBlocking(bool blocking)
 {
@@ -134,6 +135,57 @@ bool ProtoSocket::SetBlocking(bool blocking)
     return true;  //Note: taken care automatically under Win32 by WSAAsyncSelect(), etc
 }  // end ProtoSocket::SetBlocking(bool blocking)
 
+bool ProtoSocket::StartInputNotification()
+{
+    if (!notify_input)
+    {
+	    notify_input = true;
+	    notify_input = UpdateNotification();
+    }
+	return notify_input;
+}  // end ProtoSocket::StartInputNotification()
+
+void ProtoSocket::StopInputNotification()
+{
+	if (notify_input)
+    {
+	    notify_input = false;
+	    UpdateNotification();
+    }
+}  // end ProtoSocket::StopInputNotification()
+
+bool ProtoSocket::StartOutputNotification()
+{
+	if (!notify_output)
+    {
+	    notify_output = true;
+	    notify_output = UpdateNotification();
+    }
+	return notify_output;
+}  // end ProtoSocket::StartOutputNotification()
+
+void ProtoSocket::StopOutputNotification()
+{
+	 if (notify_output)
+    {
+	    notify_output = false;
+	    UpdateNotification();
+    }
+}  // end ProtoSocket::StopOutputNotification()
+
+bool ProtoSocket::StartExceptionNotification()
+{
+    notify_exception = true;
+    notify_exception = UpdateNotification();
+    return notify_exception;
+}  // end ProtoSocket::StartExceptionNotification()
+
+void ProtoSocket::StopExceptionNotification()
+{   
+    notify_exception = false;
+    UpdateNotification();
+}  // ProtoSocket::StopExceptionNotification()
+
 bool ProtoSocket::SetNotifier(ProtoSocket::Notifier* theNotifier)
 {
     if (notifier != theNotifier)
@@ -141,10 +193,10 @@ bool ProtoSocket::SetNotifier(ProtoSocket::Notifier* theNotifier)
         if (IsOpen())
         {
             // 1) Detach old notifier, if any
-            if (notifier)
+            if (NULL != notifier)
             {
                 notifier->UpdateSocketNotification(*this, 0);
-                if (!theNotifier)
+                if (NULL == theNotifier)
                 {
                     // Reset socket to "blocking"
                     if(!SetBlocking(true))
@@ -154,11 +206,16 @@ bool ProtoSocket::SetNotifier(ProtoSocket::Notifier* theNotifier)
             else
             {
                 // Set socket to "non-blocking"
-	      if(!SetBlocking(false))
+				if(!SetBlocking(false))
                 {
                     PLOG(PL_ERROR, "ProtoSocket::SetNotifier() SetBlocking(false) error\n", GetErrorString());
                     return false;
                 }
+#ifdef WIN32
+                // Reset input/output ready to initial state?
+                input_ready = false;
+                output_ready = true;
+#endif // WIN32
             }   
             // 2) Set and update new notifier (if applicable)
             notifier = theNotifier;
@@ -175,7 +232,6 @@ bool ProtoSocket::SetNotifier(ProtoSocket::Notifier* theNotifier)
     }
     return true;
 }  // end ProtoSocket::SetNotifier()
-
 
 ProtoAddress::Type ProtoSocket::GetAddressType()
 {
@@ -213,11 +269,8 @@ bool ProtoSocket::Open(UINT16               thePort,
     {
         if (!HostIsIPv6Capable())
         {
-            if (!SetHostIPv6Capable())
-            {
-                PLOG(PL_ERROR, "ProtoSocket::Open() system not IPv6 capable?!\n"); 
-                return false;  
-            }   
+            PLOG(PL_ERROR,"ProtoSocket::Open() system not IPv6 capable?\n");
+            return false;
         }
         domain = IPv6;
     }
@@ -240,7 +293,7 @@ bool ProtoSocket::Open(UINT16               thePort,
             socketType = SOCK_RAW;
             break;
         default:
-	        PLOG(PL_ERROR,"ProtoSocket::Open Error: Unsupported protocol\n");
+	        PLOG(PL_ERROR,"ProtoSocket::Open() error: Unsupported protocol\n");
 	        return false;
     }
     
@@ -251,7 +304,7 @@ bool ProtoSocket::Open(UINT16               thePort,
     int family = AF_INET;
 #endif // if/else HAVE_IPV6
     // Startup WinSock
-    if (!ProtoAddress::Win32Startup())
+	if (!ProtoAddress::Win32Startup())
     {
         PLOG(PL_ERROR, "ProtoSocket::Open() WSAStartup() error: %s\n", GetErrorString());
         return false;
@@ -274,7 +327,20 @@ bool ProtoSocket::Open(UINT16               thePort,
                 protocolType = IPPROTO_TCP;
                 break;
             case RAW:  
-                protocolType = IPPROTO_RAW;
+                switch (raw_protocol)
+                {
+                    case RAW:
+                        protocolType = IPPROTO_RAW;
+                        break;
+                    case UDP:
+                        protocolType = IPPROTO_UDP;
+                        break;
+                    case TCP:
+                        protocolType = IPPROTO_TCP;
+                        break;
+                    default:
+                        protocolType = IPPROTO_RAW;
+                }
                 break; 
         }
         
@@ -327,20 +393,20 @@ bool ProtoSocket::Open(UINT16               thePort,
             {
                 PLOG(PL_ERROR, "ProtoSocket: WSAEnumProtocols() error2!\n");
                 delete[] protocolInfo;
-                ProtoAddress::Win32Cleanup();
+				ProtoAddress::Win32Cleanup();
                 return false;
             }
         }
         else
         {
             PLOG(PL_ERROR, "ProtoSocket: Error allocating memory!\n");
-            ProtoAddress::Win32Cleanup();
+			ProtoAddress::Win32Cleanup();
             return false;
         }        
     }
     else
     {
-        PLOG(PL_ERROR, "ProtoSocket::Open() WSAEnumProtocols() error1!\n");            
+        PLOG(PL_WARN, "ProtoSocket::Open() WSAEnumProtocols() error1!\n");            
     }
 
     // Use WSASocket() to open right kind of socket
@@ -350,10 +416,11 @@ bool ProtoSocket::Open(UINT16               thePort,
     if (UDP == protocol) flags |= (WSA_FLAG_MULTIPOINT_C_LEAF | WSA_FLAG_MULTIPOINT_D_LEAF);
 #endif // !_WIN32_WCE
     handle = WSASocket(family, socketType, 0, infoPtr, 0, flags);
-    if (protocolInfo) delete[] protocolInfo;
+    if (NULL != protocolInfo) delete[] protocolInfo;
     if (INVALID_HANDLE == handle)
     {
-        PLOG(PL_ERROR, "ProtoSocket::WSASocket() error: %s\n", GetErrorString());
+        PLOG(PL_ERROR, "ProtoSocket::Open() WSASocket() error: %s\n", GetErrorString());
+	ProtoAddress::Win32Cleanup();	
         return false;
     }
     if (NULL == (input_event_handle = WSACreateEvent()))
@@ -362,12 +429,35 @@ bool ProtoSocket::Open(UINT16               thePort,
         Close();
         return false;
     } 
+	input_ready = false;
+	output_ready = true;
+#else 
+#ifdef HAVE_IPV6
+    int family = (IPv6 == domain) ? AF_INET6: AF_INET;
 #else
-    int family = (IPv6 == domain) ? PF_INET6: PF_INET;
-    int socketProtocol = (SOCK_RAW == socketType) ? IPPROTO_RAW : 0;
+    int family = AF_INET;
+#endif // if/else HAVE_IPV6
+    int socketProtocol = 0;  // use default socket protocol type if not RAW
+    if (SOCK_RAW == socketType)
+    {
+        switch (raw_protocol)
+        {
+            case RAW:
+                socketProtocol = IPPROTO_RAW;
+                break;
+            case UDP:
+                socketProtocol = IPPROTO_UDP;
+                break;
+            case TCP:
+                socketProtocol = IPPROTO_TCP;
+                break;
+            default:
+                socketProtocol = IPPROTO_RAW;
+        }
+    }
     if (INVALID_HANDLE == (handle = socket(family, socketType, socketProtocol)))
     {
-       PLOG(PL_ERROR, "ProtoSocket: socket() error: %s\n", GetErrorString());
+       PLOG(PL_ERROR, "ProtoSocket::Open() socket() error: %s\n", GetErrorString());
        return false;
     }
     // (TBD) set IP_HDRINCL option for raw socket
@@ -376,7 +466,7 @@ bool ProtoSocket::Open(UINT16               thePort,
 #ifdef NETSEC
     if (net_security_setrequest(handle, 0, netsec_request, netsec_requestlen))
     {
-        PLOG(PL_ERROR, "ProtoSocket: net_security_setrequest() error: %s\n", 
+        PLOG(PL_ERROR, "ProtoSocket::Open() net_security_setrequest() error: %s\n", 
                 GetErrorString());
         Close();
         return false;
@@ -410,12 +500,14 @@ bool ProtoSocket::Open(UINT16               thePort,
     else
     {
         port = -1;
-        if (!UpdateNotification())
-        {
-            PLOG(PL_ERROR, "ProtoSocket::Open() error installing async notification\n");
-            Close();
-            return false;
-        }
+		// TBD - the UpdateNotification() call here may be unnecessary???
+		//       (newly opened, unbound socket needs no notification?)
+		if (!UpdateNotification())
+		{
+			PLOG(PL_ERROR, "ProtoSocket::Open() error installing async notification\n");
+			Close();
+			return false;
+		}
     } 
     // Do the following in case TOS or "ecn_capable" was set _before_ 
     // ProtoSocket::Open() was called.  Note that the "IPv6" flow label
@@ -424,12 +516,31 @@ bool ProtoSocket::Open(UINT16               thePort,
 #ifdef WIN32
     closing = false;
 #endif //WIN32
+    ip_recvdstaddr = false;  // make sure this is reset
     return true;
 }  // end ProtoSocket::Open()
 
+bool ProtoSocket::SetRawProtocol(Protocol theProtocol)
+{
+    bool wasOpen = false;
+    UINT16 portSave = 0;
+    if (IsOpen())
+    {
+        portSave = GetPort();
+        Close();
+        wasOpen = true;
+    }
+    protocol = RAW;
+    raw_protocol = theProtocol;
+    if (wasOpen)
+        return Open(portSave);
+    else
+        return true;
+}  // end ProtoSocket::SetRawProtocol()
+
 bool ProtoSocket::UpdateNotification()
 {    
-    if (NULL != notifier)
+	if (NULL != notifier)
     {
         if (IsOpen() && !SetBlocking(false))
         {
@@ -437,7 +548,7 @@ bool ProtoSocket::UpdateNotification()
             return false;   
         }
         int notifyFlags = NOTIFY_NONE;
-        if (listener)
+        if (NULL != listener)
         {
             switch (protocol)
             {
@@ -473,7 +584,8 @@ bool ProtoSocket::UpdateNotification()
                             notifyFlags = NOTIFY_INPUT;
                             break;
                         case CONNECTED:
-                            notifyFlags = NOTIFY_INPUT;
+			  	            if (notify_input)
+                                notifyFlags = NOTIFY_INPUT;
                             if (notify_output) 
                                 notifyFlags |= NOTIFY_OUTPUT;
                             break;  
@@ -566,6 +678,7 @@ void ProtoSocket::OnNotify(ProtoSocket::Flag theFlag)
     }
     else if (NOTIFY_ERROR == theFlag)
     {
+		TRACE("ProtoSocket NOTIFY_ERROR notification\n");
         switch(state)
     	{
 	        case CONNECTING:
@@ -593,16 +706,12 @@ void ProtoSocket::OnNotify(ProtoSocket::Flag theFlag)
     ASSERT(INVALID_EVENT != event);
     if (listener) listener->on_event(*this, event);
 }  // end ProtoSocket::OnNotify()
-
 bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
 {
-    if (IsBound()) 
-        Close();
-    if (IsOpen() && 
-        (NULL != localAddress) &&
-        (GetAddressType() != localAddress->GetType()))
+    if (IsBound()) Close();
+    if (IsOpen() && (NULL != localAddress) && (GetAddressType() != localAddress->GetType()))
     {
-        Close();
+        Close();  // requires a different address family, so close for reopen
     }
     if (!IsOpen()) 
     {
@@ -642,7 +751,7 @@ bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
         if (NULL != localAddress)
         {
             ((struct sockaddr_in*)&socketAddr)->sin_addr = 
-                ((const struct sockaddr_in*)(&localAddress->GetSockAddr()))->sin_addr;
+                ((const struct sockaddr_in*)(&localAddress->GetSockAddrStorage()))->sin_addr;
         }
 	    else
         {
@@ -678,17 +787,13 @@ bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
 #endif // UNIX
 
 #ifdef HAVE_IPV6
-#if defined(WIN32) 
+#ifdef WIN32
 	OSVERSIONINFO osvi;
 	BOOL osVistaOrLater;
-
 	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-
 	GetVersionEx(&osvi);
-
 	osVistaOrLater = osvi.dwMajorVersion > 5;
-
 	if (osVistaOrLater)
 	{
 		// On Windows Vista & above dual stack sockets are supported so
@@ -701,12 +806,12 @@ bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
 			return false;
 		}
 	}
-#endif
+#endif  // WIN32
 #endif // HAVE_IPV6
     // Bind the socket to the given port     
     if (bind(handle, (struct sockaddr*)&socketAddr, addrSize) < 0)
     {
-       PLOG(PL_ERROR, "ProtoSocket::Bind() bind() error: %s\n", GetErrorString());
+       PLOG(PL_ERROR, "ProtoSocket::Bind(%hu) bind() error: %s\n", thePort, GetErrorString());
        return false;
     }
 
@@ -717,7 +822,7 @@ bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
         PLOG(PL_ERROR, "ProtoSocket::Bind() getsockname() error: %s\n", GetErrorString());
         return false;
     }
-
+	source_addr.SetSockAddr((struct sockaddr&)socketAddr);
     switch(((struct sockaddr*)&socketAddr)->sa_family)
     {
         case AF_INET:    
@@ -734,6 +839,11 @@ bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
             PLOG(PL_ERROR, "ProtoSocket::Bind() error: getsockname() returned unknown address type\n");
             return false;
     }
+#ifdef WIN32
+	// reset input/output readiness since it is a newly bound socket
+	input_ready = false;
+	output_ready = true;
+#endif  // WIN32
     return UpdateNotification();
 }  // end ProtoSocket::Bind()
 
@@ -754,9 +864,11 @@ bool ProtoSocket::Shutdown()
 #ifdef WIN32
         if (SOCKET_ERROR == shutdown(handle, SD_SEND))
 #else
-        if (0 != shutdown(handle, 1))
+        if (0 != shutdown(handle, SHUT_WR))
 #endif // if/else WIN32/UNIX
         {
+            // TBD - should we not bother to re-enable output notification here?
+            //  (i.e. since the user intended to shutdown the socket?!)
             if (notifyOutput)
             {
                 notify_output = true;
@@ -779,19 +891,15 @@ bool ProtoSocket::Shutdown()
 
 void ProtoSocket::Close()
 {
-
     if (IsOpen()) 
     {
-        if (IsConnected()) {Disconnect();};
+        if (IsConnected()) Disconnect();
         state = CLOSED;
         UpdateNotification();   
 #ifdef WIN32
         if (NULL != input_event_handle)
         {
-            if (LOCAL == protocol)
-                CloseHandle(input_event_handle);
-            else
-                WSACloseEvent(input_event_handle);
+            WSACloseEvent(input_event_handle);
             input_event_handle = NULL;
         }
 #endif // if WIN32
@@ -799,19 +907,17 @@ void ProtoSocket::Close()
         {
 #ifdef WIN32
             if (SOCKET_ERROR == closesocket(handle))
-                PLOG(PL_ERROR, "ProtoSocket::Close() warning: closesocket() error: %s\n", GetErrorString());
-            ProtoAddress::Win32Cleanup();
-            output_ready = false;
+                PLOG(PL_WARN, "ProtoSocket::Close() warning: closesocket() error: %s\n", GetErrorString());
+	    ProtoAddress::Win32Cleanup();
+            input_ready = output_ready = false;  
 #else
             close(handle);
 #endif // if/else WIN32/UNIX
-        handle = INVALID_HANDLE;
+	    handle = INVALID_HANDLE;
         }
         port = -1;
     }
-
 }  // end Close() 
-
 
 bool ProtoSocket::Connect(const ProtoAddress& theAddress)
 {
@@ -827,13 +933,6 @@ bool ProtoSocket::Connect(const ProtoAddress& theAddress)
 #else
     socklen_t addrSize = sizeof(struct sockaddr_in);
 #endif // if/else HAVE_IPV6
-    state = CONNECTING;
-    if (!UpdateNotification())
-    {   
-        PLOG(PL_ERROR, "ProtoSocket::Connect() error updating notification\n");
-        state = IDLE;
-        return false;
-    }
 #ifdef WIN32
     int result = WSAConnect(handle, &theAddress.GetSockAddr(), addrSize,
                             NULL, NULL, NULL, NULL);
@@ -842,13 +941,12 @@ bool ProtoSocket::Connect(const ProtoAddress& theAddress)
         if (WSAEWOULDBLOCK != WSAGetLastError())
         {
             PLOG(PL_ERROR, "ProtoSocket::Connect() WSAConnect() error: (%s)\n", GetErrorString());
-            state = IDLE;
-            UpdateNotification();
             return false;
-        }   
-        output_ready = false;   
+        } 
+        output_ready = false;  // not yet connected
+        state = CONNECTING;
     }
-#else
+#else  // UNIX
 #ifdef HAVE_IPV6
     if (flow_label && (ProtoAddress::IPv6 == theAddress.GetType()))
         ((struct sockaddr_in6*)(&theAddress.GetSockAddrStorage()))->sin6_flowinfo = flow_label;
@@ -859,21 +957,21 @@ bool ProtoSocket::Connect(const ProtoAddress& theAddress)
         if (EINPROGRESS != errno)
         {
             PLOG(PL_ERROR, "ProtoSocket::Connect() connect() error: %s\n", GetErrorString());
-            state = IDLE;
-            UpdateNotification();
             return false;
         }
+        state = CONNECTING;
     }
-#endif // if/else WIN32
+#endif // if/else WIN32/UNIX
     else
     {
         state = CONNECTED;
-        if (!UpdateNotification())
-        {
-            PLOG(PL_ERROR, "ProtoSocket::Connect() error updating notification\n");
-            state = IDLE;
-            return false;
-        }
+    }
+    if (!UpdateNotification())
+    {
+        PLOG(PL_ERROR, "ProtoSocket::Connect() error updating notification\n");
+        state = IDLE;
+        UpdateNotification();
+        return false;
     }
     // Use getsockname() to get local "port" and "source_addr"
 #ifdef HAVE_IPV6
@@ -921,10 +1019,10 @@ void ProtoSocket::Disconnect()
 {
     if (IsConnected() || IsConnecting())
     {
-        state = IDLE;
+		state = IDLE;
+        UpdateNotification();
         //source_addr.Invalidate();
         //destination.Invalidate();
-        UpdateNotification();
         struct sockaddr nullAddr;
         memset(&nullAddr, 0 , sizeof(struct sockaddr));
 #ifdef UNIX
@@ -934,8 +1032,8 @@ void ProtoSocket::Disconnect()
             if (connect(handle, &nullAddr, sizeof(struct sockaddr)))
             {
                 if (EAFNOSUPPORT != errno)
-                    PLOG(PL_ERROR, "ProtoSocket::Disconnect() connect() error: %s)\n", GetErrorString());
-                
+                    PLOG(PL_WARN, "ProtoSocket::Disconnect() connect() error: %s)\n", GetErrorString());
+                // (TBD) should we Close() and re-Open() the socket here?
             }
         }
         else
@@ -945,16 +1043,17 @@ void ProtoSocket::Disconnect()
             // (but can't easily recall all socket options, so best not I guess)
             //UINT16 savePort = GetPort();
 	  
-	  // Macosx & linux trigger server resets differently...
+	        // MACOSX & LINUX trigger server resets differently...
 #ifdef MACOSX
             Close();
 #else
-	    nullAddr.sa_family = AF_UNSPEC;
-	    if (connect(handle,&nullAddr,sizeof(struct sockaddr)))
-	      {
-		if (EAFNOSUPPORT != errno)
-		  PLOG(PL_ERROR,"ProtoSocket::Disconnect() connect() error (%s)\n",GetErrorString());
-	      }
+	        nullAddr.sa_family = AF_UNSPEC;
+	        if (connect(handle,&nullAddr,sizeof(struct sockaddr)))
+	        {
+		        if (EAFNOSUPPORT != errno)
+		            PLOG(PL_WARN, "ProtoSocket::Disconnect() connect() error (%s)\n", GetErrorString());
+				Close();
+	        }
 #endif
             //Open(savePort);
         }
@@ -962,9 +1061,9 @@ void ProtoSocket::Disconnect()
         if (SOCKET_ERROR == WSAConnect(handle, &nullAddr, sizeof(struct sockaddr),
                                        NULL, NULL, NULL, NULL))
         {
-            PLOG(PL_WARN, "ProtoSocket::Disconnect() WSAConnect() error: (%s)\n", GetErrorString());
+            //PLOG(PL_WARN, "ProtoSocket::Disconnect() WSAConnect() error: %s\n", GetErrorString());
+			Close();  // if windows doesn't like the null-connect disconnect trick either
         }
-        if (TCP == protocol) output_ready = false;
 #endif  // WIN32
     }
 }  // end ProtoSocket::Disconnect()
@@ -987,17 +1086,16 @@ bool ProtoSocket::Listen(UINT16 thePort)
             return false; 
         } 
     } 
-    if (UDP == protocol)
-        state = CONNECTED;
-    else
-        state = LISTENING;
+    if (TCP == protocol)
+		state = LISTENING;
+	else
+		return true; // UDP sockets don't "listen"
     if (!UpdateNotification())
     {
         state = IDLE;
         PLOG(PL_ERROR, "ProtoSocket::Listen() error updating notification\n");
         return false;
     }
-    if (UDP == protocol) return true;
 #ifdef WIN32
     if (SOCKET_ERROR == listen(handle, 5))
 #else
@@ -1012,6 +1110,11 @@ bool ProtoSocket::Listen(UINT16 thePort)
 
 bool ProtoSocket::Accept(ProtoSocket* newSocket)
 {
+	if (TCP != protocol)
+	{
+		PLOG(PL_ERROR, "ProtoSocket::Accept() error non-TCP socket!\n");
+		return false;
+	}
     ProtoSocket& theSocket = (NULL != newSocket) ? *newSocket : *this;
     // Clone server socket
     if (this != &theSocket) 
@@ -1019,7 +1122,7 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
         // TBD - should override ProtoSocket copy operator to delete old listener???
         if (NULL != theSocket.listener) delete theSocket.listener;
         theSocket = *this;
-        theSocket.listener = NULL; // this->listener is duplicated later (or should we save our old one) 
+        theSocket.listener = NULL; // this->listener is duplicated later (or should we save our old one?) 
     }
 #ifdef HAVE_IPV6
 	struct sockaddr_in6 socketAddr;
@@ -1046,18 +1149,21 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
         switch (WSAGetLastError())
         {
             case WSAEWOULDBLOCK:
-              input_ready = false; 
-              break;
+                if (input_ready)
+                {
+                    input_ready = false; 
+                    UpdateNotification();
+                }
+                break;
             default:
-              PLOG(PL_ERROR, "ProtoSocket::Accept() accept() error: %s\n", GetErrorString());
-              break;
+                PLOG(PL_ERROR, "ProtoSocket::Accept() accept() error: %s\n", GetErrorString());
+                break;
         }
 #endif
         PLOG(PL_ERROR, "ProtoSocket::Accept() accept() error: %s\n", GetErrorString());
         if (this != &theSocket)
         {
 #ifdef WIN32
-            closesocket(theHandle);
             ProtoAddress::Win32Cleanup();
 #endif // WIN32
             theSocket.handle = INVALID_HANDLE;
@@ -1065,6 +1171,7 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
         }
         return false;
     }
+    // Don't think we need make "input_ready" true on accept?
     if (LOCAL != domain)
         theSocket.destination.SetSockAddr((struct sockaddr&)socketAddr);
     // Get the socket name so we know our port number
@@ -1076,7 +1183,7 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
         {
 #ifdef WIN32
             closesocket(theHandle);
-            ProtoAddress::Win32Cleanup();
+			ProtoAddress::Win32Cleanup();
 #endif // WIN32
             theSocket.handle = INVALID_HANDLE;
             theSocket.state = CLOSED;
@@ -1107,12 +1214,12 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
             {
  #ifdef WIN32
                 closesocket(theHandle);
-                ProtoAddress::Win32Cleanup();
+				ProtoAddress::Win32Cleanup();
 #endif // WIN32
                 theSocket.handle = INVALID_HANDLE;
                 theSocket.state = CLOSED;
             }
-	        return false;;
+	        return false;
     }  // end switch()
     if (this == &theSocket)
     {  
@@ -1120,6 +1227,8 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
         UpdateNotification();
 #ifdef WIN32
         closesocket(theSocket.handle);
+		input_ready = false;  // will be notified when there's something to read
+		output_ready = true;  // assume new socket ready for writing
 #else
         close(theSocket.handle);
 #endif // if/else WIN32/UNIX
@@ -1127,13 +1236,15 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
     else
     {   
 #ifdef WIN32
-        theSocket.input_event_handle = NULL;
+		// Need a new event handle for this new, unopened socket
         if (NULL == (theSocket.input_event_handle = WSACreateEvent()))
         {
             PLOG(PL_ERROR, "ProtoSocket::Accept() WSACreateEvent error: %s\n", GetErrorString());
             theSocket.Close();
             return false;
         }
+		theSocket.input_ready = false; // will be notified when there's something to read
+		theSocket.output_ready = true; // assume new socket ready for writing
 #endif // WIN32
         // TBD - keep old listener / notifier and just do an UpdateNotification() here
         if (NULL != listener)
@@ -1156,7 +1267,7 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
 	        }
         }
     }  // end if/else (this == &theSocket)
-    theSocket.handle = theHandle;
+    theSocket.handle = theHandle;  // the socket gets the new handle/descriptor from accept()
     theSocket.state = CONNECTED;
     theSocket.UpdateNotification();
     return true;
@@ -1178,27 +1289,47 @@ bool ProtoSocket::Send(const char*         buffer,
             switch (WSAGetLastError())
             {
                 case WSAEINTR:
-                  return true;
+                    return true;
                 case WSAEWOULDBLOCK:
-                  output_ready = false;
-                  return true;
+                    if (output_ready)
+                    {
+						output_ready = false;  
+                        UpdateNotification();  // because no longer "output ready"
+                    }
+                    return true;
                 case WSAENETRESET:
                 case WSAECONNABORTED:
                 case WSAECONNRESET:
                 case WSAESHUTDOWN:
                 case WSAENOTCONN:
-                  output_ready = false;
-                  OnNotify(NOTIFY_ERROR);
-                  break;
+                    if (output_ready)
+                    {
+                        output_ready = false;
+                        UpdateNotification();  // because no longer "output ready"
+                    }
+                    OnNotify(NOTIFY_ERROR);
+                    break;
                 default:
-                  PLOG(PL_ERROR, "ProtoSocket::Send() WSASend() error: %s\n", GetErrorString());
-                  break;
+                    PLOG(PL_ERROR, "ProtoSocket::Send() WSASend() error: %s\n", GetErrorString());
+                    break;
             }
             return false;
         }
         else
         {
-            output_ready = true;
+            if (bytesSent < numBytes)
+			{
+                if (output_ready)
+                {
+                    output_ready = false;
+				    UpdateNotification();  // because no longer "output ready"
+                }
+			}
+            else if (!output_ready)
+            {
+				output_ready = true;
+                UpdateNotification();
+            }
             numBytes = (unsigned int)bytesSent;
             return true;
         }
@@ -1219,6 +1350,9 @@ bool ProtoSocket::Send(const char*         buffer,
                 case ENOTCONN:
                     OnNotify(NOTIFY_ERROR);
                     break;
+                case ENOBUFS:
+                    PLOG(PL_DEBUG, "ProtoSocket::Send() send() error: %s\n", GetErrorString());
+                    return false;
                 default:
                     PLOG(PL_ERROR, "ProtoSocket::Send() send() error: %s\n", GetErrorString());
                     break;
@@ -1256,10 +1390,13 @@ bool ProtoSocket::Recv(char*            buffer,
         {
             case WSAEINTR:
             case WSAEWOULDBLOCK:
-                
-              input_ready = false; 
-              return true; // not really an error, just no bytes read
-              break;
+                if (input_ready)
+                {
+                    input_ready = false;
+                    UpdateNotification();  // because no longer "input ready"
+                }
+                return true; // not really an error, just no bytes read
+                break;
             case WSAENETRESET:
             case WSAECONNABORTED:
             case WSAECONNRESET:
@@ -1276,7 +1413,18 @@ bool ProtoSocket::Recv(char*            buffer,
     }
     else
     {
+        if ((bytesReceived < numBytes) && (TCP == protocol))
+	  {
+            input_ready = false;  
+	    UpdateNotification();  // because no longer "input ready"
+	  }
+        else if (!input_ready)
+        {
+	  input_ready = true;
+	  UpdateNotification();
+        }
         numBytes = bytesReceived;
+        // TBD - Should we do a NOTIFY_NONE here like we do for UNIX?
         return true;
     }
 #else
@@ -1313,8 +1461,14 @@ bool ProtoSocket::Recv(char*            buffer,
 #endif // if/else WIN32/UNIX
 }  // end ProtoSocket::Recv()
 
+// Note the function prototype and behavior here is changing slightly
+// from the prior / original ProtoSocket::SendTo() behavior such that
+// the EWOULDBLOCK condition no longer returns "false" but instead returns
+// "true", but with setting the referenced "buflen" value to zero.
+// This lets us differentiate this condition, mainly as a cue for when
+// (and when not to) enable socket output notification for async i/o mgmnt.s
 bool ProtoSocket::SendTo(const char*         buffer, 
-                         unsigned int        buflen,
+                         unsigned int&       buflen,
                          const ProtoAddress& dstAddr)
 {
     if (!IsOpen())
@@ -1331,66 +1485,92 @@ bool ProtoSocket::SendTo(const char*         buffer,
         if (!Send(buffer, numBytes))
         {
 
-	        PLOG(PL_WARN, "ProtoSocket::SendTo() error: Send() error\n");
+	        PLOG(PL_DEBUG, "ProtoSocket::SendTo() error: Send() error\n");
+            buflen = 0;
             return false;
         }
-        else if (numBytes != buflen)
+        if (numBytes != buflen)
         {
-
-            PLOG(PL_ERROR, "ProtoSocket::SendTo() error: Send() incomplete\n");
-            return false;
+            PLOG(PL_DEBUG, "ProtoSocket::SendTo() error: Send() incomplete\n");
+            buflen = 0;
+            return true;
         }
         else
         {
             return true;
         }
     }
-    else
-    {
-        socklen_t addrSize;
+	else
+	{
+		socklen_t addrSize;
 #ifdef HAVE_IPV6
-        if (flow_label && (ProtoAddress::IPv6 == dstAddr.GetType()))
-            ((struct sockaddr_in6*)(&dstAddr.GetSockAddrStorage()))->sin6_flowinfo = flow_label;
-        if (ProtoAddress::IPv6 == dstAddr.GetType())
-            addrSize = sizeof(struct sockaddr_in6);
-        else
+		if (flow_label && (ProtoAddress::IPv6 == dstAddr.GetType()))
+			((struct sockaddr_in6*)(&dstAddr.GetSockAddrStorage()))->sin6_flowinfo = flow_label;
+		if (ProtoAddress::IPv6 == dstAddr.GetType())
+			addrSize = sizeof(struct sockaddr_in6);
+		else
 #endif //HAVE_IPV6
-            addrSize = sizeof(struct sockaddr_in);
+			addrSize = sizeof(struct sockaddr_in);
 #ifdef WIN32
         WSABUF wsaBuf;
         wsaBuf.len = buflen;  
         wsaBuf.buf = (char*)buffer;
         DWORD numBytes; 
-
         if (SOCKET_ERROR == WSASendTo(handle, &wsaBuf, 1, &numBytes, 0, 
-            &dstAddr.GetSockAddr(), addrSize, NULL, NULL))
-#else
-        int result = sendto(handle, buffer, (size_t)buflen, 0, 
-                            &dstAddr.GetSockAddr(), addrSize);	
-
-        if (result < 0)
-#endif // if/else WIN32/UNIX
+                                      &dstAddr.GetSockAddr(), addrSize, NULL, NULL))
         {
-#ifdef WIN32
-            if (WSAEWOULDBLOCK == WSAGetLastError())
-                output_ready = false;
-#endif
-	    PLOG(PL_WARN, "ProtoSocket::SendTo() sendto() error: %s\n", GetErrorString());
+            buflen = 0;
+            switch (WSAGetLastError())
+            {
+                case WSAEINTR:
+                  return true;
+                case WSAEWOULDBLOCK:
+                  output_ready = false;
+                  return true;
+                default:
+                  break;
+            }
+            PLOG(PL_ERROR, "ProtoSocket::SendTo() WSASendTo() error: %s\n", GetErrorString());
+            return false;
+        }
+        else
+        {
+            //ASSERT(numBytes == buflen);
+            return true;
+        }
+#else
+        ssize_t result = sendto(handle, buffer, (size_t)buflen, 0, &dstAddr.GetSockAddr(), addrSize);	
+        if (result < 0)
+        {
+            buflen = 0;
+            switch (errno)
+            {
+                case EINTR:
+                case EAGAIN:
+                    return true;
+                case ENOBUFS:
+                    PLOG(PL_DEBUG, "ProtoSocket::SendTo() sendto() error: %s\n", GetErrorString());
+                    return false;
+                default:
+                    break;
+            }
+	        PLOG(PL_ERROR, "ProtoSocket::SendTo() sendto() error: %s\n", GetErrorString());
             return false;
         }
         else
         {   
+            //ASSERT(result == buflen);
             return true;
         }
-    }
+#endif // if/else WIN32/UNIX
+	}
 }  // end ProtoSocket::SendTo()
-
 
 bool ProtoSocket::RecvFrom(char*            buffer, 
                            unsigned int&    numBytes, 
                            ProtoAddress&    sourceAddr)
 {
-    if (!IsBound())
+	if (!IsBound())
     {
         PLOG(PL_ERROR, "ProtoSocket::RecvFrom() error: socket not bound\n");
         numBytes = 0;    
@@ -1407,16 +1587,147 @@ bool ProtoSocket::RecvFrom(char*            buffer,
     {
         numBytes = 0;
 #ifdef WIN32
-        PLOG(PL_WARN, "ProtoSocket::RecvFrom() recvfrom() error: %s\n", GetErrorString());
         switch (WSAGetLastError())
         {
             case WSAEINTR:
             case WSAEWOULDBLOCK:
-                input_ready = false;  
+                if (input_ready)
+                {
+                    input_ready = false;   
+				    UpdateNotification(); // because no longer "input ready"
+                }
                 return true;
                 break;
             default:
+                PLOG(PL_ERROR, "ProtoSocket::RecvFrom() recvfrom() error: %s\n", GetErrorString());
+                break;
+        }
+#else
+        switch (errno)
+        {
+            case EINTR:
+            case EAGAIN:
+                //PLOG(PL_WARN, "ProtoSocket::Recv() recv() error: %s\n", GetErrorString());   
+                return true;            
+                break;
+            default:
                 PLOG(PL_ERROR, "ProtoSocket::Recv() recv() error: %s\n", GetErrorString());
+                break;
+        }
+#endif // UNIX
+        return false;
+    }
+    else
+    {
+#ifdef WIN32
+        if (!input_ready)
+        {
+            input_ready = true;
+            UpdateNotification();
+        }
+#endif  // WIN32
+        numBytes = result;
+        sourceAddr.SetSockAddr(*((struct sockaddr*)&sockAddr));
+        if (!sourceAddr.IsValid())
+        {
+            PLOG(PL_ERROR, "ProtoSocket::RecvFrom() Unsupported address type!\n");
+            return false;
+        }
+        return true;
+    }
+}  // end ProtoSocket::RecvFrom()
+
+void ProtoSocket::EnableRecvDstAddr()
+{
+    if (!ip_recvdstaddr)
+    {
+        int enable = 1; 
+#ifdef IP_RECVDSTADDR
+        if (setsockopt(handle, IPPROTO_IP, IP_RECVDSTADDR, (char*)&enable, sizeof(enable)) < 0)
+            PLOG(PL_WARN, "ProtoSocket::EnableRecvDstAddr() setsocktopt(IP_RECVDSTADDR) error: %s\n", GetErrorString());
+#else
+        if (setsockopt(handle, IPPROTO_IP, IP_PKTINFO, (char*)&enable, sizeof(enable)) < 0)
+            PLOG(PL_WARN, "ProtoSocket::EnableRecvDstAddr() setsocktopt(IP_PKTINFO) error: %s\n", GetErrorString());
+#endif // if/else IP_RECVDSTADDR        
+#ifdef HAVE_IPV6
+#ifdef IPV6_RECVDSTADDR
+        if (setsockopt(handle, IPPROTO_IPV6, IPV6_RECVDSTADDR, (char*)&enable, sizeof(enable)) < 0)
+            PLOG(PL_WARN, "ProtoSocket::EnableRecvDstAddr() setsocktopt(IPV6_RECVDSTADDR) error: %s\n", GetErrorString());
+#else
+        if (setsockopt(handle, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char*)&enable, sizeof(enable)) < 0)
+            PLOG(PL_WARN, "ProtoSocket::EnableRecvDstAddr() setsocktopt(IPV6_PKTINFO) error: %s\n", GetErrorString());
+#endif // if/else IPV6_RECVDSTADDR
+#endif // HAVE_IPV6
+        ip_recvdstaddr = true;
+    }
+#ifdef WIN32
+    // On Windows, you have to "load" the WsaRecvMsg() function pointer
+    if (NULL == WSARecvMsg)
+    {
+        // On first call, we need to fetch the WSARecvMsg() function pointer
+        GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
+        DWORD NumberOfBytes;
+        if (SOCKET_ERROR == WSAIoctl(handle, SIO_GET_EXTENSION_FUNCTION_POINTER, 
+                                     &WSARecvMsg_GUID, sizeof(WSARecvMsg_GUID),
+                                     &WSARecvMsg, sizeof WSARecvMsg,
+                                     &NumberOfBytes, NULL, NULL))
+        {
+            PLOG(PL_ERROR, "ProtoSocket::EnableRecvDstAddr() error: WSARecvMsg() not supported on this platform!\n");
+            WSARecvMsg = NULL;
+	    }
+    }
+#endif // WIN32
+}  // end ProtoSocket::EnableRecvDstAddr()
+
+#ifndef WIN32
+// Variant RecvFrom() that uses recvmsg() to get destAddr information
+bool ProtoSocket::RecvFrom(char*            buffer, 
+                           unsigned int&    numBytes, 
+                           ProtoAddress&    sourceAddr,
+                           ProtoAddress&    destAddr)
+{
+    if (!IsBound())
+    {
+        PLOG(PL_ERROR, "ProtoSocket::RecvFrom() error: socket not bound\n");
+        numBytes = 0;    
+    }
+    if (!ip_recvdstaddr) EnableRecvDstAddr();  // should enable ahead of time to make sure you don't miss any
+    
+#ifdef HAVE_IPV6    
+    struct sockaddr_storage sockAddr;
+#else
+    struct sockaddr sockAddr;
+#endif  // if/else HAVE_IPV6
+    socklen_t addrLen = sizeof(sockAddr);
+    
+    char cdata[64];
+    struct msghdr msg;  // TBD - should we bzero() our "cdata" and "msg" here???
+    struct iovec iov[1];
+    iov[0].iov_base = buffer;
+    iov[0].iov_len = numBytes;
+    msg.msg_name = &sockAddr;
+    msg.msg_namelen = addrLen;
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = cdata;
+    msg.msg_controllen = 64;//sizeof(cdata);
+    msg.msg_flags = 0;
+    destAddr.Invalidate();
+    int result = recvmsg(handle, &msg, 0);
+    if (result < 0)
+    {
+        numBytes = 0;
+#ifdef WIN32
+        switch (WSAGetLastError())
+        {
+            case WSAEINTR:
+            case WSAEWOULDBLOCK:
+				//PLOG(PL_WARN, "ProtoSocket::RecvFrom() recvmsg() error: %s\n", GetErrorString());
+				input_ready = false;  
+                return true;
+                break;
+            default:
+                PLOG(PL_ERROR, "ProtoSocket::RecvFrom() recvmsg() error: %s\n", GetErrorString());
                 break;
         }
 #else
@@ -1443,10 +1754,153 @@ bool ProtoSocket::RecvFrom(char*            buffer,
             PLOG(PL_ERROR, "ProtoSocket::RecvFrom() Unsupported address type!\n");
             return false;
         }
+        // Get destAddr info
+        for (struct cmsghdr* cmptr = CMSG_FIRSTHDR(&msg); cmptr != NULL; cmptr = CMSG_NXTHDR(&msg, cmptr)) 
+        {
+            if (cmptr->cmsg_level == IPPROTO_IP)
+            {
+#ifdef IP_RECVDSTADDR
+                if ((cmptr->cmsg_level == IPPROTO_IP) && (cmptr->cmsg_type == IP_RECVDSTADDR))
+                {
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)CMSG_DATA(cmptr), 4);
+                }
+#else
+                if (cmptr->cmsg_type == IP_PKTINFO)
+                {
+                    struct in_pktinfo* pktInfo = (struct in_pktinfo*)((void*)CMSG_DATA(cmptr));
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(&pktInfo->ipi_addr), 4);
+                }
+#endif // if/else IP_RECVDSTADDR
+            }
+#ifdef HAVE_IPV6
+            if (cmptr->cmsg_level == IPPROTO_IPV6)   
+            {             
+#ifdef IPV6_RECVDSTADDR
+                if (cmptr->cmsg_type == IPV6_RECVDSTADDR)
+                {
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv6, (char*)CMSG_DATA(cmptr), 16);
+                }
+#else
+                if (cmptr->cmsg_type == IPV6_PKTINFO)
+                {
+                    struct in6_pktinfo* pktInfo = (struct in6_pktinfo*)((void*)CMSG_DATA(cmptr));
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv6, (char*)(&pktInfo->ipi6_addr), 16);
+                }
+#endif // if/else IPV6_RECVDSTADDR
+            }
+#endif // HAVE_IPV6    
+        } 
         return true;
     }
-}  // end ProtoSocket::RecvFrom()
+}  // end ProtoSocket::RecvFrom(w/ destAddr)
+#else
+// WIN32 implementation
+bool ProtoSocket::RecvFrom(char*            buffer, 
+                           unsigned int&    numBytes, 
+                           ProtoAddress&    sourceAddr,
+                           ProtoAddress&    destAddr)
+{
+	if (!IsBound())
+    {
+        PLOG(PL_ERROR, "ProtoSocket::RecvFrom() error: socket not bound\n");
+        numBytes = 0;    
+    }
+    if (!ip_recvdstaddr) EnableRecvDstAddr();  // should enable ahead of time to make sure you don't miss any
+    destAddr.Invalidate();  // will be filled in if possible
+    
+    if (NULL == WSARecvMsg)
+    {
+        PLOG(PL_WARN, "ProtoSocket::RecvFrom() warning: WSARecvMsg() not supported\n");
+        return RecvFrom(buffer, numBytes, sourceAddr);
+    }
+    struct sockaddr sockAddr;
+    socklen_t addrLen = sizeof(sockAddr);
+    
+    // Buffer to receive control data (destAddr info)
+    char cdata[256];
+    // Buffer to receive data
+    WSABUF dbuf[1];
+    dbuf[0].len = numBytes;
+    dbuf[0].buf = buffer;
+    
+    WSAMSG msg;
+    msg.name = &sockAddr;
+    msg.namelen = addrLen;
+    msg.lpBuffers = dbuf;
+    msg.dwBufferCount = 1;
+    msg.Control.len = 64;
+    msg.Control.buf = cdata;
+    msg.dwFlags = 0;
+    destAddr.Invalidate();
+    
+    DWORD bytesRecvd;
+    if (SOCKET_ERROR == WSARecvMsg(handle, &msg, &bytesRecvd, NULL, NULL))
+    {
+        numBytes = 0;
+        switch (WSAGetLastError())
+        {
+            case WSAEINTR:
+            case WSAEWOULDBLOCK:
+				//PLOG(PL_WARN, "ProtoSocket::RecvFrom() WSARecvMsg() error: %s\n", GetErrorString());
+				input_ready = false;  
+                return true;
+                break;
+            default:
+                PLOG(PL_ERROR, "ProtoSocket::RecvFrom() WSARecvMsg() error: %s\n", GetErrorString());
+                break;
+        }
+        return false;
+    }
+    else
+    {
+        numBytes = bytesRecvd;
+        sourceAddr.SetSockAddr(*((struct sockaddr*)&sockAddr));
+        if (!sourceAddr.IsValid())
+        {
+            PLOG(PL_ERROR, "ProtoSocket::RecvFrom() error: Unsupported address type!\n");
+            return false;
+        }
+        // Get destAddr info
+		for (WSACMSGHDR* cmptr = WSA_CMSG_FIRSTHDR(&msg); cmptr != NULL; cmptr = WSA_CMSG_NXTHDR(&msg, cmptr)) 
+        {
+			if (cmptr->cmsg_level == IPPROTO_IP)
+            {
+#ifdef IP_RECVDSTADDR
+                if ((cmptr->cmsg_level == IPPROTO_IP) && (cmptr->cmsg_type == IP_RECVDSTADDR))
+                {
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)WSA_CMSG_DATA(cmptr), 4);
+                }
+#else
+                if (cmptr->cmsg_type == IP_PKTINFO)
+                {
+                    struct in_pktinfo* pktInfo = (struct in_pktinfo*)((void*)WSA_CMSG_DATA(cmptr));
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(&pktInfo->ipi_addr), 4);
+                }
+#endif // if/else IP_RECVDSTADDR
+            }
+#ifdef HAVE_IPV6
+            if (cmptr->cmsg_level == IPPROTO_IPV6)   
+            {             
+#ifdef IPV6_RECVDSTADDR
+                if (cmptr->cmsg_type == IPV6_RECVDSTADDR)
+                {
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv6, (char*)WSA_CMSG_DATA(cmptr), 16);
+                }
+#else
+                if (cmptr->cmsg_type == IPV6_PKTINFO)
+                {
+                    struct in6_pktinfo* pktInfo = (struct in6_pktinfo*)((void*)WSA_CMSG_DATA(cmptr));
+                    destAddr.SetRawHostAddress(ProtoAddress::IPv6, (char*)(&pktInfo->ipi6_addr), 16);
+                }
+#endif // if/else IPV6_RECVDSTADDR
+            }
+#endif // HAVE_IPV6    
+        } 
+        return true;
+    }
+}  // end ProtoSocket::RecvFrom(w/ destAddr) [WIN32]
 
+#endif // if/else !WIN32
 
 #ifdef HAVE_IPV6
 #ifndef IPV6_ADD_MEMBERSHIP
@@ -1460,15 +1914,23 @@ bool ProtoSocket::RecvFrom(char*            buffer,
  * Thus NT 4.0 probably doesn't support IPv6 multicast???
  * So, here we use WSAJoinLeaf() iff the OS is NT and version 4.0 or earlier.
  */
+ // Full SSM support is still work in progress (only supported on Linux and Mac OSX for moment)
 bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress, 
-                            const char*         interfaceName)
+                            const char*         interfaceName,  // optional interface name for group join
+                            const ProtoAddress* sourceAddress)  // optional source address for SSM support
 {
     if (!IsOpen() && !Open(0, groupAddress.GetType(), false))
     {
-        PLOG(PL_ERROR, "ProtoSocket::JoinGroup() error: socket not open\n");
+        PLOG(PL_ERROR, "ProtoSocket::JoinGroup() error: unable to open socket\n");
         return false;
     }    
 #ifdef WIN32
+    if (NULL != sourceAddress)
+    {
+        // WIN32 SSM support will be added in near future
+        PLOG(PL_ERROR, "ProtoSocket::JoinGroup() error: Source-specific Multicast (SSM) for WIN32 not yet supported\n");
+        return false;
+    }
     // on WinNT 4.0 (or earlier?), we seem to need WSAJoinLeaf() for multicast to work
     // Thus NT 4.0 probably doesn't support IPv6 multicast???
     // So, here we use WSAJoinLeaf() iff the OS is NT and version 4.0 or earlier.
@@ -1501,12 +1963,18 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
 #ifdef HAVE_IPV6
     if  (ProtoAddress::IPv6 == groupAddress.GetType())
     {
+        if (NULL != sourceAddress)
+        {
+            // IPv6 SSM support will be added in near future
+            PLOG(PL_ERROR, "ProtoSocket::JoinGroup() error: Source-specific Multicast (SSM) for IPv6 not yet supported\n");
+            return false;
+        }
         if (IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6*)&groupAddress.GetSockAddrStorage())->sin6_addr))
         {
             struct ip_mreq mreq;
             mreq.imr_multiaddr.s_addr = 
                 IN6_V4MAPPED_ADDR(&(((struct sockaddr_in6*)&groupAddress.GetSockAddrStorage())->sin6_addr));
-            if (interfaceName)
+            if (NULL != interfaceName)
             {
                 ProtoAddress interfaceAddress;
 #if defined(WIN32) && (WINVER < 0x0500)
@@ -1537,65 +2005,120 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
         {
             struct ipv6_mreq mreq;
             mreq.ipv6mr_multiaddr = ((struct sockaddr_in6*)&groupAddress.GetSockAddrStorage())->sin6_addr;
-            if (interfaceName)
+            if (NULL != interfaceName)
                 mreq.ipv6mr_interface = GetInterfaceIndex(interfaceName);               
             else
                 mreq.ipv6mr_interface = 0;
             result = setsockopt(handle, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
-        }
+       }
     }
     else
 #endif // HAVE_IPV6
     {
-        struct ip_mreq mreq;
-#ifdef HAVE_IPV6
-        mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddrStorage())->sin_addr;
-#else
-        mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddr())->sin_addr;
-#endif  // end if/else HAVE_IPV6
-        if (interfaceName)
+        // IPv4 group join
+        if (NULL == sourceAddress)
         {
-            ProtoAddress interfaceAddress;
-#if defined(WIN32) && (WINVER < 0x0500)
-            if (interfaceAddress.ResolveFromString(interfaceName))
-            {
-                mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
-            }
-            else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+            // non-SSM
+        
+            struct ip_mreq mreq;
+#ifdef HAVE_IPV6
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddrStorage())->sin_addr;
 #else
-            if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
-#endif // if/else defined(WIN32) && (WINVER < 0x0500)
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddr())->sin_addr;
+#endif  // end if/else HAVE_IPV6
+            if (NULL != interfaceName)
             {
-                mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                ProtoAddress interfaceAddress;
+#if defined(WIN32) && (WINVER < 0x0500)
+                if (interfaceAddress.ResolveFromString(interfaceName))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#else
+                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#endif // if/else defined(WIN32) && (WINVER < 0x0500)
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else
+                {
+                    PLOG(PL_ERROR, "ProtoSocket::JoinGroup() error: invalid interface name\n");
+                    return false;
+                }
             }
             else
             {
-                PLOG(PL_ERROR, "ProtoSocket::JoinGroup() invalid interface name\n");
-                return false;
+                mreq.imr_interface.s_addr = INADDR_ANY;  
             }
+            result = setsockopt(handle, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
         }
         else
         {
-            mreq.imr_interface.s_addr = INADDR_ANY;  
+            // SSM join   
+#ifdef _PROTOSOCKET_IGMPV3_SSM
+            struct ip_mreq_source mreq;
+#ifdef HAVE_IPV6
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddrStorage())->sin_addr;
+            mreq.imr_sourceaddr = ((struct sockaddr_in*)&sourceAddress->GetSockAddrStorage())->sin_addr;
+#else
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddr())->sin_addr;
+            mreq.imr_sourceaddr = ((struct sockaddr_in*)&sourceAddress->GetSockAddr())->sin_addr;
+#endif // if/else HAVE_IPV6
+            if (NULL != interfaceName)
+            {
+                ProtoAddress interfaceAddress;
+                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else
+                {
+                    PLOG(PL_ERROR, "ProtoSocket::JoinGroup() invalid interface name\n");
+                    return false;
+                }
+            }
+            else
+            {
+                mreq.imr_interface.s_addr = INADDR_ANY;  
+            }
+            result = setsockopt(handle, IPPROTO_IP, IP_ADD_SOURCE_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
+            if (result  < 0) 
+            {
+                   PLOG(PL_ERROR, "ProtoSocket::JoinGroup() setsockopt(IP_ADD_SOURCE_MEMBERSHIP) error: %s\n", strerror( errno ));
+                   return false;
+            }
+		    return true;
+#else
+            PLOG(PL_ERROR, "ProtoSocket:JoinGroup() error: SSM support not included in this build\n");
+            return false;
+#endif
         }
-        result = setsockopt(handle, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
     }
     if (result < 0)
     { 
-        PLOG(PL_ERROR, "ProtoSocket: Error joining multicast group: %s\n", GetErrorString());
+        PLOG(PL_ERROR, "ProtoSocket:JoinGroup() setsockopt(add membership) error: %s\n", GetErrorString());
         return false;
     }  
     return true;
 }  // end ProtoSocket::JoinGroup() 
 
 bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddress,
-                             const char*         interfaceName)
+                             const char*         interfaceName,
+                             const ProtoAddress* sourceAddress)
 {    
     if (!IsOpen()) return true;
     int result;
 #ifdef HAVE_IPV6
     if (ProtoAddress::IPv6 == groupAddress.GetType())
     {
+        // IPv6 leave
+        if (NULL != sourceAddress)
+        {
+            // IPv6 SSM support will be added in near future
+            PLOG(PL_ERROR, "ProtoSocket::LeaveGroup() error: Source-specific Multicast (SSM) for IPv6 not yet supported\n");
+            return false;
+        }
         if (IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6*)&groupAddress.GetSockAddrStorage())->sin6_addr))
         {
             struct ip_mreq mreq;
@@ -1634,31 +2157,72 @@ bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddress,
     else
 #endif //HAVE_IPV6
     {
-        struct ip_mreq mreq;
-#ifdef HAVE_IPV6
-        mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddrStorage())->sin_addr;
-#else
-        mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddr())->sin_addr;
-#endif  // end if/else HAVE_IPV6
-        if (interfaceName)
+        // IPv4 leave
+        if (NULL == sourceAddress)
         {
-            ProtoAddress interfaceAddress;
-            if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, 
-                                    interfaceAddress))
+            // non-SSM
+            struct ip_mreq mreq;
+#ifdef HAVE_IPV6
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddrStorage())->sin_addr;
+#else
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddr())->sin_addr;
+#endif  // end if/else HAVE_IPV6
+            if (NULL != interfaceName)
             {
-                mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                ProtoAddress interfaceAddress;
+                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, 
+                                        interfaceAddress))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else
+                {
+                    PLOG(PL_ERROR, "ProtoSocket::LeaveGroup() invalid interface name\n");
+                    return false;
+                }
             }
             else
             {
-                PLOG(PL_ERROR, "ProtoSocket::LeaveGroup() invalid interface name\n");
-                return false;
+                    mreq.imr_interface.s_addr = INADDR_ANY; 
             }
+            result = setsockopt(handle, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
         }
         else
         {
-                mreq.imr_interface.s_addr = INADDR_ANY; 
+            // SSM
+#ifdef _PROTOSOCKET_IGMPV3_SSM
+            struct ip_mreq_source   mreq;
+#ifdef HAVE_IPV6
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddrStorage())->sin_addr;
+            mreq.imr_sourceaddr = ((struct sockaddr_in*)&sourceAddress->GetSockAddrStorage())->sin_addr;
+#else
+            mreq.imr_multiaddr = ((struct sockaddr_in*)&groupAddress.GetSockAddr())->sin_addr;
+            mreq.imr_sourceaddr = ((struct sockaddr_in*)&sourceAddress->GetSockAddr())->sin_addr;
+#endif  // if/else HAVE_IPV6
+            if (interfaceName)
+            {
+                ProtoAddress interfaceAddress;
+                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, 
+                                        interfaceAddress))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else
+                {
+                    PLOG(PL_ERROR, "ProtoSocket::LeaveGroup() invalid interface name\n");
+                    return false;
+                }
+            }
+            else
+            {
+                    mreq.imr_interface.s_addr = INADDR_ANY; 
+            }
+            result = setsockopt(handle, IPPROTO_IP, IP_DROP_SOURCE_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
+#else
+            PLOG(PL_ERROR, "ProtoSocket:LeaveGroup() error: SSM support not included in this build\n");
+            return false;
+#endif  
         }
-        result = setsockopt(handle, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
     }
     if (result < 0)
     {
@@ -1671,40 +2235,45 @@ bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddress,
     }
 }  // end ProtoSocket::LeaveGroup() 
 
+// Set MulticastTTL Function name retained for backwards compatability
+// See new ProtoSocket::SetUnicastTTL
 bool ProtoSocket::SetTTL(unsigned char ttl)
 {   
 #if defined(WIN32) && !defined(_WIN32_WCE)
     DWORD dwTTL = (DWORD)ttl; 
     DWORD dwBytesXfer;
-	int optVal = ttl;
-	int optLen = sizeof(int);
-	// We set unicast ttl too
-	if (setsockopt(handle,IPPROTO_IP,IP_TTL,(char*)&optVal,optLen) == SOCKET_ERROR)
-		PLOG(PL_ERROR, "ProtoSocket: setsockopt(IP_TTL) error: %s\n", GetErrorString()); 
+    int optVal = ttl;
+    int optLen = sizeof(int);
     if (WSAIoctl(handle, SIO_MULTICAST_SCOPE, &dwTTL, sizeof(dwTTL),
 			    NULL, 0, &dwBytesXfer, NULL, NULL))
 
 #else
-    int result;
+    int result = 0;
 #ifdef HAVE_IPV6
     if (IPv6 == domain)
     {
-        socklen_t hops = (socklen_t) ttl;
-
 #ifdef MACOSX
-        result = setsockopt(handle, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 
-                            &hops, sizeof(&hops));
+    // v6 multicast TTL socket option must be an int
+        int hops = (int) ttl;
 
-	if (result == 0)
-	  result = setsockopt(handle, IPPROTO_IPV6, IPV6_UNICAST_HOPS,
-			      &hops, sizeof(&hops));
+        if (protocol != ProtoSocket::TCP)
+            result = setsockopt(handle, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 
+                                &hops, sizeof(hops));
+
+        if (result == 0)
+            result = setsockopt(handle, IPPROTO_IPV6, IPV6_UNICAST_HOPS,
+                                &hops, sizeof(hops));
 #else
-        result = setsockopt(handle, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 
-                            &hops, sizeof(hops));
 
-	if (result == 0)
-	  result = setsockopt(handle, IPPROTO_IPV6, IPV6_UNICAST_HOPS,
-			      &hops, sizeof(hops));
+        socklen_t hops = (socklen_t) ttl;
+        
+        if (protocol != ProtoSocket::TCP)
+            result = setsockopt(handle, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 
+                                &hops, sizeof(hops));
+        
+        if (result == 0)
+            result = setsockopt(handle, IPPROTO_IPV6, IPV6_UNICAST_HOPS,
+                                &hops, sizeof(hops));
 #endif // MACOSX
     }
     else
@@ -1716,17 +2285,17 @@ bool ProtoSocket::SetTTL(unsigned char ttl)
 	socklen_t hops = (socklen_t)ttl;
 #endif // if/else _WIN32_WCE/UNIX
 #ifdef MACOSX
-        result = setsockopt(handle, IPPROTO_IP, IP_MULTICAST_TTL, 
-                            (char*)&hops, sizeof(&hops));
+	if (protocol != ProtoSocket::TCP)
+	  result = setsockopt(handle, IPPROTO_IP, IP_MULTICAST_TTL, 
+                            (char*)&hops, sizeof(hops));
+
 	if (result == 0)
 	  result = setsockopt(handle,IPPROTO_IP, IP_TTL,
-			      (char*)&hops, sizeof(&hops));
+			      (char*)&hops, sizeof(hops));
 
 #else
-        result = setsockopt(handle, IPPROTO_IP, IP_MULTICAST_TTL, 
-                            (char*)&hops, sizeof(hops));
-	if (result == 0)
-	  result = setsockopt(handle,IPPROTO_IP, IP_TTL,
+	if (protocol != ProtoSocket::TCP)
+	  result = setsockopt(handle, IPPROTO_IP, IP_MULTICAST_TTL, 
 			      (char*)&hops, sizeof(hops));
 #endif 
     }
@@ -1742,6 +2311,63 @@ bool ProtoSocket::SetTTL(unsigned char ttl)
         return true;
     }
 }  // end ProtoSocket::SetTTL()
+
+bool ProtoSocket::SetUnicastTTL(unsigned char ttl)
+{   
+#if defined(WIN32) && !defined(_WIN32_WCE)
+    DWORD dwTTL = (DWORD)ttl; 
+    DWORD dwBytesXfer;
+    int optVal = ttl;
+    int optLen = sizeof(int);
+    if (setsockopt(handle,IPPROTO_IP,IP_TTL,(char*)&optVal,optLen) == SOCKET_ERROR)
+	{
+      PLOG(PL_ERROR, "ProtoSocket: setsockopt(IP_TTL) error: %s\n", GetErrorString()); 
+	  return false;
+	}
+#else
+    int result = 0;
+#ifdef HAVE_IPV6
+    if (IPv6 == domain)
+    {
+        socklen_t hops = (socklen_t) ttl;
+
+#ifdef MACOSX
+	result = setsockopt(handle, IPPROTO_IPV6, IPV6_UNICAST_HOPS,
+			      &hops, sizeof(&hops));
+#else
+	result = setsockopt(handle, IPPROTO_IPV6, IPV6_UNICAST_HOPS,
+			      &hops, sizeof(hops));
+#endif // MACOSX
+    }
+    else
+#endif // HAVE_IPV6
+    {
+#ifdef _WIN32_WCE
+        int hops = (int)ttl;
+#else
+	socklen_t hops = (socklen_t)ttl;
+#endif // if/else _WIN32_WCE/UNIX
+#ifdef MACOSX
+	result = setsockopt(handle,IPPROTO_IP, IP_TTL,
+			    (char*)&hops, sizeof(&hops));
+
+#else
+	result = setsockopt(handle,IPPROTO_IP, IP_TTL,
+			    (char*)&hops, sizeof(hops));
+#endif 
+    }
+    if (result < 0) 
+    { 
+		
+	PLOG(PL_ERROR, "ProtoSocket: setsockopt(IP_MULTICAST_TTL) error: %s\n", GetErrorString()); 
+        return false;
+    }
+#endif // if/else WIN32/UNIX | _WIN32_WCE
+    else
+    {   
+        return true;
+    }
+}  // end ProtoSocket::SetUnicastTTL()
 
 bool ProtoSocket::SetTOS(UINT8 theTOS)
 { 
@@ -1766,7 +2392,7 @@ bool ProtoSocket::SetTOS(UINT8 theTOS)
    if (setsockopt(handle, SOL_IP, IP_TOS, (char*)&tosBits, sizeof(tosBits)) < 0) 
 #else
     int tosBits = theTOS;
-    int result;
+    int result = -1;
 #ifdef HAVE_IPV6
     if (IPv6 == domain)
     {
@@ -1863,7 +2489,7 @@ bool ProtoSocket::SetFragmentation(bool enable)
             // For IPv6 sockets, we can try "IPV6_DONTFRAG" as a backup
             // (clear DF to allow fragmenation to occur)
             int df = enable ? 0 : 1;
-            if (setsockopt(handle, IPPROTO_IP6, IPV6_DONTFRAG, &df, sizeof(df)) < 0)
+            if (setsockopt(handle, IPPROTO_IPV6, IPV6_DONTFRAG, &df, sizeof(df)) < 0)
             {
                 PLOG(PL_ERROR, "ProtoSocket::SetFragmentation() setsockopt(IPV6_DONTFRAG) error: %s\n", GetErrorString());
                 return false;
@@ -1891,7 +2517,7 @@ bool ProtoSocket::SetFragmentation(bool enable)
         return false;
     }
 #else
-    PLOG(PL_ERROR, "ProtoSocket::SetFragmentation() error: IP_MTU_DISCOVER or IP_DONTFRAG socket option not supported!\n");
+    PLOG(PL_WARN, "ProtoSocket::SetFragmentation() warning: IP_MTU_DISCOVER or IP_DONTFRAG socket option not supported!\n");
     return false;
 #endif // if/else IP_MTU_DISCOVER / IP_DONTFRAG / none
 #endif // if/else WIN32 / UNIX
@@ -2039,7 +2665,7 @@ bool ProtoSocket::SetReuse(bool state)
             
 #ifdef SO_REUSEPORT  // not defined on Linux for some reason?
 #ifdef WIN32
-    BOOL reusePort = (BOOL)reusePort;
+    BOOL reusePort = (BOOL)resuse;
     if (setsockopt(handle, SOL_SOCKET, SO_REUSEPORT, (char*)&reusePort, sizeof(reusePort)) < 0)
 #else
     if (setsockopt(handle, SOL_SOCKET, SO_REUSEPORT, (char*)&reuse, sizeof(reuse)) < 0)
@@ -2063,50 +2689,29 @@ bool ProtoSocket::HostIsIPv6Capable()
     }
     SOCKET handle = socket(AF_INET6, SOCK_DGRAM, 0);
     closesocket(handle);
-    ProtoAddress::Win32Cleanup();
+	ProtoAddress::Win32Cleanup();
     if(INVALID_SOCKET == handle)
         return false;
     else
         return true;
 #else
-#ifdef RES_USE_INET6
-    if (0 == (_res.options & RES_INIT)) res_init();
-    if (0 == (_res.options & RES_USE_INET6))
-        return false;
-    else
-#endif // RES_USE_INET6
-        return true;
+    if (IPV6_UNKNOWN == ipv6_support_status)
+    {
+        ProtoAddressList addrList;
+        ProtoNet::GetHostAddressList(ProtoAddress::IPv6, addrList);
+        if (addrList.IsEmpty())
+        {
+            ipv6_support_status = IPV6_UNSUPPORTED;
+        }
+        else
+        {
+            ipv6_support_status = IPV6_SUPPORTED;
+        }
+    }
+    return (IPV6_SUPPORTED == ipv6_support_status);
 #endif  // if/else WIN32
 }  // end ProtoSocket::HostIsIPv6Capable()
 
-bool ProtoSocket::SetHostIPv6Capable()
-{
-#ifdef WIN32
-    if (!ProtoAddress::Win32Startup())
-    {
-        PLOG(PL_ERROR, "ProtoSocket::SetHostIPv6Capable() WSAStartup() error: %s\n", GetErrorString());
-        return false;
-    }
-    SOCKET handle = socket(AF_INET6, SOCK_DGRAM, 0);
-    closesocket(handle);
-    ProtoAddress::Win32Cleanup();
-    if(INVALID_SOCKET == handle)
-        return false;
-    else
-        return true;
-#else
-#ifdef RES_USE_INET6
-    if (0 == (_res.options & RES_INIT)) 
-        res_init();
-    if (0 == (_res.options & RES_USE_INET6)) 
-        _res.options |= RES_USE_INET6; 
-    if (0 == (_res.options & RES_USE_INET6))
-        return false;
-    else
-#endif // RES_USE_INET6
-        return true;
-#endif  // if/else WIN32
-}  // end ProtoSocket::SetHostIPv6Capable()
 #endif // HAVE_IPV6
 
 
@@ -2149,7 +2754,7 @@ bool ProtoSocket::SetRxBufferSize(unsigned int bufferSize)
         PLOG(PL_ERROR, "ProtoSocket::SetRxBufferSize() error: socket closed\n");    
         return false;
    }
-   unsigned int oldBufferSize = GetTxBufferSize();
+   unsigned int oldBufferSize = GetRxBufferSize();
    if (setsockopt(handle, SOL_SOCKET, SO_RCVBUF, (char*)&bufferSize, sizeof(bufferSize)) < 0) 
    {
         setsockopt(handle, SOL_SOCKET, SO_RCVBUF, (char*)&oldBufferSize, sizeof(oldBufferSize));
@@ -2290,7 +2895,7 @@ ProtoSocket::List::Item::Item(ProtoSocket* theSocket)
 }
 
 ProtoSocket::List::Iterator::Iterator(const ProtoSocket::List& theList)
- : list(theList), next(theList.head)
+ : next(theList.head)
 {
 }
 
@@ -2349,12 +2954,12 @@ unsigned int ProtoSocket::GetInterfaceIndices(unsigned int* indexArray, unsigned
 
 bool ProtoSocket::GetInterfaceName(unsigned int index, char* buffer, unsigned int buflen)
 {
-    return ProtoNet::GetInterfaceName(index, buffer, buflen);
+    return (0 != ProtoNet::GetInterfaceName(index, buffer, buflen));
 }  // end ProtoSocket::GetInterfaceName(by index)
 
 
 bool ProtoSocket::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
 {  
-    return ProtoNet::GetInterfaceName(ifAddr, buffer, buflen);
+    return (0 != ProtoNet::GetInterfaceName(ifAddr, buffer, buflen));
 }  // end ProtoSocket::GetInterfaceName(by address)
 

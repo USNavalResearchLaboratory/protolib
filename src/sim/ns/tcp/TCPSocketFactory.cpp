@@ -3,7 +3,6 @@
  *  FullerTCP
  *
  *  Created by Ian Taylor on 07/03/2007.
- *  Copyright 2007 __MyCompanyName__. All rights reserved.
  *
  */
 

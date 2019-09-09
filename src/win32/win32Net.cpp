@@ -5,6 +5,8 @@
 
 #include <winsock2.h>
 #include <WS2tcpip.h>  // for extra socket options
+// wcstombs
+#include <stdlib.h>
 /**
 * @file win32Net.cpp
 * 
@@ -108,7 +110,16 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
         }
         while (addrEntry)
         {
-            if (0 == strncmp(interfaceName, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN))
+			// Were we given a friendly name or the adapter name?
+			char friendlyName[MAX_INTERFACE_NAME_LEN];
+			//PLOG(PL_INFO,"PWCHAR string: %ls \n", addrEntry->FriendlyName);
+			//PLOG(PL_INFO,"adapterName> %s \n", addrEntry->AdapterName);
+			//PLOG(PL_INFO,"interfaceName> %s \n\n", interfaceName);
+			int ret = wcstombs(friendlyName, addrEntry->FriendlyName, MAX_INTERFACE_NAME_LEN);
+			if (ret == MAX_INTERFACE_NAME_LEN) friendlyName[MAX_INTERFACE_NAME_LEN - 1] = '\0';
+            if ((0 == strncmp(interfaceName, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN))
+				|
+				(0 == strncmp(interfaceName, friendlyName, MAX_INTERFACE_NAME_LEN)))
             {
                 // A match was found!
                 if (ProtoAddress::ETH == addressType)
@@ -117,6 +128,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
                     {
                         ProtoAddress ethAddr;
                         ethAddr.SetRawHostAddress(ProtoAddress::ETH, (char*)&addrEntry->PhysicalAddress, 6);
+						PLOG(PL_INFO, "Win32Net::GetInterfaceAddressList() ethAddr>%s\n", ethAddr.GetHostString());
                         if (NULL != interfaceIndex)
                         {
                             if (0 != addrEntry->IfIndex)
@@ -153,7 +165,8 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
                             }
                             ProtoAddress ifAddr;
                             ifAddr.SetSockAddr(*(ipAddr->Address.lpSockaddr));
-                            // Defer link local address to last
+							
+							// Defer link local address to last
                             if (ifAddr.IsLinkLocal())
                             {
                                 if (localAddrList.Insert(ifAddr))
@@ -183,7 +196,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
         }
         delete[] addrBuffer;
         if (!foundAddr)
-            PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressList(%s) warning: no matching interface found\n", interfaceName);
+            PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressList(%s) warning: no matching interface found.  Checking for ip address\n", interfaceName);
     }
     else 
 #endif // if (WINVER >= 0x0501)
@@ -414,10 +427,10 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
     if (foundAddr) return true;
     // As a last resort, check if the "interfaceName" is actually an address string
     ProtoAddress ifAddr;
-    if (ifAddr.ResolveFromString(interfaceName))
+    if (ifAddr.ConvertFromString(interfaceName))
     {
-        char ifName[256];
-        if (!GetInterfaceName(ifAddr, ifName, 256))
+        char ifName[MAX_ADAPTER_NAME_LENGTH + 4];
+        if (!GetInterfaceName(ifAddr, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList(%s) error: no matching interface name found\n", interfaceName);
             return false;
@@ -588,6 +601,7 @@ bool ProtoNet::FindLocalAddress(ProtoAddress::Type addrType, ProtoAddress& theAd
     }    
 }  // end ProtoNet::FindLocalAddress()
 
+
 unsigned int ProtoNet::GetInterfaceIndex(const char* interfaceName)
 {
     ProtoAddress theAddress;
@@ -603,7 +617,8 @@ unsigned int ProtoNet::GetInterfaceIndex(const char* interfaceName)
     }
 }  // end ProtoNet::GetInterfaceIndex()
 
-bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int buflen)
+
+unsigned int ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int buflen)
 {
     ULONG bufferLength = 0;
     if (ERROR_BUFFER_OVERFLOW == GetAdaptersInfo(NULL, &bufferLength))  
@@ -612,35 +627,36 @@ bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int b
         if (NULL == infoBuffer)
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(by index) new infoBuffer error: %s\n", ::GetErrorString());
-            return false;
+            return 0;
         }
         IP_ADAPTER_INFO* adapterInfo = (IP_ADAPTER_INFO*)infoBuffer; 
         if (NO_ERROR != GetAdaptersInfo(adapterInfo, &bufferLength))
         {       
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(by index) GetAdaptersInfo() error: %s\n", ::GetErrorString());
             delete[] infoBuffer;
-            return false;
+            return 0;
         }
         while (NULL != adapterInfo)
         {
             if (index == adapterInfo->Index)
             {
-                strncpy_s(buffer, buflen, adapterInfo->AdapterName, MAX_ADAPTER_NAME_LENGTH);
+				size_t nameLen = strnlen_s(adapterInfo->AdapterName, MAX_ADAPTER_NAME_LENGTH);
+				strncpy_s(buffer, buflen, adapterInfo->AdapterName, nameLen);
                 delete[] infoBuffer;
-                return true;
+                return nameLen;
             }
             adapterInfo = adapterInfo->Next;
         }
-        // Assume index==1 is loopback?
+        // Assume index == 1 is loopback?
         if (1 == index)
         {
             strncpy_s(buffer, buflen, "lo", 3);
-            return true;
+            return 2;
         }
         else
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(by index) no matching interface found!\n");
-            return false;
+            return 0;
         }
     }
     else if (0 != index)
@@ -657,20 +673,21 @@ bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int b
             buflen = buflen < MAX_INTERFACE_NAME_LEN ? buflen : MAX_INTERFACE_NAME_LEN;
             wcstombs(buffer, ifRow.wszName, buflen);
 #else
+			size_t nameLen = strnlen_s((char*)ifRow.bDescr, ifRow.dwDescrLen);
             strncpy_s(buffer, buflen, (char*)ifRow.bDescr, ifRow.dwDescrLen);
 #endif // if/else _UNICODE
-            return true;
+            return nameLen;
         }
         else
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(by index) GetIfEntry(%d) error: %s\n", index, ::GetErrorString());
-            return false;
+            return 0;
         }
     }
     else
     {
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(%d) error: invalid index\n", index);
-        return false;
+        return 0;
     }
 }  // end ProtoNet::GetInterfaceName(by index)
 
@@ -680,7 +697,7 @@ bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int b
  *    using the "GetAdaptersAddresses()" call, and
  * 2) Supports IPv4 only on older operating systems using "GetIPaddrTable()" 
  */
-bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
+unsigned int ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
 {
     /* (TBD) Do the approaches below provide the loopback address?
     if (ifAddr.IsLoopback())
@@ -688,7 +705,6 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
         strncpy_s(buffer, buflen, "lo", 3);
         return true;
     }*/
-   
     
     // Try the "GetAdaptersAddresses()" approach first
     ULONG afFamily = AF_UNSPEC;
@@ -718,20 +734,20 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
         if (ERROR_NO_DATA == result)
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(%s) error: no matching network adapters found.\n", ifAddr.GetHostString());
-            return false;
+            return 0;
         }
         char* addrBuffer = new char[bufferSize];
         if (NULL == addrBuffer)
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() new addrBuffer error: %s\n", ::GetErrorString());
-            return false;
+            return 0;
         }
         IP_ADAPTER_ADDRESSES* addrEntry = (IP_ADAPTER_ADDRESSES*)addrBuffer;
         if (ERROR_SUCCESS != GetAdaptersAddresses(afFamily, addrFlags, NULL, addrEntry, &bufferSize))
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() GetAdaptersAddresses() error: %s\n", ::GetErrorString());
             delete[] addrBuffer;
-            return false;
+            return 0;
         }
         while (NULL != addrEntry)
         {
@@ -744,9 +760,10 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
                     if (tempAddress.HostIsEqual(ifAddr))
                     {
                         // Copy the interface name
+						size_t nameLen = strnlen_s(addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN);
                         strncpy_s(buffer, buflen, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN);
                         delete[] addrBuffer;
-                        return true;
+                        return nameLen;
                     }
                 }
             }
@@ -761,9 +778,10 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
                         tempAddress.SetSockAddr(*(ipAddr->Address.lpSockaddr));
                         if (tempAddress.HostIsEqual(ifAddr))
                         {
+							size_t nameLen = strnlen_s(addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN);
                             strncpy_s(buffer, buflen, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN);
                             delete[] addrBuffer;
-                            return true;
+                            return nameLen;
                         }
                     }
                     ipAddr = ipAddr->Next;
@@ -783,14 +801,14 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
         if (NULL == infoBuffer)
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(%s) new infoBuffer error: %s\n", ifAddr.GetHostString(), ::GetErrorString());
-            return false;
+            return 0;
         }
         IP_ADAPTER_INFO* adapterInfo = (IP_ADAPTER_INFO*)infoBuffer; 
         if (NO_ERROR != GetAdaptersInfo(adapterInfo, &bufferLength))
         {       
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName(%s) GetAdaptersInfo() error: %s\n", ifAddr.GetHostString(), ::GetErrorString());
             delete[] infoBuffer;
-            return false;
+            return 0;
         }
         while (NULL != adapterInfo)
         {
@@ -807,9 +825,10 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
             }
             if (tempAddr.IsValid() && tempAddr.HostIsEqual(ifAddr))
             {
+				size_t nameLen = strnlen_s(adapterInfo->AdapterName, MAX_INTERFACE_NAME_LEN);
                 strncpy_s(buffer, buflen, adapterInfo->AdapterName, MAX_ADAPTER_NAME_LENGTH);
                 delete[] infoBuffer;
-                return true;
+                return nameLen;
             }
             adapterInfo = adapterInfo->Next;
         }
@@ -822,7 +841,7 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
         if (NO_ERROR != GetNumberOfInterfaces(&ifCount))
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() GetNumberOfInterfaces() error: %s\n", ::GetErrorString());
-            return false;
+            return 0;
         }
         for (DWORD i = 1; i <= ifCount; i++)
         {
@@ -842,11 +861,12 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
                     // We use the "bDescr" field because the "wszName" field doesn't seem to work
 #ifdef _UNICODE
                     buflen = buflen < MAX_INTERFACE_NAME_LEN ? buflen : MAX_INTERFACE_NAME_LEN;
-                    wcstombs(buffer, ifRow.wszName, buflen);
+                    size_t nameLen = wcstombs(buffer, ifRow.wszName, buflen);
 #else
+					size_t nameLen = strnlen_s((char*)ifRow.bDescr, ifRow.dwDescrLen);
                     strncpy_s(buffer, buflen, (char*)ifRow.bDescr, ifRow.dwDescrLen);
 #endif // if/else _UNICODE
-                    return true;
+                    return nameLen;
                 }
             }
         }
@@ -865,7 +885,7 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
             if (NULL == tableBuffer)
             {   
                 PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() new tableBuffer error: %s\n", ::GetErrorString());
-                return false;
+                return 0;
             }
             MIB_IPADDRTABLE* addrTable = (MIB_IPADDRTABLE*)tableBuffer;
             if (ERROR_SUCCESS == GetIpAddrTable(addrTable, &bufferSize, FALSE))
@@ -882,17 +902,20 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
                         if (NO_ERROR != GetIfEntry(&ifEntry))
                         {   
                             PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() GetIfEntry(%d) error: %s\n", i, ::GetErrorString());
-                            return false;
+                            return 0;
                         }
                         // We use the "bDescr" field because the "wszName" field doesn't seem to work
 #ifdef _UNICODE
                         buflen = buflen < MAX_INTERFACE_NAME_LEN ? buflen : MAX_INTERFACE_NAME_LEN;
-                        wcstombs(buffer, ifEntry.wszName, buflen);
+                        size_t nameLen = wcstombs(buffer, ifEntry.wszName, buflen);
+						unsigned int tmpbuflen = buflen;
 #else
+						size_t nameLen = strnlen_s((char*)ifEntry.bDescr, ifEntry.dwDescrLen);
                         strncpy_s(buffer, buflen, (char*)ifEntry.bDescr, ifEntry.dwDescrLen);
+						unsigned int tmpbuflen = buflen;
 #endif // if/else _UNICODE
                         delete[] tableBuffer;
-                        return true;
+                        return nameLen;
                     }
                 }
             }
@@ -913,266 +936,625 @@ bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsign
     {
         PLOG(PL_WARN, "ProtoNet::GetInterfaceName() warning GetAdaptersAddresses() error: %s\n", ::GetErrorString());
     }
-    return false;
+    return 0;
 }  // end ProtoNet::GetInterfaceName(by addr)
 
-class Win32NetMonitor : public ProtoNet::Monitor
+ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(const char* ifaceName)
 {
-public:
-	Win32NetMonitor();
-	~Win32NetMonitor();
+    // On WIN32, if we can't get an interface index, we assume IFACE_DOUWN
+    unsigned int ifaceIndex = GetInterfaceIndex(ifaceName);
+    if (0 != ifaceIndex)
+        return IFACE_UP;
+    else
+        return IFACE_DOWN;   
+}  // end ProtoNet::GetInterfaceStatus(by name)
 
-	bool Open();
-	void Close();
-	bool GetNextEvent(Event& theEvent);
-	bool GetEvent(PMIB_IPINTERFACE_ROW row,
-		MIB_NOTIFICATION_TYPE notificationType);
-	static bool FindIPAddr(NET_IFINDEX InterfaceIndex);
-	const char* GetNotificationType(int type);
-	HANDLE GetEventHandle() { return input_handle; }
-
-private:
-	// We cache mib changes to a linked list for
-	// retrieval by the GetNextEvent() method
-	class EventItem : public Event, public ProtoList::Item
+ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(unsigned int ifaceIndex)
+{
+    // On WIN32, if we can't get an interface name, we assume IFACE_DOWN
+    char ifaceName[MAX_ADAPTER_NAME_LENGTH + 4];
+    if (GetInterfaceName(ifaceIndex, ifaceName, MAX_ADAPTER_NAME_LENGTH + 4))
+        return IFACE_UP;
+    else
+        return IFACE_DOWN;
+}  // end ProtoNet::GetInterfaceStatus(by index)
+unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const ProtoAddress& ifAddr)
+{
+	char ifName[MAX_ADAPTER_NAME_LENGTH + 4];
+	unsigned int buflen;
+	if (GetInterfaceName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
 	{
-	public:
-		EventItem();
-		~EventItem();
-	};  // end class Win32NetMontior::EventItem
-
-	class EventList : public ProtoListTemplate<EventItem> {};
-	EventList	event_list;
-	EventList	event_pool;
-
-	typedef CRITICAL_SECTION    Mutex;
-	Mutex                       lock;
-    
-	static void Init(Mutex& m) {InitializeCriticalSection(&m);}
-    static void Destroy(Mutex& m) {DeleteCriticalSection(&m);}
-    static void Lock(Mutex& m) {EnterCriticalSection(&m);}
-	static void Unlock(Mutex& m) {LeaveCriticalSection(&m);}
-
-	HANDLE notification_handle;  // handle to subsequently stop notifications
-
-}; // end class Win32NetMonitor
-
-/// This is the implementation of the ProtoNet::Monitor::Create()
-/// static method (our win32-specific factory)
-ProtoNet::Monitor* ProtoNet::Monitor::Create()
-{
-	return static_cast<ProtoNet::Monitor*>(new Win32NetMonitor);
-} // end ProtoNet::Monitor::Create()
-
-Win32NetMonitor::Win32NetMonitor()
-{
-    Init(lock);
-}
-
-Win32NetMonitor::~Win32NetMonitor()
-{
-}
-
-// Static callback function for NotifyIpInterfaceChange API
-static void WINAPI IpInterfaceChangeCallback(PVOID callerContext,
-	PMIB_IPINTERFACE_ROW row,
-	MIB_NOTIFICATION_TYPE notificationType)
-{
-	Win32NetMonitor* monitor = (Win32NetMonitor*)callerContext;
-	if (!monitor) 
-	{
-		PLOG(PL_ERROR,"IpInterfaceChangeCallback() Error: No callerContext.\n");
-		return;
+		return GetInterfaceAddressMask(ifName, ifAddr);
 	}
+	PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() no matching interface found for ifaceIndex %s", ifaceIndex);
+	return 0;
+}
 
-	if (row)
+unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifName, const ProtoAddress& ifAddr)
+{
+
+	// ifName can be a friendly adapater address, an adapter name, or and
+	// adapter ip address.  A separate function looks up by index.
+
+	// We could use GetAdaptersInfo and get mask from adaterInfo->IpAddressList.IpMask.String
+	// would need to convert dotted decimal mask to cidr
+
+	// TBD: Implement option 2 ljt?
+
+	// 1) Supports IPv4 and IPv6 on newer Windows Operating systems (WinXP and Win2003)
+	//    using the "GetAdaptersAddresses()" call, and
+	// 2) Supports IPv4 only on older operating systems using "GetIPaddrTable()" 
+	// Then, try the "GetAdaptersAddresses()" approach first
+
+	ULONG afFamily = AF_UNSPEC;
+	switch (ifAddr.GetType())
 	{
-		// Get complete information for MIP_IPINTERFACE_ROW
-		GetIpInterfaceEntry(row);
-		// Add an event to our list for the notification
-		if (!monitor->GetEvent(row,notificationType))
-		{	
-			PLOG(PL_ERROR,"MonitorEventHandler() GetEvent error\n");
-			return;
+	case ProtoAddress::IPv4:
+		afFamily = AF_INET;
+		break;
+#ifdef HAVE_IPV6
+	case ProtoAddress::IPv6:
+		afFamily = AF_INET6;
+		break;
+#endif // HAVE_IPV6
+	default:
+		break;
+	}
+	ULONG bufferLength = 0;
+
+#if (WINVER >= 0x0501)
+	// On NT4, Win2K and earlier, GetAdaptersAddresses() isn't to be found
+	// in the iphlpapi.dll ...
+	DWORD addrFlags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST;
+	ULONG bufferSize = 0;
+	DWORD result = GetAdaptersAddresses(afFamily, addrFlags, NULL, NULL, &bufferSize);
+	if ((ERROR_BUFFER_OVERFLOW == result) ||
+		(ERROR_NO_DATA == result))
+	{
+		if (ERROR_NO_DATA == result)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask(%s) error: no matching interface adapters found.\n", ifAddr.GetHostString());
+			return 0;
 		}
+		
+		char* addrBuffer = new char[bufferSize];
+		if (NULL == addrBuffer)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() new addrBuffer error: %s\n", ::GetErrorString());
+			return 0;
+		}
+		IP_ADAPTER_ADDRESSES* addrEntry = (IP_ADAPTER_ADDRESSES*)addrBuffer;
+		if (ERROR_SUCCESS != GetAdaptersAddresses(afFamily, addrFlags, NULL, addrEntry, &bufferSize))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() GetAdaptersAddresses() error: %s\n", ::GetErrorString());
+			delete[] addrBuffer;
+			return 0;
+		}
+		while (addrEntry)
+		{
+			// Were we given a friendly name or the adapter name?
+			char friendlyName[MAX_INTERFACE_NAME_LEN];
+			int ret = wcstombs(friendlyName, addrEntry->FriendlyName, MAX_INTERFACE_NAME_LEN);
+			if (ret == MAX_INTERFACE_NAME_LEN) friendlyName[MAX_INTERFACE_NAME_LEN - 1] = '\0';
 
-    }
-	if (!SetEvent(monitor->GetEventHandle()))
-		PLOG(PL_ERROR,"win32Net::MonitorEventHandler() Error setting event handle.\n");
-
-}
-bool Win32NetMonitor::Open()
-{
- 	// Not using a manual reset event?
-	if (NULL == (input_handle = CreateEvent(NULL,FALSE,FALSE,NULL)))
-    {
-        input_handle = INVALID_HANDLE_VALUE;
-        PLOG(PL_ERROR,"Win32Monitor::Open() CreateEvent(event_handle) error: %s\n", ::GetErrorString());
-        Close(); 
-        return false;
-    }
-	// Initiate notifications ...
-	notification_handle = NULL;
-	if (!NotifyIpInterfaceChange(
-				AF_UNSPEC,  // AF_INET
-				(PIPINTERFACE_CHANGE_CALLBACK)IpInterfaceChangeCallback,
-				this,
-				false, // initialNofification 
-				&notification_handle) == NO_ERROR)
-	{
-		PLOG(PL_ERROR,"Win32NetMonitor::Open() NotifyIpInterfaceChange failed\n");
-		return false;
-	}
-
-	if (!ProtoNet::Monitor::Open())
-	{
-		Close();
-		return false;
+			if ((0 == strncmp(ifName, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN))
+				|| (0 == strncmp(ifName, friendlyName, MAX_INTERFACE_NAME_LEN)))
+			{
+				// A match was found!
+				if (ProtoAddress::ETH != ifAddr.GetType())
+				{
+					IP_ADAPTER_UNICAST_ADDRESS* ipAddr = addrEntry->FirstUnicastAddress;
+					while (NULL != ipAddr)
+					{
+						if ((afFamily == AF_UNSPEC) ||
+							(afFamily == ipAddr->Address.lpSockaddr->sa_family))
+						{
+							ProtoAddress tmpAddr;
+							tmpAddr.SetSockAddr(*(ipAddr->Address.lpSockaddr));
+							if (ifAddr == tmpAddr)
+							{
+								unsigned int mask =  ipAddr->OnLinkPrefixLength;
+								delete[] addrBuffer;
+								return  mask;
+							}
+						}
+						ipAddr = ipAddr->Next;
+					}
+				}
+			}
+			addrEntry = addrEntry->Next;
+		}
+		delete[] addrBuffer;
+		PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressMask(%s) warning: no matching interface found.  Checking for ip address.\n", ifAddr.GetHostString());
 	}
 	
-	return true;
-}
-
-void Win32NetMonitor::Close()
-{
-	if (IsOpen())
+	// See if "ifName" is actually an address
+	ProtoAddress tmpAddr;
+	if (tmpAddr.ConvertFromString(ifName))
 	{
-		ProtoNet::Monitor::Close();	
-		input_handle = INVALID_HANDLE;
+		char ifName[MAX_ADAPTER_NAME_LENGTH + 4]; 
+		if (!GetInterfaceName(tmpAddr, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask(%s) error: no matching interface found\n", ifAddr.GetHostString());
+			return false;
+		}
+		return GetInterfaceAddressMask(ifName, tmpAddr);
 	}
-	if (notification_handle != INVALID_HANDLE)
-		CancelMibChangeNotify2(notification_handle);
+	
 
-	event_list.Destroy();
-	event_pool.Destroy();
+	return 0;
+#endif // if (WINVER >= 0x0501)
+	// TBD: Implement support for earlier versions of windows?
 
-	Unlock(lock);
-	Destroy(lock);
-}
+	PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressList(%s) warning: no matching interface found (WINVER < 0x0501?)\n", ifAddr.GetHostString());
 
-const char* Win32NetMonitor::GetNotificationType(int type)
-    {
-        static const char* names[] = {
-        "ParameterNotification",
-        "AddInstance",
-        "DeleteInstance",
-        "InitialNotification" 
-        };
+	return 0;
+}; // ProtoNet::GetInterfaceAddressMask
 
-        const char* name = "";
-        if (type >=0 && type < sizeof(names)) {
-            name = names[type];
-        }
-        return name;
-    }
-bool Win32NetMonitor::GetNextEvent(Event& theEvent)
+bool ProtoNet::AddInterfaceAddress(unsigned int ifaceIndex, const ProtoAddress& addr, unsigned int maskLen, bool dhcp_enabled)
 {
-	// 0) Initialize event instance
-	theEvent.SetType(Event::UNKNOWN_EVENT);
-	theEvent.SetInterfaceIndex(0);
-	theEvent.AccessAddress().Invalidate();
+	/*
+	NOTE: dhcp interface flag is inconsisten when interface had both ipv4 and ipv6 addresses.
+	Do not use in this case.
+	*/
 
-	// 1) Get next event from list
-	Lock(lock);
-	EventItem* eventItem = event_list.RemoveHead();
-	if (eventItem == NULL)
+	unsigned int buflen;
+	char ifName[MAX_ADAPTER_NAME_LENGTH];
+	if (GetInterfaceFriendlyName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH ))
 	{
-		Unlock(lock);
-		theEvent.SetType(Event::NULL_EVENT);
-		return true;
+		return AddInterfaceAddress(ifName, addr, maskLen,dhcp_enabled);
 	}
-	theEvent = static_cast<Event&>(*eventItem);
-	event_pool.Append(*eventItem);
-	Unlock(lock);
-	return true;
-}
-
-bool Win32NetMonitor::GetEvent(PMIB_IPINTERFACE_ROW row,
-	MIB_NOTIFICATION_TYPE notificationType)
+	PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() no matching interface found for ifaceIndex %s", ifaceIndex);
+	return false;
+};
+bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& ifaceAddr, unsigned int maskLen, bool dhcp_enabled)
 {
-	EventItem* eventItem = event_pool.RemoveHead();
-	if (NULL == eventItem) eventItem = new EventItem();
-	if (NULL == eventItem)
+	/*
+	NOTE: dhcp interface flag is inconsisten when interface had both ipv4 and ipv6 addresses.
+	Do not use in this case.
+	*/
+	char cmd[1024];
+	switch (ifaceAddr.GetType())
 	{
-		PLOG(PL_ERROR,"Win32NetMonitor::GetEvent() new EventItem error: %s\n", GetErrorString());
+	case ProtoAddress::IPv4:
+		if (dhcp_enabled)
+			sprintf(cmd, "netsh interface ipv4 set address \"%s\" dhcp", ifaceName);
+		else
+			sprintf(cmd, "netsh interface ipv4 add address \"%s\" addr=%s", ifaceName, ifaceAddr.GetHostString());
+
+		break;
+#ifdef HAVE_IPV6
+	case ProtoAddress::IPv6:
+		sprintf(cmd, "netsh interface ipv6 set address interface=\"%s\" address=%s", ifaceName, ifaceAddr.GetHostString());
+		break;
+#endif //HAVE_IPV6
+	default:
+	{
+		PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() error: invalid address type\n");
+		return false;
+	}
+	}
+
+	PLOG(PL_INFO, "cmd>%s \n", cmd);
+	if (LONG ret = system(cmd))
+	{
+		PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress(%s) add %s failed failed. netsh call returned: %u", ifaceName, ifaceAddr.GetHostString(), ret);
+		return false;
+	}
+	return true;
+
+}   // end ProtoNet::AddInterfaceAddress()
+
+bool ProtoNet::RemoveInterfaceAddress(unsigned int ifaceIndex, const ProtoAddress& addr, unsigned int maskLen)
+{
+	char ifName[MAX_ADAPTER_NAME_LENGTH];
+	unsigned int buflen;
+	if (GetInterfaceName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH))
+	{
+		return RemoveInterfaceAddress(ifName, addr, maskLen);
+	}
+	PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() no matching interface found for ifaceIndex %s", ifaceIndex);
+	return false;
+};
+bool ProtoNet::RemoveInterfaceAddress(const char* ifaceAddress, const ProtoAddress& ifaceAddr, unsigned int maskLen)
+{
+	// Get the adapter name from the iface address
+	ProtoAddress ifAddr;
+	char ifName[MAX_ADAPTER_NAME_LENGTH];
+	if (ifAddr.ConvertFromString(ifaceAddress))
+	{
+		if (!GetInterfaceFriendlyName(ifAddr, ifName, MAX_ADAPTER_NAME_LENGTH))
+		{
+			PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress(%s) error: no matching interface name found\n", ifaceAddress);
+			return false;
+		}
+		PLOG(PL_INFO, "ProtoNet::RemoveInterfaceAddress() ifaceName>%s\n", ifName);
+		
+	} 
+	else
+	{
+		// Is it already a friendly name?
+		sprintf(ifName, "%s", ifaceAddress);
+		PLOG(PL_INFO, "ProtoNet::RemoveInterfaceAddress() ifaceName>%s\n", ifName);
+	}
+	char cmd[1024];
+	// First assign a static address to the interface so we can then delete it
+
+	switch (ifaceAddr.GetType())
+	{
+	case ProtoAddress::IPv4:
+		sprintf(cmd, "netsh interface ipv4 set address name=\"%s\" static %s", ifName, ifaceAddr.GetHostString());
+		break;
+	case ProtoAddress::IPv6:
+		// ipv6 seems to behave differently - is this necessary?
+		sprintf(cmd, "netsh interface ipv6 set address interface=\"%s\" %s", ifName, ifaceAddr.GetHostString());
+		break;
+	default:
+		PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: invalid address type\n");
+		return false;
+	}
+	PLOG(PL_INFO, "cmd>%s \n", cmd);
+	if (LONG ret = system(cmd))
+	{
+		PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress(%s) Change to static ip %s failed. netsh call returned: %u\n", ifName, ifaceAddr.GetHostString(), ret);
+		return false;
+	}
+	switch (ifaceAddr.GetType())
+	{
+	case ProtoAddress::IPv4:
+		sprintf(cmd, "netsh interface ipv4 delete address \"%s\" addr=%s", ifName, ifaceAddr.GetHostString());
+		break;
+#ifdef HAVE_IPV6
+	case ProtoAddress::IPv6:
+		sprintf(cmd, "netsh interface ipv6 delete address interface=\"%s\" address=%s", ifName, ifaceAddr.GetHostString());
+		break;
+#endif //HAVE_IPV6
+	default:
+	{
+		PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: invalid address type\n");
+		return false;
+	}
+	}
+	PLOG(PL_INFO, "cmd>%s \n", cmd);
+	if (LONG ret = system(cmd))
+	{
+		PLOG(PL_ERROR,"ProtoNet::RemoveInterfaceAddress(%s) Open %s failed. netsh call returned: %u\n", ifName,ifaceAddr.GetHostString(), ret);
 		return false;
 	}
 
-	eventItem->SetInterfaceIndex(row->InterfaceIndex);
-
-	switch (notificationType)
-    {
-	case 0:
-		//eventItem->SetType(Event::IFACE_STATE);
-		// not interested in windows state changes at the moment
-		eventItem->SetType(Event::UNKNOWN_EVENT);
-		break;
-	case 1:
-		eventItem->SetType(Event::IFACE_UP);
-		break;
-	case 2:
-		eventItem->SetType(Event::IFACE_DOWN);
-		break;
-	case 3:
-		eventItem->SetType(Event::UNKNOWN_EVENT);
-		break;
-	default:
-		eventItem->SetType(Event::UNKNOWN_EVENT);
-		PLOG(PL_ERROR,"Win32NetMonitor::GetEvent() warning: unhandled network event: %d\n",notificationType);
-		break;
-	}
-
-
-	// Iterate through addresses looking for our interface index
-	ULONG bufferSize = 0;
-    ULONG index = 0;
-    if (ERROR_INSUFFICIENT_BUFFER == GetIpAddrTable(NULL, &bufferSize, FALSE))
-    {
-            char* tableBuffer = new char[bufferSize];
-			if (NULL == tableBuffer)
-	        {   
-				PLOG(PL_ERROR, "Win32NetMonitor::GetEvent() new tableBuffer error: %s\n", ::GetErrorString());
-				return false;
-			}
-			MIB_IPADDRTABLE* addrTable = (MIB_IPADDRTABLE*)tableBuffer;
-		    if (ERROR_SUCCESS == GetIpAddrTable(addrTable, &bufferSize, FALSE))
-			{
-				 for (DWORD i = 0; i < addrTable->dwNumEntries; i++)
-				{
-
-				   MIB_IPADDRROW* entry = &(addrTable->table[i]);
-				   if (entry->dwIndex == row->InterfaceIndex)
-				   {
-					  if (row->Family == AF_INET)
-					     eventItem->AccessAddress().SetRawHostAddress(ProtoAddress::IPv4, (char*)&entry->dwAddr,4);
-					  else
-					     eventItem->AccessAddress().SetRawHostAddress(ProtoAddress::IPv6, (char*)&entry->dwAddr,16);
-					  // TBD Ignore link local addr new/delete events?
-					  
-				   }
-
-			    }
-
-			}
-	}
-    else
-        {
-            PLOG(PL_WARN, "Win32NetMonitor::GetEvent(%u) warning GetIpAddrTable() error: %s\n", row->InterfaceIndex, GetErrorString());
-        }
-
-
-	Lock(lock);
-	event_list.Append(*eventItem);
-	Unlock(lock);
 	return true;
+}   // end ProtoNet::RemoveInterfaceAddress()
 
-} // end Win32NetMonitor::GetNextEvent();
-
-Win32NetMonitor::EventItem::EventItem()
+/**
+* Only available on WINVER > 0x0501
+*/
+unsigned int ProtoNet::GetInterfaceFriendlyName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
 {
+#if (WINVER >= 0x0501)
+
+	ULONG afFamily = AF_UNSPEC;
+	switch (ifAddr.GetType())
+	{
+	case ProtoAddress::IPv4:
+		afFamily = AF_INET;
+		break;
+#ifdef HAVE_IPV6
+	case ProtoAddress::IPv6:
+		afFamily = AF_INET6;
+		break;
+#endif // HAVE_IPV6
+	default:
+		break;
+	}
+	ULONG bufferLength = 0;
+	// On NT4 and earlier, GetAdaptersAddresses() isn't to be found
+	// in the iphlpapi.dll ...
+	DWORD addrFlags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST;
+	ULONG bufferSize = 0;
+	DWORD result = GetAdaptersAddresses(afFamily, addrFlags, NULL, NULL, &bufferSize);
+	if ((ERROR_BUFFER_OVERFLOW == result) ||
+		(ERROR_NO_DATA == result))
+	{
+		if (ERROR_NO_DATA == result)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName(%s) error: no matching network adapters found.\n", ifAddr.GetHostString());
+			return 0;
+		}
+		char* addrBuffer = new char[bufferSize];
+		if (NULL == addrBuffer)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName() new addrBuffer error: %s\n", ::GetErrorString());
+			return 0;
+		}
+		IP_ADAPTER_ADDRESSES* addrEntry = (IP_ADAPTER_ADDRESSES*)addrBuffer;
+		if (ERROR_SUCCESS != GetAdaptersAddresses(afFamily, addrFlags, NULL, addrEntry, &bufferSize))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName() GetAdaptersAddresses() error: %s\n", ::GetErrorString());
+			delete[] addrBuffer;
+			return 0;
+		}
+		while (NULL != addrEntry)
+		{
+			// TODO LJT remove this
+			if (ProtoAddress::ETH == ifAddr.GetType())
+			{
+				if (6 == addrEntry->PhysicalAddressLength)
+				{
+					ProtoAddress tempAddress;
+					tempAddress.SetRawHostAddress(ProtoAddress::ETH, (char*)&addrEntry->PhysicalAddress, 6);
+					if (tempAddress.HostIsEqual(ifAddr))
+					{
+						// Copy the interface name
+						size_t nameLen = strnlen_s(addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN);
+						strncpy_s(buffer, buflen, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN);
+						delete[] addrBuffer;
+						return nameLen;
+					}
+				}
+			}
+			else
+			{
+				IP_ADAPTER_UNICAST_ADDRESS* ipAddr = addrEntry->FirstUnicastAddress;
+				while (NULL != ipAddr)
+				{
+					if (afFamily == ipAddr->Address.lpSockaddr->sa_family)
+					{
+						ProtoAddress tempAddress;
+						tempAddress.SetSockAddr(*(ipAddr->Address.lpSockaddr));
+						if (tempAddress.HostIsEqual(ifAddr))
+						{
+							// Convert the PWCHAR friendly name 
+							char friendlyName[MAX_INTERFACE_NAME_LEN];
+							PLOG(PL_INFO, "PWCHAR string: %ls \n", addrEntry->FriendlyName);
+							int ret = wcstombs(friendlyName, addrEntry->FriendlyName, MAX_INTERFACE_NAME_LEN);
+							if (ret == MAX_INTERFACE_NAME_LEN) friendlyName[MAX_INTERFACE_NAME_LEN - 1] = '\0';
+
+							size_t nameLen = strnlen_s(friendlyName, MAX_INTERFACE_NAME_LEN);
+							strncpy_s(buffer, buflen, friendlyName, MAX_INTERFACE_NAME_LEN);
+							delete[] addrBuffer;
+							return nameLen;
+						}
+					}
+					ipAddr = ipAddr->Next;
+				}
+				if (NULL != ipAddr) break;
+			}
+			addrEntry = addrEntry->Next;
+		}  // end while(addrEntry)
+		delete[] addrBuffer;
+		PLOG(PL_WARN, "ProtoNet::GetInterfaceFriendlyName(%s) warning: no matching interface found\n", ifAddr.GetHostString());
+		return 0;
+	}
+#else
+	PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName() not available on WINVER < 0x0501\n");
+	return 0;
+#endif // if (WINVER >= 0x0501)
+
+}  // end ProtoNet::GetInterfaceFriendlyName(by addr)
+/**
+* Only available on WINVER > 0x0501
+*/
+unsigned int ProtoNet::GetInterfaceFriendlyName(unsigned int index, char* buffer, unsigned int buflen)
+{
+#if (WINVER >= 0x0501)
+
+	ULONG bufferLength = 0;
+	if (ERROR_BUFFER_OVERFLOW == GetAdaptersInfo(NULL, &bufferLength))
+	{
+		char * infoBuffer = new char[bufferLength]; 
+		if (NULL == infoBuffer)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName(by index) new infoBuffer error: %s\n", GetErrorString());
+			return 0;
+		}
+
+		IP_ADAPTER_INFO* adapterInfo = (IP_ADAPTER_INFO*)infoBuffer;
+		if (NO_ERROR != GetAdaptersInfo(adapterInfo, &bufferLength))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName(by index) GetAdaptersInfo() error: %s\n", ::GetErrorString());
+			delete[] infoBuffer;
+			return 0;
+		}
+		ProtoAddress ifAddr;
+		while (NULL != adapterInfo)
+		{
+			if (index == adapterInfo->Index)
+			{
+				ifAddr.ResolveFromString(adapterInfo->IpAddressList.IpAddress.String);
+				return GetInterfaceFriendlyName(ifAddr, buffer, MAX_ADAPTER_NAME_LENGTH);
+			}
+			adapterInfo = adapterInfo->Next;
+		}
+		// Assume index == 1 is loopback?
+		if (1 == index)
+		{
+			strncpy_s(buffer, buflen, "lo", 3);
+			return 2;
+		}
+		else
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceFirendlyName(by index) no matching interface found!\n");
+			return 0;
+		}
+	}
+	else
+	{
+		PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName(%d) error: invalid index\n", index);
+		return 0;
+	}
+
+#else
+	PLOG(PL_ERROR, "ProtoNet::GetInterfaceFriendlyName(by index) not available on WINVER < 0x0501\n");
+	return 0;
+#endif // if (WINVER >= 0x0501)
+
+}  // end ProtoNet::GetInterfaceFriendlyName(by index)
+
+bool ProtoNet::GetInterfaceAddressDhcp(unsigned int ifaceIndex, const ProtoAddress& ifAddr)
+{
+	char ifName[MAX_ADAPTER_NAME_LENGTH + 4];
+	unsigned int buflen;
+	if (GetInterfaceName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
+	{
+		return GetInterfaceAddressDhcp(ifName, ifAddr);
+	}
+	PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressDhcp() no matching interface found for ifaceIndex %s", ifaceIndex);
+	return false;
 }
 
-Win32NetMonitor::EventItem::~EventItem()
+bool ProtoNet::GetInterfaceAddressDhcp(const char* ifName, const ProtoAddress& ifAddr)
 {
-}
- 
+	// 1) IP_ADAPTER_ADDRESSES only seems to support Dhcpv4Enabled - not sure
+	//    how to detect ipv6 ljt
+	ULONG afFamily = AF_UNSPEC;
+	switch (ifAddr.GetType())
+	{
+	case ProtoAddress::IPv4:
+		afFamily = AF_INET;
+		break;
+#ifdef HAVE_IPV6
+	case ProtoAddress::IPv6:
+		afFamily = AF_INET6;
+		break;
+#endif // HAVE_IPV6
+	default:
+		break;
+	}
+	ULONG bufferLength = 0;
+
+#if (WINVER >= 0x0501)
+	// On NT4, Win2K and earlier, GetAdaptersAddresses() isn't to be found
+	// in the iphlpapi.dll ...
+	DWORD addrFlags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST;
+	ULONG bufferSize = 0;
+	DWORD result = GetAdaptersAddresses(afFamily, addrFlags, NULL, NULL, &bufferSize);
+	if ((ERROR_BUFFER_OVERFLOW == result) ||
+		(ERROR_NO_DATA == result))
+	{
+		if (ERROR_NO_DATA == result)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressDhcp(%s) error: no matching interface adapters found.\n", ifAddr.GetHostString());
+			return 0;
+		}
+
+		char* addrBuffer = new char[bufferSize];
+		if (NULL == addrBuffer)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressDhcp() new addrBuffer error: %s\n", ::GetErrorString());
+			return 0;
+		}
+		IP_ADAPTER_ADDRESSES* addrEntry = (IP_ADAPTER_ADDRESSES*)addrBuffer;
+		if (ERROR_SUCCESS != GetAdaptersAddresses(afFamily, addrFlags, NULL, addrEntry, &bufferSize))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressDhcp() GetAdaptersAddresses() error: %s\n", ::GetErrorString());
+			delete[] addrBuffer;
+			return 0;
+		}
+		while (addrEntry)
+		{
+			if (0 == strncmp(ifName, addrEntry->AdapterName, MAX_INTERFACE_NAME_LEN))
+			{
+				// A match was found!
+				if (ProtoAddress::ETH != ifAddr.GetType())
+				{
+					IP_ADAPTER_UNICAST_ADDRESS* ipAddr = addrEntry->FirstUnicastAddress;
+					while (NULL != ipAddr)
+					{
+						if ((afFamily == AF_UNSPEC) ||
+							(afFamily == ipAddr->Address.lpSockaddr->sa_family))
+						{
+							ProtoAddress tmpAddr;
+							tmpAddr.SetSockAddr(*(ipAddr->Address.lpSockaddr));
+							if (ifAddr == tmpAddr)
+							{
+								unsigned int mask = ipAddr->OnLinkPrefixLength;
+								delete[] addrBuffer;
+								// Apparantly windows doesn't automatically convert 0/1 to bool properly??
+								if (addrEntry->Dhcpv4Enabled)
+								{
+									return true;
+								}
+								else
+								{
+									return false;
+								}
+								return  addrEntry->Dhcpv4Enabled;
+							}
+						}
+						ipAddr = ipAddr->Next;
+					}
+				}
+			}
+			addrEntry = addrEntry->Next;
+		}
+		delete[] addrBuffer;
+		PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressDhcp(%s) warning: no matching interface found.  Checking for ip address.\n", ifAddr.GetHostString());
+	}
+
+	// See if "ifName" is actually an address
+	ProtoAddress tmpAddr;
+	if (tmpAddr.ConvertFromString(ifName))
+	{
+		char ifName[MAX_ADAPTER_NAME_LENGTH + 4];
+		if (!GetInterfaceName(tmpAddr, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddresDhcp(%s) error: no matching interface found\n", ifAddr.GetHostString());
+			return false;
+		}
+		return GetInterfaceAddressDhcp(ifName, tmpAddr);
+	}
+
+
+	return false;
+#endif // if (WINVER >= 0x0501)
+	// TBD: Implement support for earlier versions of windows?
+
+	PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressDhcp(%s) warning: no matching interface found (WINVER < 0x0501?)\n", ifAddr.GetHostString());
+
+	return false;
+}; // ProtoNet::GetInterfaceAddressMask
+
+
+bool ProtoNet::GetInterfaceIpAddress(unsigned int index,ProtoAddress& ifAddr)
+{
+#if (WINVER >= 0x0501)  // TBD Should work on older?
+
+	ULONG bufferLength = 0;
+	if (ERROR_BUFFER_OVERFLOW == GetAdaptersInfo(NULL, &bufferLength))
+	{
+		char * infoBuffer = new char[bufferLength];
+		if (NULL == infoBuffer)
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(by index) new infoBuffer error: %s\n", GetErrorString());
+			return false;
+		}
+
+		IP_ADAPTER_INFO* adapterInfo = (IP_ADAPTER_INFO*)infoBuffer;
+		if (NO_ERROR != GetAdaptersInfo(adapterInfo, &bufferLength))
+		{
+			PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(by index) GetAdaptersInfo() error: %s\n", ::GetErrorString());
+			delete[] infoBuffer;
+			return false;
+		}
+		while (NULL != adapterInfo)
+		{
+			if (index == adapterInfo->Index)
+			{
+				ifAddr.ResolveFromString(adapterInfo->IpAddressList.IpAddress.String);
+				return true;
+			}
+			adapterInfo = adapterInfo->Next;
+		}
+	}
+	else
+	{
+		PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(%d) error: invalid index\n", index);
+		return false;
+	}
+
+#else
+	PLOG(PL_ERROR, "ProtoNet::GetInterfaceIpAddress(by index) not available on WINVER < 0x0501\n");
+	return false;
+#endif // if (WINVER >= 0x0501)
+
+}  // end ProtoNet::GetInterfaceIpAddress(by index)

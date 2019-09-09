@@ -112,7 +112,7 @@ class ProtoRouteTable
                 void Init(const ProtoAddress& dstAddr, unsigned int prefixSize);
                 
                 ProtoAddress        destination;
-                unsigned            prefix_size;  // in bits
+                unsigned int        prefix_size;  // in bits
                 ProtoAddress        gateway;
                 unsigned int        iface_index;
                 int                 metric;

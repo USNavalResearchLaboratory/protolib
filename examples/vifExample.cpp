@@ -11,8 +11,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>  // for "isspace()"
-
+#include <ctype.h> //for "isspace()"
+#ifdef WIN32
+#include <Iptypes.h>  // For MAX_ADAPTER_NAME_LENGTH
+#endif //WIN32
 // rxlimit smoothing factors -- weights for new data
 #define RXLIMIT_SIZE_ALPHA 0.1   // for average packet length
 #define RXLIMIT_RATE_ALPHA 0.1  // for average rate measurement
@@ -84,7 +86,11 @@ class VifExampleApp : public ProtoApp
       ProtoAddress   vif_addr;
       ProtoAddress   vif_hwaddr;
       unsigned int   vif_mask_len;
-      char           if_name[ProtoVif::VIF_NAME_MAX]; 
+      char           if_name[ProtoVif::VIF_NAME_MAX];
+#ifdef WIN32
+      char           if_friendly_name[MAX_ADAPTER_NAME_LENGTH];
+	  bool           dhcp_enabled;
+#endif //WIN32
       Mode           vif_mode;
       double         txrate_limit;  // in kbps
       double         rxrate_limit;  // in kbps
@@ -150,7 +156,11 @@ const char* const VifExampleApp::CMD_LIST[] =
 PROTO_INSTANTIATE_APP(VifExampleApp) 
 
 VifExampleApp::VifExampleApp()
-  : vif(NULL), cap(NULL), vif_mask_len(0), vif_mode(BRIDGE), txrate_limit(-1.0), rxrate_limit(-1.0), 
+: vif(NULL), cap(NULL), vif_mask_len(0), 
+#ifdef WIN32
+    dhcp_enabled(false),
+#endif //WIN32
+	vif_mode(BRIDGE), txrate_limit(-1.0), rxrate_limit(-1.0), 
     rxrate_limit_uppernominal(-1.0), rxrate_limit_lowernominal(-1.0), 
     rxlimit_prev_pkt_time_initialized(false), rxlimit_avg_rate(0.0), 
     rxlimit_drop_prob(0.0), rxlimit_avg_size(0.0), rxlimit_rxbytes(0), 
@@ -159,6 +169,9 @@ VifExampleApp::VifExampleApp()
 {
     vif_name[0] = '\0'; 
     if_name[0] = '\0'; 
+#ifdef WIN32
+	if_friendly_name[0] = '\0';
+#endif //WIN32
     txrate_timer.SetListener(this, &VifExampleApp::OnTxRateTimeout);
     
     control_pipe.SetNotifier(&GetSocketNotifier());
@@ -218,13 +231,13 @@ bool VifExampleApp::OnStartup(int argc, const char*const* argv)
     // Check for valid parameters.
     if (0 == strlen(vif_name))
     {
-        PLOG(PL_ERROR, "VifExampleApp::OnStartup() error: missng required 'vif' command!\n");
+        PLOG(PL_ERROR, "VifExampleApp::OnStartup() error: missing required 'vif' command!\n");
         Usage();
         return false;
     }
     if (0 == strlen(if_name))
     {
-        PLOG(PL_ERROR, "VifExampleApp::OnStartup() error: missng required 'interface' command!\n");
+        PLOG(PL_ERROR, "VifExampleApp::OnStartup() error: missing required 'interface' command!\n");
         Usage();
         return false;
     }
@@ -248,13 +261,14 @@ bool VifExampleApp::OnStartup(int argc, const char*const* argv)
 
     cap->SetNotifier(static_cast<ProtoChannel::Notifier*>(&dispatcher));
     cap->SetListener(this,&VifExampleApp::OnInboundPkt);
-
+	
     if (!vif->Open(vif_name, vif_addr, vif_mask_len))
     {
         PLOG(PL_ERROR,"VifExampleApp::OnStartup() ProtoVif::Open(\"%s\") error\n", vif_name);
         Usage();
         return false;
     }
+
     if (!cap->Open(if_name))
     {
        PLOG(PL_ERROR,"VifExampleApp::OnStartup() ProtoCap::Open(\"%s\") error\n", if_name);
@@ -274,6 +288,27 @@ bool VifExampleApp::OnStartup(int argc, const char*const* argv)
                     Usage();
                     return false;
                 }
+				// Seems we  need to reopen vif after setting hardware address?
+				// Note that SetHardwareAddress is not currently working on windows 7
+				// so this open is redundant on windows 7.  TBD: Remove?
+#ifdef WIN32
+				/*
+				if (!vif->Open(vif_name, vif_addr, vif_mask_len))
+				{
+					PLOG(PL_ERROR, "VifExampleApp::OnStartup() ProtoVif::Open(\"%s\") error\n", vif_name);
+					Usage();
+					return false;
+				}
+				*/
+#endif
+				// Snag the virtual interface hardware address
+				ProtoAddress tmp_hw_addr;
+				if (!ProtoNet::GetInterfaceAddress(vif_name, ProtoAddress::ETH, tmp_hw_addr))
+					PLOG(PL_ERROR, "Win32Vif::Open(%s) error: unable to get ETH address!\n", vif_name);
+
+				PLOG(PL_INFO,"Snagged>%s from vif>%s\n", tmp_hw_addr.GetHostString(), vif_name);
+
+
             }
             break;
         case CLONE:
@@ -294,25 +329,64 @@ bool VifExampleApp::OnStartup(int argc, const char*const* argv)
                 Usage();
                 return false;
             }
+			// TBD: Seems like we need to reopen after changing hardware address?
+			// Note that SetHardwareAddress is not currently working on windows 7
+			// so this open is redundant on windows 7.  
+#ifdef WIN32
+			/*
+			if (!vif->Open(vif_name, vif_addr, vif_mask_len))
+			{
+				PLOG(PL_ERROR, "VifExampleApp::OnStartup() ProtoVif::Open(\"%s\") error\n", vif_name);
+				Usage();
+				return false;
+			}
+			*/
+#endif
             ProtoAddressList addrList;
             if (!ProtoNet::GetInterfaceAddressList(if_name, ProtoAddress::IPv4, addrList))
-            {
-                // TBD - make this a warning?
                 PLOG(PL_WARN, "VifExampleApp::OnStartup() warning: no interface IPv4 addresses?\n");
-                
-            }
             if (!ProtoNet::GetInterfaceAddressList(if_name, ProtoAddress::IPv6, addrList))
-            {
-                // TBD - make this a warning?
                 PLOG(PL_WARN, "VifExampleApp::OnStartup() warning: no interface IPv6 addresses?\n");
-            }
+#ifdef WIN32
+			// On WIN32 after we move the interface ip address to the vif
+			// interface subsequent calls using the original ifAddr ip address 
+	        // will get the vif adapter - use the friendly name to prevent this.
+			ProtoAddress ifAddr;
+			if (ifAddr.ConvertFromString(if_name))
+			{
+				if (!ProtoNet::GetInterfaceFriendlyName(ifAddr, if_friendly_name, MAX_ADAPTER_NAME_LENGTH))
+				{
+					PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList(%s) error: no matching interface name found\n", if_name);
+					return false;
+				}
+				PLOG(PL_INFO, "ProtoNet::GetInterfaceAddressList() friendly if_name>%s\n", if_friendly_name);
+			}
+
+			// Also squirrel away the dhcp enabled boolean so we can restore correctly
+			dhcp_enabled = ProtoNet::GetInterfaceAddressDhcp(if_name,ifAddr);
+#endif //WIN32
+
+            // TBD - check for empty addrList?
             ProtoAddress addr;
             ProtoAddressList::Iterator iterator(addrList);
+#ifndef WIN32
             while (iterator.GetNextAddress(addr))
             {
+				if (addr.IsLinkLocal()) continue;
                 unsigned int maskLen = ProtoNet::GetInterfaceAddressMask(if_name, addr);
+				// TODO: continue?
+				if (maskLen == 0)
+					continue;
+
                 // Remove address from "interface"
-                if (!ProtoNet::RemoveInterfaceAddress(if_name, addr, maskLen))
+#ifdef WIN32
+				// On WIN32 after we move the interface ip address to the vif
+				// address subsequent calls using the ifAddr will get the vif adapter - 
+				// use the friendly name to prevent this.
+                if (!ProtoNet::RemoveInterfaceAddress(if_friendly_name, addr, maskLen))
+#else 
+				if (!ProtoNet::RemoveInterfaceAddress(if_name,addr,maskLen))
+#endif //if/else WIN32
                 {
                     PLOG(PL_ERROR, "VifExampleApp::OnStartup() error removing address %s from interface %s\n", addr.GetHostString(), if_name);
                     Usage();
@@ -325,7 +399,12 @@ bool VifExampleApp::OnStartup(int argc, const char*const* argv)
                     Usage();
                     return false;
                 }
+#ifdef WIN32
+				// Set vif_addr to the new addr
+				vif_addr = addr;
+#endif //WIN32
             }
+#endif // !WIN32
             break;
         }
     }
@@ -347,18 +426,37 @@ void VifExampleApp::OnShutdown()
                 PLOG(PL_ERROR, "VifExampleApp::OnShutdown() error getting vif IPv4 addresses\n");
             if (!ProtoNet::GetInterfaceAddressList(vif_name, ProtoAddress::IPv6, addrList))
                 PLOG(PL_ERROR, "VifExampleApp::OnShutdown() error getting vif IPv6 addresses\n");
+
             ProtoAddress addr;
             ProtoAddressList::Iterator iterator(addrList);
+#ifndef WIN32
             while (iterator.GetNextAddress(addr))
             {
-                unsigned int maskLen = ProtoNet::GetInterfaceAddressMask(vif_name, addr);
+				if (addr.IsLinkLocal()) continue;
+				unsigned int maskLen = 0;
+#ifdef WIN32
+				// TODO: add option to GetInterfaceAddressMask to accept vif_name for lookup
+				maskLen = ProtoNet::GetInterfaceAddressMask(vif_addr.GetHostString(), addr);
+#else
+                maskLen = ProtoNet::GetInterfaceAddressMask(vif_name, addr);
+#endif //WIN32
+				// TBD: continue?
+				if (maskLen == 0)
+					continue;
                 // Remove address from vif
                 if (!ProtoNet::RemoveInterfaceAddress(vif_name, addr, maskLen))
                     PLOG(PL_ERROR, "VifExampleApp::OnShutdown() error removing address %s from vif %s\n", addr.GetHostString(), vif_name);
                 // Assign address to "interface"
-                if (!ProtoNet::AddInterfaceAddress(if_name, addr, maskLen))
-                    PLOG(PL_ERROR, "VifExampleApp::OnShutdown() error adding address %s to interface %s\n", addr.GetHostString(), if_name);
+#ifdef WIN32
+				// TODO: Make common function prototypes
+                if (!ProtoNet::AddInterfaceAddress(if_friendly_name, addr, maskLen, dhcp_enabled))
+                    PLOG(PL_ERROR, "VifExampleApp::OnShutdown() error adding address %s to interface %s\n", addr.GetHostString(), if_friendly_name);
+#else
+				if (!ProtoNet::AddInterfaceAddress(if_name, addr, maskLen))
+					PLOG(PL_ERROR, "VifExampleApp::OnShutdown() error adding address %s to interface %s\n", addr.GetHostString(), if_name);
+#endif //WIN32
             }  
+#endif // !WIN32
         }     
             vif->Close();
             delete vif;
@@ -751,6 +849,8 @@ void VifExampleApp::OnOutboundPkt(ProtoChannel&              theChannel,
     {
         if (numBytes == 0) break;  // no more packets to receive
         
+        TRACE("read %u bytes from vif ...\n", numBytes);
+        
         ProtoPktETH ethPkt((UINT32*)ethBuffer, BUFFER_MAX - 2);
         if (!ethPkt.InitFromBuffer(numBytes))
         {
@@ -832,7 +932,7 @@ void VifExampleApp::OnInboundPkt(ProtoChannel&              theChannel,
         }
 
         if (numBytes == 0) break;  // no more packets to receive
-        
+
         if ((ProtoCap::OUTBOUND != direction)) 
         {
             // Map ProtoPktETH instance into buffer and init for processing

@@ -274,7 +274,8 @@ bool ProtoSocket::RecvFrom(char*            buffer,
 }  // end ProtoSocket::RecvFrom()
 
 bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddr, 
-                            const char*         /*interfaceName*/)
+                            const char*         /*interfaceName*/,
+                            const ProtoAddress* /*sourceAddr*/)
 {
     if (!IsOpen())
     {
@@ -288,7 +289,8 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddr,
 }  // end ProtoSocket::JoinGroup() 
 
 bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddr,
-                             const char*         /*interfaceName*/)
+                             const char*         /*interfaceName*/,
+                             const ProtoAddress* /*sourceAddr*/)
 {    
     if (IsOpen())
     {
@@ -299,6 +301,7 @@ bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddr,
         return true; // if we weren't open, we weren't joined   
     }
 }  // end ProtoSocket::LeaveGroup() 
+
 
 // (NOTE: These functions are being moved to ProtoRouteMgr
 // Helper functions for group joins & leaves
@@ -580,6 +583,6 @@ ProtoSocket::List::Item::Item(ProtoSocket* theSocket)
 }
 
 ProtoSocket::List::Iterator::Iterator(const ProtoSocket::List& theList)
- : list(theList), next(theList.head)
+ : next(theList.head)
 {
 }

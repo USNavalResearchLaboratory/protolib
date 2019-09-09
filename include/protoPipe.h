@@ -17,8 +17,7 @@ class ProtoPipe : public ProtoSocket
     public:
         enum Type {MESSAGE, STREAM};
 
-		ProtoPipe();  // JPH 11/2/2005 - added default constructor for nrlsmf.ex.cpp compilation
-        ProtoPipe(Type theType);
+		ProtoPipe(Type theType = MESSAGE);
         ~ProtoPipe();
         
         Type GetType() {return ((UDP == GetProtocol()) ? MESSAGE : STREAM);}
@@ -28,15 +27,10 @@ class ProtoPipe : public ProtoSocket
         bool Accept(ProtoPipe* thePipe = NULL);
         void Close();
 
-#if defined(WIN32) && !defined(_WIN32_WCE)
-        bool Send(const char* buffer, unsigned int& numBytes);
-        bool Recv(char* buffer, unsigned int& numBytes);
-#else
         bool Send(const char* buffer, unsigned int& numBytes)
             {return ProtoSocket::Send(buffer, numBytes);}
         bool Recv(char* buffer, unsigned int& numBytes)
             {return ProtoSocket::Recv(buffer, numBytes);}
-#endif // if/else WIN32/UNIX
         
     private:
         bool Open(const char* theName);
@@ -44,7 +38,7 @@ class ProtoPipe : public ProtoSocket
         void Unlink(const char* theName);
         bool unlink_tried;
 #else
-#ifndef _WIN32_WCE
+#ifdef _NEVER_
         virtual bool SetBlocking(bool blocking);
         HANDLE       pipe_handle;
 		bool         is_mailslot;  
@@ -57,9 +51,8 @@ class ProtoPipe : public ProtoSocket
         char         write_buffer[BUFFER_MAX];
         OVERLAPPED   read_overlapped;
         OVERLAPPED   write_overlapped;
-#else
+#endif  
         HANDLE       named_event_handle;
-#endif // if/else _WIN32_WCE
 #endif // if/else !WIN32
         char        path[PATH_MAX];
 };

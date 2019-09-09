@@ -89,13 +89,13 @@ void Ticker::Stop()
 
 /**
  * IMPORTANT NOTE @note Remember this timeout handler
- * is being called by the dispatcher thread, _not_
+ * is being called by the dispatcher child thread, _not_
  * the main thread since we're using ProtoDispatcher::StartThread()
  * to run the dispatcher
  */
 bool Ticker::OnTimeout(ProtoTimer& theTimer)
 {
-    PLOG(PL_ERROR, "threadExample: Ticker::OnTimeout() ...\n");
+    TRACE("threadExample: child thread Ticker::OnTimeout() ...\n");
     return true;
 }  // end Ticker::OnTimeout()
 
@@ -103,6 +103,8 @@ int main(int argc, char* argv[])
 {
     Ticker ticker;
     
+    // This "starts" the  ticker thread although it just sits and
+    // waits until its "StartTimer()" method is called
     if (!ticker.Start())
     {
         PLOG(PL_ERROR, "threadExample: Ticker::Start() error\n");
@@ -113,24 +115,24 @@ int main(int argc, char* argv[])
     while (count--)
     {
 #ifdef WIN32
-        Sleep(10000);
+        Sleep(3000);
 #else
         sleep(3);
 #endif  // if/else WIN32
         if (count)
         {
-            PLOG(PL_ERROR, "threadExample: 3 seconds have passed (starting ticker timer)\n");        
+            TRACE("threadExample: main thread 3 seconds have passed (starting ticker timer)\n");        
             ticker.StartTimer();
         }
         else
         {   
-            PLOG(PL_ERROR, "threadExample: 3 more seconds have passed (stopping ticker timer)\n");        
+            TRACE("threadExample: main thread 3 more seconds have passed (stopping ticker timer)\n");        
             ticker.Stop();
         }
         
     }
-    PLOG(PL_ERROR, "threadExample: ticker stopped.\n");
-    TRACE("threadExample: Done.\n");
+    TRACE("threadExample: main thread ticker stopped.\n");
+    TRACE("threadExample: main thread Done.\n");
     return 0;
     
 }  // end main()

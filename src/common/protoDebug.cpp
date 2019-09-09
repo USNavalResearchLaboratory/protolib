@@ -24,6 +24,9 @@
 #include <android/log.h>
 #endif
 
+#ifdef MACOSX
+#include <fcntl.h>
+#endif
     
 #if defined(PROTO_DEBUG) || defined(PROTO_MSG)
 // Note - the static debug_level, debug_log, etc variables are 
@@ -520,7 +523,7 @@ void DMSG(unsigned int level, const char *format, ...)
         if (debug_window.IsOpen() && ((stderr == debugLog) || (stdout == debugLog)))
         {
             char charBuffer[2048];
-            charBuffer[2048] = '\0';
+            charBuffer[2047] = '\0';
             int count = _vsnprintf(charBuffer, 2047, format, args);
 #ifdef _UNICODE
             wchar_t wideBuffer[2048];
@@ -581,7 +584,7 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
         if (debug_window.IsOpen() && !debug_pipe.IsOpen() && ((stderr == debugLog) || (stdout == debugLog)))
         {
             char charBuffer[8192];
-            charBuffer[8192] = '\0';
+            charBuffer[8191] = '\0';
             int count = _vsnprintf(charBuffer, 8191, format, args);
 #ifdef _UNICODE
             wchar_t wideBuffer[8192];
@@ -652,10 +655,11 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
                     prio = ANDROID_LOG_DEBUG;
                     break;
                 case PL_TRACE:
-                    prio = ANDROID_LOG_VERBOSE;
                 case PL_DETAIL: /* explicit fallthrough */
                 case PL_MAX:    /* explicit fallthrough */
                 case PL_ALWAYS: /* explicit fallthrough */
+                    prio = ANDROID_LOG_VERBOSE;
+                    break;
                 default:
                     prio = ANDROID_LOG_DEFAULT;
                     break;
@@ -663,7 +667,21 @@ void PLOG(ProtoDebugLevel level, const char *format, ...)
             __android_log_vprint(prio, "protolib", format, args);
 #else
             fprintf(debugLog, "%s", header);
-            vfprintf(debugLog, format, args);
+            if (vfprintf(debugLog, format, args) < 0)
+            {
+                // perror() seems more resilient for some reason (at least on Mac OSX)
+                perror("");
+                char buffer[8192];
+                buffer[8191] = '\0';
+                strcpy(buffer, header);
+                va_end(args);
+                va_start(args, format);
+                int count = vsnprintf(buffer + headerLen, 8191 - headerLen, format, args);
+                if ('\n' == buffer[headerLen + count - 1])
+                    buffer[headerLen + count - 1] = '\0';
+                perror(buffer);
+                clearerr(debugLog);
+            }
             fflush(debugLog);
 #endif
         }
@@ -786,7 +804,7 @@ void TRACE(const char *format, ...)
     if (debug_window.IsOpen() && ((stderr == debugLog) || (stdout == debugLog)))
     {
         char charBuffer[2048];
-        charBuffer[2048] = '\0';
+        charBuffer[2047] = '\0';
         int count = _vsnprintf(charBuffer, 2047, format, args);
 #ifdef _UNICODE
         wchar_t wideBuffer[2048];
@@ -801,8 +819,26 @@ void TRACE(const char *format, ...)
     else
 #endif  // _WIN32_WCE
     {
-        vfprintf(debugLog, format, args);
+#ifdef __ANDROID__
+        __android_log_vprint(ANDROID_LOG_ERROR, "protolib", format, args);
+#else
+        if (vfprintf(debugLog, format, args) < 0)
+        {
+            // perror() seems more resilient for some reason (at least on Mac OSX)
+            perror("");
+            char buffer[8192];
+            buffer[8191] = '\0';
+            va_end(args);
+            va_start(args, format);
+            int count = vsnprintf(buffer, 8191, format, args);
+            if ('\n' == buffer[count - 1])
+                buffer[count - 1] = '\0';
+            perror(buffer);
+            clearerr(debugLog);
+        }
         fflush(debugLog);
+        
+#endif  // if/else __ANDROID__
     }
     va_end(args);
 }  // end TRACE();
@@ -841,4 +877,4 @@ void ProtoAssertHandler(bool condition, const char* conditionText, const char* f
     if (NULL != assert_function) assert_function(condition, conditionText, fileName, lineNumber, assert_data);
 }  // end ProtoAssertHandler()
 
-#endif // if/else PROTO_DEBUG
+#endif // PROTO_DEBUG

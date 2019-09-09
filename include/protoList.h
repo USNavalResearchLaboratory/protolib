@@ -9,18 +9,12 @@
 * deriving your own classes you wish to store in a 
 * ProtoList.  
 * 
-* I have some ideas for some more sophisticated
-* list mechanisms (like that I put into the ProtoGraph
-* class) to provide for a list item base class that can
-* be a member of multiple lists at once, automatically get
-* removed from all of its lists when destroyed, etc.  But,
-* meanwhile this simple list puts no sophisticated demands
-* on memory management other than that specified by the
-* programmer.
+* Note the "ProtoQueue" classes provide some more sophisticated
+* options like items that can be listed in multiple lists and
+* automated removal from the multiple lists upon deletion, etc
 */
 
 #include "protoDefs.h"
-
 
 /**
 * @class ProtoIterable
@@ -131,6 +125,11 @@ class ProtoList : private ProtoIterable
         {
             public:
                 virtual ~Item();
+            
+                const Item* GetNext() const
+                    {return plist_next;}
+                const Item* GetPrev() const
+                    {return plist_prev;}
                 
             protected:
                 Item();
@@ -165,10 +164,15 @@ class ProtoList : private ProtoIterable
                 Item* GetPrevItem();
                 Item* PeekPrevItem() const;
                 
-                void SetCursor(Item* cursor)
-                    {item = cursor;}
+                bool SetCursor(Item* cursor)
+                {   
+                    item = cursor;
+                    return true; // note list membership not validated
+                }
                 
                 void Reverse();
+                bool IsReversed() const
+                    {return reversed;}
                 
             private:
                 // Required override for ProtoIterable to make sure any
@@ -178,9 +182,6 @@ class ProtoList : private ProtoIterable
             
                 Item*       item;
                 bool        reversed;
-                
-                Iterator*   ilist_prev;
-                Iterator*   ilist_next;
                 
         };  // end class ProtoList::Iterator
         
@@ -419,8 +420,12 @@ class ProtoStackTemplate : public ProtoStack
         ProtoStackTemplate() {}
         virtual ~ProtoStackTemplate() {}     
         
+        void Push(ITEM_TYPE& item)
+            {ProtoStack::Push(item);}
         ITEM_TYPE* Pop()
             {return static_cast<ITEM_TYPE*>(ProtoStack::Pop());}
+        ITEM_TYPE* Peek()
+            {return static_cast<ITEM_TYPE*>(ProtoStack::Peek());}
         ITEM_TYPE* Get()
             {return static_cast<ITEM_TYPE*>(ProtoStack::Get());}
         ITEM_TYPE* GetHead() const

@@ -718,7 +718,7 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
 				if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
 				return true;
 			}
-			else if (ProtoFile::DIRECTORY == type)
+			else if (ProtoFile::DIRECTORY == type && search_dirs)
 			{
 
 				ProtoDirectory *dir = new ProtoDirectory(ptr, current);
@@ -786,7 +786,7 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
             if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
             return true;
         } 
-        else if (ProtoFile::DIRECTORY == type)
+        else if (ProtoFile::DIRECTORY == type && search_dirs)
         {
             ProtoDirectory *dir = new ProtoDirectory(dp->d_name, current);
             if (dir && dir->Open())
@@ -827,7 +827,12 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
     }      
 }  // end ProtoDirectoryIterator::GetNextFile() (UNIX)
 #endif // if/else WIN32
-
+void
+ProtoDirectoryIterator::Recursive(bool stepIntoDirs)
+{
+    search_dirs = stepIntoDirs;
+    return;
+}
 ProtoDirectoryIterator::ProtoDirectory::ProtoDirectory(const char*    thePath, 
                                                        ProtoDirectory* theParent)
     : parent(theParent),
@@ -1324,11 +1329,11 @@ ProtoFileList::DirectoryItem::~DirectoryItem()
 }
 
 bool ProtoFileList::DirectoryItem::GetNextFile(char*   thePath,
-                                              bool    reset,
-                                              bool    updatesOnly,
-                                              time_t  lastTime,
-                                              time_t  thisTime,
-                                              time_t& bigTime)
+                                               bool    reset,
+                                               bool    updatesOnly,
+                                               time_t  lastTime,
+                                               time_t  thisTime,
+                                               time_t& bigTime)
 {
      if (reset)
      {
@@ -1340,7 +1345,7 @@ bool ProtoFileList::DirectoryItem::GetNextFile(char*   thePath,
         if (updates_only)
         {
             // Check to see if directory has been touched
-            time_t update_time = MdpFileGetUpdateTime(path);
+            time_t update_time = ProtoFile::GetUpdateTime(path);
             if (updateTime > bigTime) *bigTime = updateTime;
             if ((updateTime <= lastTime) || (updateTime > thisTime))
                 return false;

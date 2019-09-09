@@ -193,7 +193,8 @@ class NsProtoSimAgent : public Agent, public TimerHandler, public ProtoSimAgent
         };  // end class NsProtoSimAgent::UdpSocketAgent
         
 				
-        ProtoSimAgent::SocketProxy::List  socket_proxy_list; 
+        //ProtoSimAgent::SocketProxy::List  socket_proxy_list; 
+        NSSocketProxy::List               socket_proxy_list;
         Scheduler*                        scheduler;
         
 };  // end class NsProtoSimAgent

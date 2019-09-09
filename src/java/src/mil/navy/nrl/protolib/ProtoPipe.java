@@ -39,6 +39,6 @@ public class ProtoPipe
 	
 	private native void doFinalize();
 	
-	protected void finalize() throws Throwable {doFinalize();}
+    protected void finalize() throws Throwable {doFinalize(); super.finalize();}
 	
 }

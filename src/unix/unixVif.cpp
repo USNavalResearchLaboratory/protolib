@@ -1,4 +1,5 @@
 #include "protoVif.h"
+#include "protoNet.h"
 #include "protoDebug.h"
 
 #ifdef UNIX
@@ -23,7 +24,7 @@ class UnixVif : public ProtoVif
     UnixVif();
     ~UnixVif();
             
-    bool Open(const char* vifName, const ProtoAddress& vifAddr, unsigned int maskLen);
+    bool Open(const char* vifName, const ProtoAddress& ipAddr, unsigned int maskLen);
 
     void Close();
     
@@ -50,17 +51,27 @@ UnixVif::~UnixVif()
 {
 }
 
-bool UnixVif::Open(const char* vifName, const ProtoAddress& vifAddr, unsigned int maskLen)
+bool UnixVif::Open(const char* vifName, const ProtoAddress& ipAddr, unsigned int maskLen)
 {
-#ifdef LINUX    
-    // 1) Open up the TUN/TAP device
-    const char* devName = "/dev/net/tun";
-    if ((descriptor = open(devName, O_RDWR)) < 0)
+    Close();  // in case already open
+#ifdef LINUX 
+#ifdef __ANDROID__
+    const char* devName = "/dev//tun";
+#else
+    // 0) Prefer the flow control enabled TUN/TAP first
+    const char* devName = "/dev/net/tun_flowctl";
+#endif // if/else __ANDROID__
+    descriptor = open(devName, O_RDWR);
+    if (descriptor < 0)
     {
-        PLOG(PL_ERROR,"UnixVif::Open(%s) error: open(\"%s\") failed: %s\n", vifName, devName, GetErrorString());            
-        return false;
+        // 1) Open up the TUN/TAP device
+        const char* devName = "/dev/net/tun";
+        if ((descriptor = open(devName, O_RDWR)) < 0)
+        {
+            PLOG(PL_ERROR,"UnixVif::Open(%s) error: open(\"%s\") failed: %s\n", vifName, devName, GetErrorString());            
+            return false;
+        }
     }
-
     // 2) Set up a TAP virtual interface with given "vifName"
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
@@ -76,6 +87,15 @@ bool UnixVif::Open(const char* vifName, const ProtoAddress& vifAddr, unsigned in
         Close(); 
         return false;
     }
+    /* doesn't do what i want!
+    // This enables flow control in the Linux tap device?
+    int sndbuf = 500*1500;  // 500 packets worth?
+    if (ioctl(descriptor, TUNSETSNDBUF, &sndbuf) < 0)
+    {
+        PLOG(PL_ERROR, "UnixVif::Open(%s) error: ioctl(TUNSETIFF) failed: %s\n", vifName, GetErrorString());   
+    }
+    TRACE("set tap sndbuf to %d\n", sndbuf);
+    */
     strncpy(vif_name, vifName, VIF_NAME_MAX);
 #endif // LINUX
     
@@ -104,21 +124,41 @@ bool UnixVif::Open(const char* vifName, const ProtoAddress& vifAddr, unsigned in
     // 3) Configure the interface via "ifconfig" command
     // (TBD) Do this with an ioctl() call instead??
     char cmd[1024];
-    if (vifAddr.IsValid())  //IP address specified
-        sprintf(cmd, "/sbin/ifconfig %s %s/%d up", vif_name, vifAddr.GetHostString(), maskLen);
+#ifdef __ANDROID__
+    // Bring interface up and give it an address
+    sprintf(cmd, "ip link set %s up", vif_name);
+#else
+    if (ipAddr.IsValid())  //IP address specified
+        sprintf(cmd, "/sbin/ifconfig %s %s/%d up", vif_name, ipAddr.GetHostString(), maskLen);
     else  // IP address NOT specified, use system scripts
         sprintf(cmd, "/sbin/ifconfig %s up", vif_name);
+#endif // if/else __ANDROID__
     if (system(cmd) < 0)
     {
         PLOG(PL_ERROR, "UnixVif::Open(%s) error: \"%s\n\" failed: %s\n", vifName, cmd, GetErrorString());
         Close();
         return false;       
     }
+#ifdef __ANDROID__
+    // On Android, addr is assigned as a separate step
+    if (ipAddr.IsValid())
+    {
+        if (!ProtoNet::AddInterfaceAddress(vif_name, ipAddr, maskLen))
+        {
+            PLOG(PL_ERROR, "UnixVif::Open(%s) error: unable to assign IP address!\n", vifName);
+            Close();
+            return false;
+        } 
+    }
+#endif // __ANDROID__    
+    // 4) Snag the virtual interface hardware address
+    if (!ProtoNet::GetInterfaceAddress(vif_name, ProtoAddress::ETH, hw_addr))
+        PLOG(PL_ERROR, "UnixVif::Open(%s) error: unable to get ETH address!\n", vif_name);
 
-    // 4) Make a call to "ProtoChannel::Open()" to install event dispatching if applicable
+    // 5) Make a call to "ProtoChannel::Open()" to install event dispatching if applicable
     if (!ProtoChannel::Open())
     {
-        PLOG(PL_ERROR, "UnixVif::Open(%s) error: couldn't install ProtoChannel\n", vifName);
+        PLOG(PL_ERROR, "UnixVif::Open(%s) error: couldn't install ProtoChannel\n", vif_name);
         Close();
         return false;    
     }
@@ -193,6 +233,12 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
         return false;       
     }
 #endif // MACOSX
+    
+    
+    // 4) Snag the virtual interface hardware address
+    if (!ProtoNet::GetInterfaceAddress(vif_name, ProtoAddress::ETH, hw_addr))
+        PLOG(PL_ERROR, "UnixVif::SetHardwareAddress() error: unable to get ETH address for virtual interface \"%s\"!\n", vif_name);
+    
     return true;
 }  // end UnixVif::SetHardwareAddress()
 

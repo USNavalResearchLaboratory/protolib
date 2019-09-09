@@ -10,8 +10,11 @@ to provide some additional description of significant changes made.
 Additionally, the developers will try to provide more timely releases of 
 the Protolib source tree outside of the SVN repository.
 
-
-
+Version 3.0b1
+=============
+  - ProtoDispatcher can now use "epoll()" (Linux), "kqueue()" (BSD), and
+    "/dev/poll" (Solaris), and "pselect()" for enhanced performance over
+    the current use of "select()"
 
 Version 2.1b1
 =============

@@ -198,7 +198,7 @@ class ProtoPktRTP : public ProtoPkt
 		}
 
         void SetSequence(UINT16 sequence)  // may want this class to maintain the sequence # rather than get it from outside later on
-        {reinterpret_cast<UINT16*>(buffer_ptr)[OFFSET_SEQUENCE] = htons(sequence);}
+            {reinterpret_cast<UINT16*>(buffer_ptr)[OFFSET_SEQUENCE] = htons(sequence);}
 
         void SetTimestamp(UINT32 timestamp)
             {buffer_ptr[OFFSET_TIMESTAMP] = htonl(timestamp);}

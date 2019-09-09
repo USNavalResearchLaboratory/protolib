@@ -72,8 +72,8 @@ class LinuxRouteMgr : public ProtoRouteMgr
         bool NetlinkCheckResponse(UINT32 seq);
                     
         int     descriptor;
-        pid_t   pid;
-        UINT32  sequence;
+        UINT32  port_id;  // netlink port id
+        UINT32  sequence; // netlink request/response sequence number
         
 };  // end class LinuxRouteMgr
 
@@ -85,28 +85,19 @@ ProtoRouteMgr* ProtoRouteMgr::Create(Type theType)
     {
         case ZEBRA:
           returnMgr = (ProtoRouteMgr*)(new ZebraRouteMgr);
-          returnMgr->Init();
           break;
         case SYSTEM:
           returnMgr = (ProtoRouteMgr*)(new LinuxRouteMgr);
-          returnMgr->Init();
           break;
         default:
           return NULL;
     }
     return returnMgr;
 }  // end ProtoRouteMgr::Create()
-void
-ProtoRouteMgr::Init()
-{
-    savedRoutesIPv4 = NULL;
-    savedRoutesIPv6 = NULL;
-    return;
-}
+
 LinuxRouteMgr::LinuxRouteMgr()
- : descriptor(-1), sequence(0)
+ : descriptor(-1), port_id(0), sequence(0)
 {
-    Init();
 }
 
 LinuxRouteMgr::~LinuxRouteMgr()
@@ -148,8 +139,27 @@ bool LinuxRouteMgr::Open(const void* /*userData*/)
     }
     else
     {
-        pid = (UINT32)getpid();
-       return true;
+        // Here we use "bind()" to get a unique netlink port id (pid) from the kernel
+        // (with localAddr.nl_pid passed into bind() set as '0', kernel assigns us one
+        struct sockaddr_nl localAddr;
+        memset(&localAddr, 0, sizeof(localAddr));
+        localAddr.nl_family = AF_NETLINK;
+	    if (0 > bind(descriptor, (struct sockaddr*) &localAddr, sizeof(localAddr)))
+        {
+            PLOG(PL_ERROR, "ProtoNetlink::Open() bind() error: %s\n", GetErrorString());
+            Close();
+            return false;
+        }
+        // Get socket name so we know our port number (i.e. netlink pid)
+        socklen_t addrLen = sizeof(localAddr);
+        if (getsockname(descriptor, (struct sockaddr*)&localAddr, &addrLen) < 0) 
+        {    
+            PLOG(PL_ERROR, "ProtoNetlink::Open()  getsockname() error: %s\n", GetErrorString());
+            Close();
+            return false;
+        }
+        port_id = localAddr.nl_pid;
+        return true;
     }
 }  // end LinuxRouteMgr::Open()
 
@@ -203,7 +213,7 @@ bool LinuxRouteMgr::NetlinkCheckResponse(UINT32 seq)
 // Justin Below is a semi-hack to get SMF to function correctly in core namespaces.  
 // If when the msg->nlmsg_pid gets fixed this ifdef can be removed
 #ifndef CORE_NAMESPACES
-          if ((msg->nlmsg_pid == (UINT32)pid) && (msg->nlmsg_seq == seq))
+          if ((msg->nlmsg_pid == port_id) && (msg->nlmsg_seq == seq))
 #else
     //DMSG(0,"J Namspaces comment in NetlinkCheckResponse\n");
             if (msg->nlmsg_seq == seq)
@@ -217,7 +227,7 @@ bool LinuxRouteMgr::NetlinkCheckResponse(UINT32 seq)
                         if (0 != errorMsg->error)
                         {
                             PLOG(PL_ERROR, "LinuxRouteMgr::NetlinkCheckResponse() recvd NLMSG_ERROR "
-                                    "error seq:%d code:%d...\n", msg->nlmsg_seq, errorMsg->error);
+                                           "error seq:%d code:%d...\n", msg->nlmsg_seq, errorMsg->error);
                             return false;
                         }
                         else
@@ -228,7 +238,7 @@ bool LinuxRouteMgr::NetlinkCheckResponse(UINT32 seq)
                     }   
                     default:
                         PLOG(PL_ERROR, "LinuxRouteMgr::NetlinkCheckResponse() recvd unexpected "
-                                "matching message type:%d\n", msg->nlmsg_type);
+                                       "matching message type:%d\n", msg->nlmsg_type);
                         // Assume success ???
                         return true;
                         break;
@@ -272,7 +282,7 @@ bool LinuxRouteMgr::SetRoute(const ProtoAddress&   dst,
     req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE  | NLM_F_ACK;
     UINT32 seq = sequence++;
     req.msg.nlmsg_seq = seq; 
-    req.msg.nlmsg_pid = pid;
+    req.msg.nlmsg_pid = port_id;
     
     // route add request
     switch (dst.GetType())
@@ -448,7 +458,7 @@ bool LinuxRouteMgr::DeleteRoute(const ProtoAddress& dst,
         req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_MATCH;
         UINT32 seq = sequence++;
         req.msg.nlmsg_seq = seq; 
-        req.msg.nlmsg_pid = pid;
+        req.msg.nlmsg_pid = port_id;
 
         // route delete request
         switch (dst.GetType())
@@ -598,7 +608,7 @@ bool LinuxRouteMgr::GetRoute(const ProtoAddress& dst,
         req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_MATCH;
         UINT32 seq = sequence++;
         req.msg.nlmsg_seq = seq; 
-        req.msg.nlmsg_pid = pid;
+        req.msg.nlmsg_pid = port_id;
 
         // route dump request
         switch (dst.GetType())
@@ -696,7 +706,8 @@ bool LinuxRouteMgr::GetRoute(const ProtoAddress& dst,
             else if (msgLen == bufferSize)
             {
                 bufferSize *= 2;
-                truncated = true;  
+                truncated = true; 
+                // TBD - should use struct msghdr.msg_flags MSG_TRUNC flag to detect this isntead 
             }
             
             struct nlmsghdr* msg = (struct nlmsghdr*)buffer;
@@ -706,7 +717,7 @@ bool LinuxRouteMgr::GetRoute(const ProtoAddress& dst,
 //Justin Below is a semi-hack to get SMF to function correctly in core namespaces.  
 //If when the msg->nlmsg_pid gets fixed this ifdef can be removed
 #ifndef CORE_NAMESPACES
-                if ((msg->nlmsg_pid == (UINT32)pid) && (msg->nlmsg_seq == seq))
+                if ((msg->nlmsg_pid == port_id) && (msg->nlmsg_seq == seq))
 #else
                 if (msg->nlmsg_seq == seq)
 #endif // if/else !CORE_NAMESPACES
@@ -893,7 +904,7 @@ bool LinuxRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
         req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP | NLM_F_MULTI;
         UINT32 seq = sequence++;
         req.msg.nlmsg_seq = seq; 
-        req.msg.nlmsg_pid = pid;
+        req.msg.nlmsg_pid = port_id;
 
         // route dump request
         switch (addrType)
@@ -961,7 +972,7 @@ bool LinuxRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
 // Justin Below is a semi-hack to get SMF to function correctly in core namespaces.  
 // If when the msg->nlmsg_pid gets fixed this #ifdef can be removed
 #ifndef CORE_NAMESPACES
-                if ((msg->nlmsg_pid == (UINT32)pid) && (msg->nlmsg_seq == seq))
+                if ((msg->nlmsg_pid == port_id) && (msg->nlmsg_seq == seq))
 #else
                 if (msg->nlmsg_seq == seq)
 #endif // if/else !CORE_NAMESPACES
@@ -1157,7 +1168,7 @@ bool LinuxRouteMgr::GetInterfaceAddressList(unsigned int        ifIndex,
     req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_MATCH ;
     UINT32 seq = sequence++;
     req.msg.nlmsg_seq = seq; 
-    req.msg.nlmsg_pid = pid;
+    req.msg.nlmsg_pid = port_id;
     
     // route dump request
     unsigned int addrLength = 0;
@@ -1202,8 +1213,8 @@ bool LinuxRouteMgr::GetInterfaceAddressList(unsigned int        ifIndex,
     while(!done)
     {
 //        DMSG(0,"Justin in while comment in getinterfaceaddress is ipv4\n");
-        char buffer[1024];
-        int msgLen = recv(descriptor, buffer, 1024, 0); 
+        char buffer[4096];
+        int msgLen = recv(descriptor, buffer, 4096, 0); 
         if (msgLen < 0)
         {
             PLOG(PL_ERROR, "LinuxRouteMgr::GetInterfaceAddressList() recv() error: %s\n", strerror(errno)); 
@@ -1215,7 +1226,7 @@ bool LinuxRouteMgr::GetInterfaceAddressList(unsigned int        ifIndex,
 //Justin Below is a semi-hack to get SMF to function correctly in core namespaces.  
 //If when the msg->nlmsg_pid gets fixed this #if can be removed
 #ifndef CORE_NAMESPACES
-          if ((msg->nlmsg_pid == (UINT32)pid) && (msg->nlmsg_seq == seq))
+          if ((msg->nlmsg_pid == port_id) && (msg->nlmsg_seq == seq))
 #else
             if (msg->nlmsg_seq == seq)
 #endif // if/else !CORE_NAMESPACES

@@ -1,8 +1,6 @@
 /*
  *  TCPProtoSocketAgent.h
  *
- *  Copyright 2007 __MyCompanyName__. All rights reserved.
- *
  */
 
 #ifndef TCPProtoSocketAgent_h

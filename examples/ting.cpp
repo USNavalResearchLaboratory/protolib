@@ -1193,7 +1193,8 @@ bool TingSession::SendMessage(TingMessage::Type msgType, double backoff)
     struct timeval currentTime;
     ProtoSystemTime(currentTime);
     msg.SetSentTime(currentTime);
-    if (!ting_socket.SendTo((const char*)msg.GetBuffer(), msg.GetLength(), destAddr))
+    unsigned int numBytes = msg.GetLength();
+    if (!ting_socket.SendTo((const char*)msg.GetBuffer(), numBytes, destAddr))
     {
         PLOG(PL_ERROR, "TingApp::SendMessage() error: unable to send message!\n");
         return false;
@@ -1272,7 +1273,7 @@ void TingSession::Summarize()
             if (offsetCount > 0)
             {
                 double offsetAve = offsetSum / (double)offsetCount;
-                fprintf(log_file, "offset: min>%lf ave>%lf max>%lf ", offsetMin, offsetAve, offsetMax);
+                fprintf(log_file, "offset: min>%f ave>%f max>%f ", offsetMin, offsetAve, offsetMax);
             }
             else
             {
@@ -1281,7 +1282,7 @@ void TingSession::Summarize()
             if (rttCount > 0)
             {
                 double rttAve = rttSum / (double)rttCount;
-                fprintf(log_file, "rtt: min>%lf ave>%lf max>%lf\n", rttMin, rttAve, rttMax);
+                fprintf(log_file, "rtt: min>%f ave>%f max>%f\n", rttMin, rttAve, rttMax);
             }
             else
             {
@@ -1334,7 +1335,7 @@ void TingSession::Summarize()
         if (offsetCount > 0)
         {
             double offsetAve = offsetSum / (double)offsetCount;
-            fprintf(log_file, "offset: min>%lf ave>%lf max>%lf ", offsetMin, offsetAve, offsetMax);
+            fprintf(log_file, "offset: min>%f ave>%f max>%f ", offsetMin, offsetAve, offsetMax);
         }
         else
         {
@@ -1343,7 +1344,7 @@ void TingSession::Summarize()
         if (rttCount > 0)
         {
             double rttAve = rttSum / (double)rttCount;
-            fprintf(log_file, "rtt: min>%lf ave>%lf max>%lf\n", rttMin, rttAve, rttMax);
+            fprintf(log_file, "rtt: min>%f ave>%f max>%f\n", rttMin, rttAve, rttMax);
         }
         else
         {
@@ -1400,7 +1401,7 @@ void TingSession::Summarize()
         if (offsetCount > 0)
         {
             double offsetAve = offsetSum / (double)offsetCount;
-            fprintf(log_file, "RBS offset: min>%lf ave>%lf max>%lf ", offsetMin, offsetAve, offsetMax);
+            fprintf(log_file, "RBS offset: min>%f ave>%f max>%f ", offsetMin, offsetAve, offsetMax);
         }
         else
         {
@@ -1433,7 +1434,7 @@ void TingSession::Summarize()
         if (rttCount > 0)
         {
             double rttAve = rttSum / (double)rttCount;
-            fprintf(log_file, "rtt: min>%lf ave>%lf max>%lf\n", rttMin, rttAve, rttMax);
+            fprintf(log_file, "rtt: min>%f ave>%f max>%f\n", rttMin, rttAve, rttMax);
         }
         else
         {
@@ -1523,7 +1524,7 @@ void TingApp::Usage()
 bool TingApp::OnStartup(int argc, const char*const* argv)
 {   
     
-    SetDebugLevel(2);
+    SetDebugLevel(8);
     
     // By default, listen on the default address/port
     group_address.ResolveFromString(DEFAULT_GROUP);
@@ -1743,7 +1744,10 @@ bool TingApp::OnStartup(int argc, const char*const* argv)
         return false;
     }
     if (mcastOnly)
+    {
         ting_socket.SetReuse(true); // let's use separate ting to "initiate" checks
+        ting_socket.SetLoopback(true);
+    }
     if (!(ting_socket.Bind(ting_port)))
     {
         // Bind to random socket since as this may be a unicast "initiator"
@@ -1891,7 +1895,7 @@ void TingApp::OnTingSocketEvent(ProtoSocket&       theSocket,
 
 void TingApp::HandleMessage(const TingMessage& msg, const ProtoAddress& srcAddr, const struct timeval& recvTime)
 {
-    //TRACE("TingApp::HandleMessage() from %s/%hu ...\n", srcAddr.GetHostString(), srcAddr.GetPort());
+    TRACE("TingApp::HandleMessage() from %s/%hu ...\n", srcAddr.GetHostString(), srcAddr.GetPort());
     // Make sure the message round id is valid 
     if (0 == msg.GetRoundId())
     {

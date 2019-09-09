@@ -1,30 +1,29 @@
-Microsoft Visual Studio Solution File, Format Version 8.00
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Protokit", "..\win32\Protokit.vcproj", "{119198B2-0933-49BB-A039-334A26A6FBBF}"
-	ProjectSection(ProjectDependencies) = postProject
-	EndProjectSection
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Express 2013 for Windows Desktop
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Protokit", "Protokit.vcxproj", "{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wxProtoExample", "wxProtoExample.vcproj", "{9A218E62-5FB2-471E-AEF6-DB991733290E}"
-	ProjectSection(ProjectDependencies) = postProject
-		{119198B2-0933-49BB-A039-334A26A6FBBF} = {119198B2-0933-49BB-A039-334A26A6FBBF}
-	EndProjectSection
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wxProtoExample", "wxProtoExample.vcxproj", "{8F26E30C-25CF-4846-9BC0-CDF8C33E8DCE}"
 EndProject
 Global
-	GlobalSection(SolutionConfiguration) = preSolution
-		Debug = Debug
-		Release = Release
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
 	EndGlobalSection
-	GlobalSection(ProjectConfiguration) = postSolution
-		{119198B2-0933-49BB-A039-334A26A6FBBF}.Debug.ActiveCfg = Debug|Win32
-		{119198B2-0933-49BB-A039-334A26A6FBBF}.Debug.Build.0 = Debug|Win32
-		{119198B2-0933-49BB-A039-334A26A6FBBF}.Release.ActiveCfg = Release|Win32
-		{119198B2-0933-49BB-A039-334A26A6FBBF}.Release.Build.0 = Release|Win32
-		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Debug.ActiveCfg = Debug|Win32
-		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Debug.Build.0 = Debug|Win32
-		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Release.ActiveCfg = Release|Win32
-		{9A218E62-5FB2-471E-AEF6-DB991733290E}.Release.Build.0 = Release|Win32
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Debug|x64.ActiveCfg = Debug|x64
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release|Win32.ActiveCfg = Release|Win32
+		{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}.Release|x64.ActiveCfg = Release|x64
+		{8F26E30C-25CF-4846-9BC0-CDF8C33E8DCE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{8F26E30C-25CF-4846-9BC0-CDF8C33E8DCE}.Debug|x64.ActiveCfg = Debug|Win32
+		{8F26E30C-25CF-4846-9BC0-CDF8C33E8DCE}.Release|Win32.ActiveCfg = Release|Win32
+		{8F26E30C-25CF-4846-9BC0-CDF8C33E8DCE}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-	EndGlobalSection
-	GlobalSection(ExtensibilityAddIns) = postSolution
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 EndGlobal

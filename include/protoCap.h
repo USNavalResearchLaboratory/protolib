@@ -9,6 +9,7 @@
  */
 
 #include "protoChannel.h"
+#include "protoAddress.h"
 
 class ProtoCap : public ProtoChannel
 {
@@ -25,7 +26,7 @@ class ProtoCap : public ProtoChannel
         };
         
         // These must be overridden for different implementations
-        // ProtoCap::Open() should also be called at the _end_ of derived
+        // ProtoCap::Open() MUST also be called at the _end_ of derived
         // implementations' Open() method
         virtual bool Open(const char* interfaceName = NULL)
             {return ProtoChannel::Open();}
@@ -39,12 +40,18 @@ class ProtoCap : public ProtoChannel
             if_index = -1;
         }
         
-        int GetInterfaceIndex() const 
+        unsigned int GetInterfaceIndex() const 
             {return if_index;}
         
-        virtual bool Send(const char* buffer, unsigned int buflen) = 0;
-        virtual bool Forward(char* buffer, unsigned int buflen) = 0;
+        const ProtoAddress& GetInterfaceAddr() const
+            {return if_addr;}
+        
         virtual bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL) = 0;
+        virtual bool Send(const char* buffer, unsigned int& numBytes) = 0;
+        
+        bool Forward(char* buffer, unsigned int& numBytes);
+        
+        bool ForwardFrom(char* buffer, unsigned int& numBytes, const ProtoAddress& srcMacAddr);
         
         void SetUserData(const void* userData) 
             {user_data = userData;}
@@ -53,10 +60,11 @@ class ProtoCap : public ProtoChannel
             
     protected:
         ProtoCap();
-        int         if_index;
+        unsigned int    if_index; // interface index (if applicable)
+        ProtoAddress    if_addr;  // interface MAC addr (if applicable)
         
     private:
-        const void* user_data;
+        const void*     user_data;
             
 };  // end class ProtoCap
 

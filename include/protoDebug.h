@@ -60,7 +60,6 @@ inline void CloseDebugWindow() {}
 
 #endif // if/else PROTO_DEBUG || PROTO_MSG
 
-
 #if PROTO_DEBUG || PROTO_MSG
 
 // The following prototype and "SetAssertFunction()" allows the behavior of the PROTO_ASSERT macro
@@ -77,12 +76,18 @@ void ProtoAssertHandler(bool condition, const char* conditionText, const char* f
 void PROTO_ABORT(const char *format, ...);
 
 #ifdef HAVE_ASSERT
+#ifdef __ANDROID__
+#include <android/log.h>
+#define PROTO_ASSERT(X) {if (HasAssertFunction()) ProtoAssertHandler(X, #X, __FILE__, __LINE__); \
+else if (!((bool)(X)))  __android_log_assert(#X, "protolib", "%s line:%d", __FILE__, __LINE__);}
+#else
 #include <assert.h>
 #define PROTO_ASSERT(X) {if (HasAssertFunction()) ProtoAssertHandler(X, #X, __FILE__, __LINE__); else assert(X);}
+#endif // if/else __ANDROID__
 #else
 #define PROTO_ASSERT(X) \
     {if (HasAssertFunction()) ProtoAssertHandler(X, #X, __FILE__, __LINE__); \
-    else PROTO_ABORT("ASSERT(%s) failed at line %d in source file \"%s\"\n", #X, __LINE__, __FILE__);}
+    else if (!((bool)(X))) PROTO_ABORT("ASSERT(%s) failed at line %d in source file \"%s\"\n", #X, __LINE__, __FILE__);}
 #endif // if/else HAVE_ASSERT
 
 
@@ -91,7 +96,8 @@ void PROTO_ABORT(const char *format, ...);
 #endif // TRACE
 void TRACE(const char *format, ...);
 
-#else  
+#else  // !PROTO_DEBUG
+
 #define PROTO_ASSERT(X)
 #ifndef ABORT
 #define ABORT(X)
@@ -122,6 +128,30 @@ inline const char* GetErrorString()
     return errorString;
 #else
     return strerror(errno);
+#endif // if/else WIN32/UNIX
+}
+
+
+#ifdef WIN32
+typedef DWORD ProtoErrorCode;
+#else
+typedef int ProtoErrorCode;
+#endif  // if/else WIN32/UNIX
+
+inline const char* GetErrorString(ProtoErrorCode errorCode)
+{
+#ifdef WIN32
+    static char errorString[256];
+    errorString[255] = '\0';
+    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | 
+                  FORMAT_MESSAGE_IGNORE_INSERTS,
+                  NULL,
+                  errorCode,
+                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), // Default language
+                  (LPTSTR) errorString, 255, NULL);
+    return errorString;
+#else
+    return strerror(errorCode);
 #endif // if/else WIN32/UNIX
 }
 

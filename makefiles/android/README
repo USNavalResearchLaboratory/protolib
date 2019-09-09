@@ -6,7 +6,7 @@ Using protolib in your pure Java Android Application
 
 1. First, update the library project to point to your Android SDK:
 
-    android update lib-project --target <id> --path /path/to/protolib/makefiles/android
+    android update lib-project -p /path/to/protolib/makefiles/android -t <targetId> 
 
    Use "android list targets" to see the ids of the SDK targets you have
    installed.
@@ -46,3 +46,5 @@ Using NORM in your C/C++/Java Android Application
 
    This is relative to the "NDK_MODULE_PATH" variable that must be defined in
    "Application.mk".
+   
+

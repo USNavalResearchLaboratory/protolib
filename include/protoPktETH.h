@@ -94,6 +94,9 @@ class ProtoPktETH : public ProtoPkt
         const char* GetPayload() {return (((const char*)buffer_ptr)+OFFSET_PAYLOAD);}
         char* AccessPayload() {return (((char*)buffer_ptr)+OFFSET_PAYLOAD);}
         
+        bool InitIntoBuffer(UINT32*         bufferPtr = NULL, 
+                            unsigned int    bufferBytes = 0, 
+                            bool            freeOnDestruct = false);
         void SetSrcAddr(ProtoAddress srcAddr)
             {memcpy(((char*)buffer_ptr)+OFFSET_SRC, srcAddr.GetRawHostAddress(), ADDR_LEN);}
         void SetDstAddr(ProtoAddress dstAddr)
@@ -111,10 +114,10 @@ class ProtoPktETH : public ProtoPkt
     private:
         enum
         {
-            OFFSET_DST     = 0,                   //  0 bytes
-            OFFSET_SRC     = ADDR_LEN,            //  6 bytes
-            OFFSET_TYPE    = (2*ADDR_LEN)/2,      //  6 UINT16 (12 bytes)
-            OFFSET_PAYLOAD = 2*(OFFSET_TYPE+1)    // 14 bytes
+            OFFSET_DST     = 0,                         //  6 bytes, zero offset
+            OFFSET_SRC     = OFFSET_DST + ADDR_LEN,     //  6 bytes, UINT8 offset
+            OFFSET_TYPE    = (OFFSET_SRC + ADDR_LEN)/2, //  2 bytes, UINT16 offset
+            OFFSET_PAYLOAD = 2*(OFFSET_TYPE+1)          //  UINT8 offset
         };
 };  // end class ProtoPktETH
 

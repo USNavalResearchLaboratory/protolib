@@ -752,7 +752,7 @@ ProtoGraph::Vertice* ProtoGraph::SimpleTraversal::GetNextVertice(unsigned int* l
                 if (depth_first)
                 {
                     queue_pending.Prepend(*nextVertice);
-                    // (TBD) depth tracking for Depth-first search
+                    // (TBD) level tracking for Depth-first search
                 }
                 else
                 {

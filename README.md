@@ -163,8 +163,7 @@ BSD (incl. MacOS), but not yet for WIN32 (This is work in progress).  Also,
 more complete documentation, including Doxygen-based code documentation and
 a "Developer's Guide" with examples needs to be provided. 
 
-Brian Adamson <adamson@itd.nrl.navy.mil> 30 September 2003
-
+Brian Adamson <adamson@itd.nrl.navy.mil> 26 June 2017
 
 
 

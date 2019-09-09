@@ -33,7 +33,7 @@
 #include <fcntl.h>   // for open()
 #include <unistd.h>  // for close()
 
-class BsdCap : public ProtoCap xxx
+class BsdCap : public ProtoCap
 {
     public:
         BsdCap();
@@ -41,12 +41,8 @@ class BsdCap : public ProtoCap xxx
             
         bool Open(const char* interfaceName = NULL);
         void Close();
-        bool Send(const char* buffer, unsigned int buflen);
-        bool Forward(char* buffer, unsigned int buflen);
+        bool Send(const char* buffer, unsigned int& numBytes);
         bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL);
-    
-    private:
-        char            eth_addr[6];    
 };  // end class BsdCap
 
 /**
@@ -106,15 +102,8 @@ bool BsdCap::Open(const char* interfaceName)
     }
     
     ProtoAddress macAddr;
-    if (ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, macAddr))
-    {
-        memcpy(eth_addr, macAddr.GetRawHostAddress(), 6);
-    }
-    else
-    {
-        eth_addr.Invalidate();
+    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
         PLOG(PL_ERROR, "BsdCap::Open() warning: unable to get MAC address for interface \"%s\"\n", interfaceName);
-    }
     
     int ifIndex = ProtoSocket::GetInterfaceIndex(interfaceName);
     
@@ -202,7 +191,7 @@ void BsdCap::Close()
 bool BsdCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
 {
     if (direction) *direction = UNSPECIFIED;
-    while (1)
+    for (;;)
     {
         ssize_t result = read(descriptor, buffer, numBytes);
         if (result < 0)
@@ -241,7 +230,7 @@ bool BsdCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
  */
 
 
-bool BsdCap::Send(const char* buffer, unsigned int buflen)
+bool BsdCap::Send(const char* buffer, unsigned int& numBytes)
 {
     // Make sure packet is a type that is OK for us to send
     // (Some packets seem to cause a PF_PACKET socket trouble)
@@ -250,81 +239,34 @@ bool BsdCap::Send(const char* buffer, unsigned int buflen)
     type = ntohs(type);
     if (type <=  0x05dc) // assume it's 802.3 Length and ignore
     {
-            PLOG(PL_DEBUG, "BsdCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
-            return false;
+        PLOG(PL_DEBUG, "BsdCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
+        return false;
     }
-    
-    unsigned int put = 0;
-    while (put < buflen)
+    for (;;)
     {
-        struct sockaddr sockAddr;
-        
+        struct sockaddr sockAddr;  // note the raw frame device here does not use the sockAddr
         ssize_t result = sendto(descriptor, buffer+put, buflen-put, 0, &sockAddr, sizeof(sockAddr));
-        if (result > 0)
+        if (result < 0)
         {
-            put += result;
+            switch (errno)
+            {
+                case EINTR:
+                    continue;  // try again
+                case EWOULDBLOCK:
+                    numBytes = 0;
+                case ENOBUFS:
+                    // because this doesn't block write()
+                default:
+                    PLOG(PL_ERROR, "BsdCap::Send() error: %s", GetErrorString());
+                    break;
+            }   
+            return false;              
         }
         else
         {
-            if (EINTR == errno)
-            {
-                continue;  // try again
-            }
-            else
-            {
-                PLOG(PL_ERROR, "BsdCap::Send() error: %s\n", GetErrorString());
-                return false;
-            }           
+            ASSERT(result == numBytes);
+            break;
         }
     }
     return true;
 }  // end BsdCap::Send()
-/**
- * @brief Changes the mac addr to our own and writes packet to the bsd socket descriptor.
- *
- * 802.3 frames are not supported
- *
- * @param buffer
- * @param buflen
- *
- * @return success or failure indicator 
- */
-
-bool BsdCap::Forward(char* buffer, unsigned int buflen)
-{
-    // Make sure packet is a type that is OK for us to send
-    // (Some packets seem to cause a PF_PACKET socket trouble)
-    UINT16 type;
-    memcpy(&type, buffer+12, 2);
-    type = ntohs(type);
-    if (type <=  0x05dc) // assume it's 802.3 Length and ignore
-    {
-            PLOG(PL_DEBUG, "BsdCap::Forward() unsupported 802.3 frame (len = %04x)\n", type);
-            return false;
-    }
-    // Change the src MAC addr to our own
-    // (TBD) allow caller to specify dst MAC addr ???
-    memcpy(buffer+6, eth_addr, 6);
-    unsigned int put = 0;
-    while (put < buflen)
-    {
-        ssize_t result = write(descriptor, buffer+put, buflen-put);
-        if (result > 0)
-        {
-            put += result;
-        }
-        else
-        {
-            if (EINTR == errno)
-            {
-                continue;  // try again
-            }
-            else
-            {
-                PLOG(PL_ERROR, "BsdCap::Forward() error: %s", GetErrorString());
-                return false;
-            }           
-        }
-    }
-    return true;
-}  // end BsdCap::Forward()

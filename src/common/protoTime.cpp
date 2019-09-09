@@ -25,11 +25,8 @@ ProtoTime::ProtoTime(const struct timeval& timeVal)
 
 ProtoTime::ProtoTime(double seconds)
 {
-    //TRACE("enter ProtoTime::ProtoTime(%lf seconds) ctor ...\n", seconds);
     tval.tv_sec = (unsigned long)seconds;
     tval.tv_usec = (unsigned long)(1.0e+06 * (seconds - ((double)tval.tv_sec)));
-    
-    //TRACE("   tval.tv_sec = %lu\n", tval.tv_sec);
 }
 
 ProtoTime::ProtoTime(unsigned long sec, unsigned long usec)
@@ -50,6 +47,7 @@ void ProtoTime::operator+=(const ProtoTime& t)
     }
 }  // end ProtoTime::operator+=() 
 
+/* (COMMENTED OUT BECAUSE NOT SURE IF CORRECT AND DON'T THINK IT'S USED)
 void ProtoTime::operator-=(double sec)
 {
     unsigned long secInt = (unsigned long)sec;
@@ -77,6 +75,7 @@ void ProtoTime::operator-=(double sec)
         tval.tv_sec -= secInt;
     }
 }  // end ProtoTime::operator-=()
+*/
 
 double ProtoTime::GetOffsetValue() const
 {
@@ -104,12 +103,14 @@ double ProtoTime::Delta(const ProtoTime& t1, const ProtoTime& t2)
 // precise timing (needed for WinCE)
 bool proto_performance_counter_init = false;
 LARGE_INTEGER proto_performance_counter_frequency = {0, 0};
-#ifdef _WIN32_WCE
+#ifdef USE_PERFORMANCE_COUNTER
+//#ifdef _WIN32_WCE
 long proto_performance_counter_offset = 0;
 long proto_system_time_last_sec = 0;
 unsigned long proto_system_count_roll_sec = 0;
 LARGE_INTEGER proto_system_count_last = {0, 0};
-#endif // _WIN32_WCE
+#endif // USE_PERFORMANCE_COUNTER
+//#endif // _WIN32_WCE
 #endif // WIN32
 
 

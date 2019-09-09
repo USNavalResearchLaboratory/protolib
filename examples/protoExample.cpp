@@ -18,56 +18,57 @@ class ProtoExample :
 #endif  // if/else SIMULATE
                      
 {
-public:
-  ProtoExample();
-  ~ProtoExample();
-  
-  /**
-   * Override from ProtoApp or NsProtoSimAgent base
-   */
-  bool OnStartup(int argc, const char*const* argv);
-  /**
-   * Override from ProtoApp or NsProtoSimAgent base
-   */
-  bool ProcessCommands(int argc, const char*const* argv);
-  /**
-   * Override from ProtoApp or NsProtoSimAgent base
-   */
-  void OnShutdown();
-  /**
-   * Override from ProtoApp or NsProtoSimAgent base
-   */
-  virtual bool HandleMessage(unsigned int len, const char* txBuffer,const ProtoAddress& srcAddr) {return true;}
+    public:
+        ProtoExample();
+        ~ProtoExample();
 
-private:
-  enum CmdType {CMD_INVALID, CMD_ARG, CMD_NOARG};
-  static CmdType GetCmdType(const char* string);
-  bool OnCommand(const char* cmd, const char* val);        
-  void Usage();
-  
-  bool OnTxTimeout(ProtoTimer& theTimer);
-  void OnUdpSocketEvent(ProtoSocket&       theSocket, 
-                        ProtoSocket::Event theEvent);
-  void OnClientSocketEvent(ProtoSocket&       theSocket, 
-                           ProtoSocket::Event theEvent);
-  void OnServerSocketEvent(ProtoSocket&       theSocket, 
-                           ProtoSocket::Event theEvent);
-  static const char* const CMD_LIST[];
-  static void SignalHandler(int sigNum);
-  
-  // ProtoTimer/ UDP socket demo members
-  ProtoTimer          tx_timer;
-  ProtoAddress        dst_addr;
-  
-  ProtoSocket         udp_tx_socket;
-  ProtoSocket         udp_rx_socket;
-  
-  // TCP socket demo members
-  ProtoSocket         server_socket;
-  ProtoSocket         client_socket;
-  unsigned int        client_msg_count;
-  ProtoSocket::List   connection_list;
-  bool                use_html;
+        /**
+        * Override from ProtoApp or NsProtoSimAgent base
+        */
+        bool OnStartup(int argc, const char*const* argv);
+        /**
+        * Override from ProtoApp or NsProtoSimAgent base
+        */
+        bool ProcessCommands(int argc, const char*const* argv);
+        /**
+        * Override from ProtoApp or NsProtoSimAgent base
+        */
+        void OnShutdown();
+        /**
+        * Override from ProtoApp or NsProtoSimAgent base
+        */
+        virtual bool HandleMessage(unsigned int len, const char* txBuffer,const ProtoAddress& srcAddr) {return true;}
+
+    private:
+        enum CmdType {CMD_INVALID, CMD_ARG, CMD_NOARG};
+        static CmdType GetCmdType(const char* string);
+        bool OnCommand(const char* cmd, const char* val);        
+        void Usage();
+
+        void OnTxTimeout(ProtoTimer& theTimer);
+        void OnUdpSocketEvent(ProtoSocket&       theSocket, 
+                            ProtoSocket::Event theEvent);
+        void OnClientSocketEvent(ProtoSocket&       theSocket, 
+                               ProtoSocket::Event theEvent);
+        void OnServerSocketEvent(ProtoSocket&       theSocket, 
+                               ProtoSocket::Event theEvent);
+        static const char* const CMD_LIST[];
+        static void SignalHandler(int sigNum);
+
+        // ProtoTimer/ UDP socket demo members
+        ProtoTimer          tx_timer;
+        ProtoAddress        dst_addr;
+
+        ProtoSocket         udp_tx_socket;
+        ProtoSocket         udp_rx_socket;
+
+        // TCP socket demo members
+        ProtoSocket         server_socket;
+        ProtoSocket         client_socket;
+        unsigned int        client_msg_count;
+        ProtoSocket::List   connection_list;
+        bool                use_html;
+
 }; // end class ProtoExample
 
 
@@ -183,10 +184,18 @@ bool ProtoExample::OnStartup(int argc, const char*const* argv)
     }  
     
 #ifndef SIMULATE     
+
     // Here's some code to test the ProtoSocket routines for network interface info       
     ProtoAddress localAddress;
     char nameBuffer[256];
     nameBuffer[255] = '\0';
+
+    // ljt test
+    ProtoAddress dst;
+    dst.ResolveFromString("fe80::426c:8fff:fe31:4f8e");
+    if (dst.ResolveToName(nameBuffer,255))
+        TRACE("protoExample: LJT ipv6 host name: %s\n", nameBuffer);
+
     
     if (localAddress.ResolveLocalAddress())
     {
@@ -194,7 +203,7 @@ bool ProtoExample::OnStartup(int argc, const char*const* argv)
         if (localAddress.ResolveToName(nameBuffer, 255))
             TRACE("protoExample: local default host name: %s\n", nameBuffer);
         else
-            TRACE("protoExample: unable to resolve local default IP address\n");
+            TRACE("protoExample: unable to resolve local default IP address to name\n");
     }      
     else
     {
@@ -242,7 +251,7 @@ bool ProtoExample::OnStartup(int argc, const char*const* argv)
                 ProtoAddressList::Iterator iterator(addrList);
                 while (iterator.GetNextAddress(ifaceAddr))
                 {
-                    TRACE(" %s/%d", ifaceAddr.GetHostString(), ProtoNet::GetInterfaceAddressMask(nameBuffer, ifaceAddr));
+					TRACE(" %s/%d", ifaceAddr.GetHostString(),ProtoNet::GetInterfaceAddressMask(nameBuffer, ifaceAddr));
                     if (ifaceAddr.IsLinkLocal()) TRACE(" (link local)");
                 }
                 TRACE("\n");
@@ -255,11 +264,53 @@ bool ProtoExample::OnStartup(int argc, const char*const* argv)
                 ProtoAddressList::Iterator iterator(addrList);
                 while (iterator.GetNextAddress(ifaceAddr))
                 {
+
                     TRACE(" %s/%d", ifaceAddr.GetHostString(), ProtoNet::GetInterfaceAddressMask(nameBuffer, ifaceAddr));
-                    if (ifaceAddr.IsLinkLocal()) TRACE(" (link local)");
+
+					if (ifaceAddr.IsLinkLocal()) TRACE(" (link local)");
                 }
                 TRACE("\n");
             }
+            addrList.Destroy();
+
+			// Test our interface add routine
+            /*
+			char * ifaceName = "192.168.1.6";
+			ProtoAddress tmpAddr;
+			tmpAddr.ConvertFromString("192.168.1.6");
+			int maskLen = 24;
+			bool result = ProtoNet::AddInterfaceAddress(ifaceName, tmpAddr, maskLen);
+            */
+
+
+#ifndef WIN32
+            // This code should work for Linux and BSD (incl. Mac OSX)
+            // Get IPv4 group memberships for interfaces
+            if (ProtoNet::GetGroupMemberships(nameBuffer, ProtoAddress::IPv4, addrList))
+            {
+                TRACE("          IPv4 memberships:");
+                ProtoAddressList::Iterator iterator(addrList);
+                ProtoAddress groupAddr;
+                while (iterator.GetNextAddress(groupAddr))
+                {
+                    TRACE(" %s", groupAddr.GetHostString());
+                }       
+                TRACE("\n");
+            }
+            addrList.Destroy();
+            if (ProtoNet::GetGroupMemberships(nameBuffer, ProtoAddress::IPv6, addrList))
+            {
+                TRACE("          IPv6 memberships:");
+                ProtoAddressList::Iterator iterator(addrList);
+                ProtoAddress groupAddr;
+                while (iterator.GetNextAddress(groupAddr))
+                {
+                    TRACE(" %s", groupAddr.GetHostString());
+                }       
+                TRACE("\n");
+            }
+            addrList.Destroy();
+#endif // WIN32
         }
         delete[] indexArray;
     }
@@ -267,8 +318,6 @@ bool ProtoExample::OnStartup(int argc, const char*const* argv)
     {
         TRACE("protoExample: host has no network interfaces?!\n");
     }  
-    
-    
     // Here's some code to get the system routing table
     ProtoRouteTable routeTable;
     ProtoRouteMgr* routeMgr = ProtoRouteMgr::Create();
@@ -300,7 +349,7 @@ bool ProtoExample::OnStartup(int argc, const char*const* argv)
                 entry->GetMetric());
     }
     //ProtoAddress dst;
-    //dst.ResolveFromString("132.250.93.34");
+    //dst.ResolveFromString("10.1.2.3");
     //ProtoAddress gw;
     //routeMgr->SetRoute(dst, 32, gw, 4, 0);
     routeMgr->Close();
@@ -378,7 +427,7 @@ bool ProtoExample::OnCommand(const char* cmd, const char* val)
     }
     else if (!strncmp("send", cmd, len))
     {
-        if (!udp_tx_socket.Open())
+        if (!udp_tx_socket.Open(0, ProtoAddress::IPv4, false))
         {
             PLOG(PL_ERROR, "ProtoExample::ProcessCommand(send) error opening udp_tx_socket\n");
             return false;    
@@ -431,9 +480,22 @@ bool ProtoExample::OnCommand(const char* cmd, const char* val)
         UINT16 thePort;
         if (1 == sscanf(portPtr, "%hu", &thePort))
         {
-            if (!udp_rx_socket.Open(thePort))
+            
+            if (!udp_rx_socket.Open(0, ProtoAddress::IPv4, false))
             {
                 PLOG(PL_ERROR, "ProtoExample::ProcessCommand(recv) error opening udp_rx_socket\n");
+                return false;   
+            }
+            udp_rx_socket.EnableRecvDstAddr();  // for testing this feature
+            if (groupAddr.IsValid() && groupAddr.IsMulticast())
+            {
+                
+                bool result = udp_rx_socket.SetReuse(true);
+                TRACE("set port reuse result %d...\n", result);
+            }
+            if (!udp_rx_socket.Bind(thePort))
+            {
+                PLOG(PL_ERROR, "ProtoExample::ProcessCommand(recv) error binding udp_rx_socket\n");
                 return false;   
             }
             if (groupAddr.IsValid() && groupAddr.IsMulticast())
@@ -468,12 +530,14 @@ bool ProtoExample::OnCommand(const char* cmd, const char* val)
                 return false;
             }
             server.SetPort(atoi(ptr));
+            TRACE("calling connect ...\n");
             if (!client_socket.Connect(server))
             {
                 PLOG(PL_ERROR, "ProtoExample::ProcessCommand(connect) error connecting\n");
                 return false;
             }
             client_msg_count = 5;  // (Send 5 messages, then disconnect)
+            TRACE("   (completed. starting output notification ...\n");
             client_socket.StartOutputNotification();
         }
         else
@@ -510,7 +574,7 @@ bool ProtoExample::OnCommand(const char* cmd, const char* val)
     return true;
 }  // end ProtoExample::OnCommand()
 
-bool ProtoExample::OnTxTimeout(ProtoTimer& /*theTimer*/)
+void ProtoExample::OnTxTimeout(ProtoTimer& /*theTimer*/)
 {
     const char* string = "Hello there UDP peer, how are you doing?";
     unsigned int len = strlen(string) + 1;
@@ -523,10 +587,10 @@ bool ProtoExample::OnTxTimeout(ProtoTimer& /*theTimer*/)
     }
     else if (len != numBytes)
     {
-        PLOG(PL_ERROR, "ProtoExample::OnClientSocketEvent() incomplete SendTo()\n");                
+        PLOG(PL_ERROR, "ProtoExample::OnTxTimeout() incomplete SendTo()\n");                
         TRACE("   (only sent %lu of %lu bytes)\n", numBytes, len);
     }
-    return true;
+
 }  // end ProtoExample::OnTxTimeout()
 
 void ProtoExample::OnUdpSocketEvent(ProtoSocket&       theSocket, 
@@ -556,17 +620,24 @@ void ProtoExample::OnUdpSocketEvent(ProtoSocket&       theSocket,
         {
             static unsigned long count = 0;
             TRACE("RECV) ...\n");
-            ProtoAddress srcAddr;
+            ProtoAddress srcAddr, dstAddr;
             char buffer[1024];
             unsigned int len = 1024;
-            if (theSocket.RecvFrom(buffer, len, srcAddr))
+            // This RecvFrom() call w/ dstAddr may not be suppoted on WIN32 yet
+            if (theSocket.RecvFrom(buffer, len, srcAddr, dstAddr))
             {
                 buffer[len] = '\0';
                 if (len)
-                    TRACE("ProtoExample::OnUdpSocketEvent(%lu) received \"%s\" from %s\n", 
-                           count++, buffer, srcAddr.GetHostString());
+                {
+                    char dstAddrString[32];
+                    dstAddr.GetHostString(dstAddrString, 32);
+                    TRACE("ProtoExample::OnUdpSocketEvent(%lu) received \"%s\" from %s to dest %s\n", 
+                           count++, buffer, srcAddr.GetHostString(), dstAddrString);
+                }
                 else
+                {
                     TRACE("ProtoExample::OnUdpSocketEvent() received 0 bytes\n");
+                }
             }
             else
             {
@@ -609,8 +680,10 @@ void ProtoExample::OnClientSocketEvent(ProtoSocket&       theSocket,
             TRACE("SEND) ...\n");
             if (0 == client_msg_count)
             {
+                TRACE("protoExample: client message transmission completed.\n");
                 client_socket.StopOutputNotification();  // don't send any more
-                // TBD - start a timer and do shutdown after timeout???
+                // Uncomment this to have the client cleanly disconnect after transmission
+                // (otherwise, linger for server response until user "Ctrl-C" exit)
                 client_socket.Shutdown();
 				return;
             }         
@@ -624,9 +697,9 @@ void ProtoExample::OnClientSocketEvent(ProtoSocket&       theSocket,
             }
             else if (len != numBytes)
             {
-                PLOG(PL_ERROR, "ProtoExample::OnClientSocketEvent() incomplete Send()\n");                
-                TRACE("   (only sent %lu of %lu bytes)\n", numBytes, len);
-            } 
+                PLOG(PL_WARN, "ProtoExample::OnClientSocketEvent() incomplete Send()\n");                
+				TRACE("   (only sent %lu of %lu bytes (msgCount:%d))\n", numBytes, len, client_msg_count);
+			} 
             else
             {
                 TRACE("sent %u bytes to ProtoServer ...\n", len);
@@ -694,13 +767,13 @@ void ProtoExample::OnServerSocketEvent(ProtoSocket&       theSocket,
         {
             TRACE("ACCEPT) ...\n");
             ProtoSocket* connectedSocket = new ProtoSocket(ProtoSocket::TCP);
-			connectedSocket->SetListener(this, &ProtoExample::OnServerSocketEvent); 
-
-            if (!connectedSocket)
+			if (NULL == connectedSocket)
             {
                 PLOG(PL_ERROR, "ProtoExample::OnServerSocketEvent(ACCEPT) new ProtoSocket error\n");
                 break;
             }
+            connectedSocket->SetListener(this, &ProtoExample::OnServerSocketEvent); 
+
             if (!server_socket.Accept(connectedSocket))
             {
                 PLOG(PL_ERROR, "ProtoExample::OnServerSocketEvent(ACCEPT) error accepting connection\n");

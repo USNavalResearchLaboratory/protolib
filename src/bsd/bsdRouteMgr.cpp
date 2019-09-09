@@ -113,7 +113,7 @@ void BsdRouteMgr::Close()
     }   
 }  // end BsdRouteMgr::Close()
 
-
+/*
 #define ROUNDUP(a, size) (((a) & ((size)-1)) ?                          \
                                 (1 + ((a) | ((size)-1)))                \
                                 : (a))
@@ -121,8 +121,18 @@ void BsdRouteMgr::Close()
 #define NEXT_SA(sa)   sa = (struct sockaddr *) ((caddr_t) (sa) + ((sa)->sa_len ?    \
                 ROUNDUP((sa)->sa_len, sizeof(u_long))                   \
                 : sizeof(u_long)));
-                
-
+*/   
+        
+// IMPORTANT NOTE:  These "oldie but goodie macros above are wrong on a 64-bit machine!!!
+//                  The ones below do the right thing.
+                     
+#define ROUNDUP(a, size) (((a) & ((size)-1)) ?                          \
+                                (1 + ((a) | ((size)-1)))                \
+                                : (a))
+                                
+#define NEXT_SA(sa)   sa = (struct sockaddr *) ((caddr_t) (sa) + ((sa)->sa_len ?    \
+                ROUNDUP((sa)->sa_len, sizeof(UINT32))                   \
+                : sizeof(UINT32)));
 
 bool BsdRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
                                ProtoRouteTable&   routeTable)
@@ -164,7 +174,7 @@ bool BsdRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
                 len, strerror(errno));
         return false;
     }
-        
+    
     if (sysctl(mib, 6, buf, &len, NULL, 0) < 0) 
     {
             delete[] buf;
@@ -176,7 +186,8 @@ bool BsdRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
     char* next = buf;
     while (next < end)
     {
-        struct rt_msghdr* rtm = (struct rt_msghdr*)next;
+        // (void*) casts here to avoid cast-align mis-warning
+        struct rt_msghdr* rtm = (struct rt_msghdr*)((void*)next);
         struct sockaddr* addr = (struct sockaddr*)(rtm + 1);
         ProtoAddress dst, gw;
         dst.Invalidate();
@@ -202,21 +213,8 @@ bool BsdRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
                     }
                     case RTAX_NETMASK:
                     {
-                        const unsigned char* ptr = NULL;
-                        switch (addrType)
-                        {
-                            case ProtoAddress::IPv4:
-                                ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                                break;
-#ifdef HAVE_IPV6
-                            case ProtoAddress::IPv6:
-                                ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                                break;
-#endif // HAVE_IPV6
-                            default:
-                                break;
-                        }
-                        if (ptr)
+                        const unsigned char* ptr = (const unsigned char*)(&addr->sa_data[2]);
+                        if (NULL != ptr)
                         {
                             unsigned int maskSize = addr->sa_len ? (addr->sa_len - (int)(ptr - (unsigned char*)addr)) : 0;
                             prefixLen = 0;
@@ -233,8 +231,9 @@ bool BsdRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
                                     while (0 != (bit & *ptr))
                                     {
                                         bit >>= 1;
-                                        prefixLen += 1;   
+                                        prefixLen += 1;  
                                     }
+                                    break;
                                 }   
                             }
                         }
@@ -255,21 +254,37 @@ bool BsdRouteMgr::GetAllRoutes(ProtoAddress::Type addrType,
                 NEXT_SA(addr);
             }  // end if(mask[i] is set)
         }  // end for(i=0..RTAX_MAX)
-        if (dst.IsValid() && 
-            (0 == (rtm->rtm_flags & RTF_WASCLONED)))
+        if (dst.IsValid())
         {
+            bool setRoute = true;
+#ifdef MACOSX
+            // Don't fetch cloned routes (TBD - investigate further)
+            if (0 != (rtm->rtm_flags & RTF_WASCLONED))
+                setRoute = false;
+#endif  // MACOSX            
+            if (0 == prefixLen)
+            {
+                // This makes sure default routes w/ valid gateway "trump" device default route
+                // (TBD - deal with multiple default route entries)
+                if ((NULL != routeTable.GetDefaultEntry()) && !gw.IsValid())
+                    setRoute = false;
+            }
             if (prefixLen < 0) prefixLen = dst.GetLength() << 3;
             if (0 == (rtm->rtm_flags & RTF_GATEWAY)) gw.Invalidate();
-            if (!routeTable.SetRoute(dst, prefixLen, gw, rtm->rtm_index))
+            
+            if (setRoute)
             {
-                PLOG(PL_ERROR, "BsdRouteMgr::GetAllRoutes() error creating table entry\n");
-                delete[] buf;
-                return false;   
+                if (!routeTable.SetRoute(dst, prefixLen, gw, rtm->rtm_index))
+                {
+                    PLOG(PL_ERROR, "BsdRouteMgr::GetAllRoutes() error creating table entry\n");
+                    delete[] buf;
+                    return false;   
+                }
             }
         }
         next += rtm->rtm_msglen;   
     }
-    delete[] buf;            
+    delete[] buf;  
     return true;
     
 }  // end BsdRouteMgr::GetAllRoutes()
@@ -376,7 +391,7 @@ bool BsdRouteMgr::SetRoute(const ProtoAddress& dst,
                     else
                     {
                         //TRACE("Adding RTAX_GATEWAY (IF)...\n");
-                        struct sockaddr_dl* sdl = (struct sockaddr_dl*)addr;
+                        struct sockaddr_dl* sdl = (struct sockaddr_dl*)((void*)addr);
                         sdl->sdl_len = sizeof(struct sockaddr_dl);
                         sdl->sdl_family = AF_LINK;
                         sdl->sdl_index = ifIndex;
@@ -391,21 +406,7 @@ bool BsdRouteMgr::SetRoute(const ProtoAddress& dst,
                 {
                     if (prefixLen > 0)
                     {
-                        unsigned char* ptr = NULL;
-                        switch (dst.GetType())
-                        {
-                            case ProtoAddress::IPv4:
-                                ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                                break;
-#ifdef HAVE_IPV6
-                            case ProtoAddress::IPv6:
-                                ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                                break;
-#endif // HAVE_IPV6
-                            default:
-                                break;
-                        }
-                        ASSERT(ptr);
+                        unsigned char* ptr = (unsigned char*)(&addr->sa_data[2]);
                         unsigned int numBytes = prefixLen >> 3;
                         memset(ptr, 0xff, numBytes);
                         unsigned int remainder = prefixLen & 0x07;
@@ -433,6 +434,7 @@ bool BsdRouteMgr::SetRoute(const ProtoAddress& dst,
             NEXT_SA(addr);
         }  // end if (rtm_addrs[i])
     }  // end for(i=0..RTAX_MAX)
+    
     
     // Send RTM_ADD request to routing socket
     int result = send(descriptor, rtm, rtm->rtm_msglen, 0);
@@ -472,6 +474,7 @@ bool BsdRouteMgr::SetRoute(const ProtoAddress& dst,
         if ((seq == rtm->rtm_seq) &&
             (pid == rtm->rtm_pid))
         {
+            TRACE("matching response ...\n");
             struct sockaddr* addr = (struct sockaddr*)(rtm + 1);
             for (int i = 0; i < RTAX_MAX; i++)
             {
@@ -493,20 +496,7 @@ bool BsdRouteMgr::SetRoute(const ProtoAddress& dst,
                         }
                         case RTAX_NETMASK:
                         {
-                            const unsigned char* ptr = NULL;
-                            switch (dst.GetType())
-                            {
-                                case ProtoAddress::IPv4:
-                                    ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                                    break;
-#ifdef HAVE_IPV6
-                                case ProtoAddress::IPv6:
-                                    ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                                    break;
-#endif // HAVE_IPV6
-                                default:
-                                    break;
-                            }
+                            const unsigned char* ptr = (const unsigned char*)(&addr->sa_data[2]);
                             if (ptr)
                             {
                                 unsigned int maskSize = addr->sa_len ? (addr->sa_len - (int)(ptr - (unsigned char*)addr)) : 0;
@@ -550,6 +540,7 @@ bool BsdRouteMgr::SetRoute(const ProtoAddress& dst,
             {
                 if (destination.IsValid())
                 {
+                    //TRACE("BsdRouteMgr::SetRoute() successfully added route\n");   
                     return true;
                 }
                 else
@@ -663,7 +654,7 @@ bool BsdRouteMgr::DeleteRoute(const ProtoAddress& dst,
                     else
                     {
                         //TRACE("Adding RTAX_GATEWAY (IF)...\n");
-                        struct sockaddr_dl* sdl = (struct sockaddr_dl*)addr;
+                        struct sockaddr_dl* sdl = (struct sockaddr_dl*)((void*)addr);
                         sdl->sdl_len = sizeof(struct sockaddr_dl);
                         sdl->sdl_family = AF_LINK;
                         sdl->sdl_index = ifIndex;
@@ -676,21 +667,7 @@ bool BsdRouteMgr::DeleteRoute(const ProtoAddress& dst,
                     break;  
                 case RTAX_NETMASK:
                 {
-                    unsigned char* ptr = NULL;
-                    switch (dst.GetType())
-                    {
-                        case ProtoAddress::IPv4:
-                            ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                            break;
-#ifdef HAVE_IPV6
-                        case ProtoAddress::IPv6:
-                            ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                            break;
-#endif // HAVE_IPV6
-                        default:
-                            break;
-                    }
-                    ASSERT(ptr);
+                    unsigned char* ptr = (unsigned char*)(&addr->sa_data[2]);
                     if (prefixLen > 0)
                     {
                         unsigned int numBytes = prefixLen >> 3;
@@ -784,20 +761,7 @@ bool BsdRouteMgr::DeleteRoute(const ProtoAddress& dst,
                         }
                         case RTAX_NETMASK:
                         {
-                            const unsigned char* ptr = NULL;
-                            switch (dst.GetType())
-                            {
-                                case ProtoAddress::IPv4:
-                                    ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                                    break;
-#ifdef HAVE_IPV6
-                                case ProtoAddress::IPv6:
-                                    ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                                    break;
-#endif // HAVE_IPV6
-                                default:
-                                    break;
-                            }
+                            const unsigned char* ptr = (const unsigned char*)(&addr->sa_data[2]);
                             if (ptr)
                             {
                                 unsigned int maskSize = addr->sa_len ? (addr->sa_len - (int)(ptr - (unsigned char*)addr)) : 0;
@@ -937,21 +901,7 @@ bool BsdRouteMgr::GetRoute(const ProtoAddress& dst,
                     break;
                 case RTAX_NETMASK:
                 {
-                    unsigned char* ptr = NULL;
-                    switch (dst.GetType())
-                    {
-                        case ProtoAddress::IPv4:
-                            ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                            break;
-#ifdef HAVE_IPV6
-                        case ProtoAddress::IPv6:
-                            ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                            break;
-#endif // HAVE_IPV6
-                        default:
-                            break;
-                    }
-                    ASSERT(ptr);
+                    unsigned char* ptr = (unsigned char*)(&addr->sa_data[2]);
                     if (prefixLen > 0)
                     {
                         unsigned int numBytes = prefixLen >> 3;
@@ -1038,7 +988,7 @@ bool BsdRouteMgr::GetRoute(const ProtoAddress& dst,
                                     //TRACE("RTAX_GWY: %s\n", gw.GetHostString());
                                     break;
                                 case AF_LINK:
-                                    ifIndex = ((struct sockaddr_dl*)addr)->sdl_index;
+                                    ifIndex = ((struct sockaddr_dl*)((void*)addr))->sdl_index;
                                     //TRACE("RTAX_GWY: ifIndex:%d\n", ifIndex);
                                     break;
                                 default:
@@ -1049,20 +999,7 @@ bool BsdRouteMgr::GetRoute(const ProtoAddress& dst,
                         }
                         case RTAX_NETMASK:
                         {
-                            const unsigned char* ptr = NULL;
-                            switch (dst.GetType())
-                            {
-                                case ProtoAddress::IPv4:
-                                    ptr = (unsigned char*)&(((struct sockaddr_in*)addr)->sin_addr);
-                                    break;
-#ifdef HAVE_IPV6
-                                case ProtoAddress::IPv6:
-                                    ptr = (unsigned char*)&(((struct sockaddr_in6*)addr)->sin6_addr);
-                                    break;
-#endif // HAVE_IPV6
-                                default:
-                                    break;
-                            }
+                            const unsigned char* ptr = (const unsigned char*)(&addr->sa_data[2]);
                             if (ptr)
                             {
                                 unsigned int maskSize = addr->sa_len ? (addr->sa_len - (int)(ptr - (unsigned char*)addr)) : 0;
@@ -1182,7 +1119,7 @@ bool BsdRouteMgr::GetInterfaceAddressList(unsigned int        ifIndex,
     char* next = buf;
     while (next < end)
     {
-        struct if_msghdr* ifm = (struct if_msghdr*)next;
+        struct if_msghdr* ifm = (struct if_msghdr*)((void*)next);
         switch (ifm->ifm_type)
         {
             case RTM_IFINFO:

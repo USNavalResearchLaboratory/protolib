@@ -417,23 +417,23 @@ int GraphRider::CalculateFullECDS(ManetGraph&                                   
                 UINT8 priorityN2 = useDegree ? ifaceN2->GetAdjacencyCount() : nodeN2.GetRtrPriority();
                 
                 
-                /*
-                if (NULL == ifaceN1Max)
-                {
-                    ifaceN1Max = ifaceN2;
-                }
-                else
-                {
-                    Node& nodeN1Max = static_cast<Node&>(ifaceN1Max->GetNode());
-                    UINT8 priorityN1Max = useDegree ? ifaceN1Max->GetAdjacencyCount() : nodeN1Max.GetRtrPriority();
-                    if ((priorityN2 > priorityN1Max) ||
-                        ((priorityN2 == priorityN1Max) &&
-                         (nodeN2.GetId() > nodeN1Max.GetId())))
-                    {
-                        ifaceN1Max = ifaceN2;
-                    }
-                }
-                *
+                //
+                //if (NULL == ifaceN1Max)
+                //{
+                //    ifaceN1Max = ifaceN2;
+                //}
+                //else
+                //{
+                    //Node& nodeN1Max = static_cast<Node&>(ifaceN1Max->GetNode());
+                    //UINT8 priorityN1Max = useDegree ? ifaceN1Max->GetAdjacencyCount() : nodeN1Max.GetRtrPriority();
+                    //if ((priorityN2 > priorityN1Max) ||
+                   //     ((priorityN2 == priorityN1Max) &&
+                  //       (nodeN2.GetId() > nodeN1Max.GetId())))
+                //    {
+               //         ifaceN1Max = ifaceN2;
+               //     }
+               // }
+                
                 
                 
                 

@@ -152,24 +152,25 @@ bool ProtoPktIPv4::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
         ProtoPkt::SetLength(0);
     if (GetBufferLength() > (OFFSET_VERSION+1))
     {
-        if (4 != (((UINT8*)buffer_ptr)[0] >> 4))
+        if (4 == (((UINT8*)buffer_ptr)[0] >> 4))
         {
-            return false;  // not an IPv4 packet!
-        }
-        else if (GetBufferLength() > (OFFSET_LEN + 2))
-        {
-            // this validates that the embedded length is <= buffer_bytes
-            return ProtoPkt::InitFromBuffer(GetTotalLength());
+            if (GetBufferLength() > (OFFSET_LEN + 2) &&
+                ProtoPkt::InitFromBuffer(GetTotalLength()))
+            {
+                return true;
+            }
+            else
+            {
+                PLOG(PL_ERROR, "ProtoPktIPv4::InitFromBuffer() error: insufficient buffer space!\n");
+            }
         }
         else
         {
-            return false;
+            PLOG(PL_WARN, "ProtoPktIPv4::InitFromBuffer() error: invalid protocol version!\n");
         }
     }
-    else
-    {
-        return false;
-    }
+    if (NULL != bufferPtr) DetachBuffer();
+    return false;
 }  // end ProtoPktIPv4::InitFromBuffer()
 
 
@@ -190,6 +191,10 @@ bool ProtoPktIPv4::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, b
     SetHeaderLength(20);
     SetChecksum(0);
     ((UINT16*)buffer_ptr)[OFFSET_FRAGMENT] = 0;  // init flags & frag to ZERO
+    ((UINT8*)buffer_ptr)[OFFSET_TOS] = 0;
+    ((UINT8*)buffer_ptr)[OFFSET_FLAGS] = 0;
+    ((UINT8*)buffer_ptr)[OFFSET_TTL] = 255;
+    ((UINT8*)buffer_ptr)[OFFSET_PROTOCOL] = 0;
     // (TBD) Set some header fields to default values? (e.g. fragment, flags)
     // (TBD) should we set total length to 20 here? 
     return true;
@@ -579,7 +584,6 @@ bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
         if (6 != (((UINT8*)buffer_ptr)[0] >> 4))
         {
             PLOG(PL_ERROR, "ProtoPktIPv6::InitFromBuffer() error: invalid version number\n");
-            return false;  // not an IPv6 packet!
         }
         else if (GetBufferLength() > (2*OFFSET_LENGTH + 2))
         {
@@ -591,20 +595,19 @@ bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
             else
             {
                 PLOG(PL_ERROR, "ProtoPktIPv6::InitFromBuffer() error: invalid packet length?\n");
-                return false;
             }
         }
         else
         {
             PLOG(PL_ERROR, "ProtoPktIPv6::InitFromBuffer() error: insufficient buffer space (2)\n");
-            return false;
         }
     }
     else
     {
         PLOG(PL_ERROR, "ProtoPktIPv6::InitFromBuffer() error: insufficient buffer space (1)\n");
-        return false;
     }
+    if (NULL != bufferPtr) DetachBuffer();
+    return false;
 }  // end ProtoPktIPv6::InitFromBuffer()
 
 
@@ -857,7 +860,7 @@ ProtoPktIPv6::Extension::Extension(Protocol     extType,
  : ProtoPkt(bufferPtr, numBytes, freeOnDestruct), ext_type(NONE), opt_pending(false), opt_packed(false)
 {
     if (initFromBuffer) 
-        InitFromBuffer(extType, bufferPtr, numBytes, freeOnDestruct);
+        InitFromBuffer(extType);
     else
         InitIntoBuffer(extType);
 }
@@ -1151,7 +1154,7 @@ bool ProtoPktIPv6::Extension::Iterator::GetNextExtension(Extension& extension)
     if ((6 != ipv6_pkt.GetVersion()) || (offset >= ipv6_pkt.GetLength())) return false;
     if (IsExtension(next_hdr))
     {
-        if (extension.InitFromBuffer(next_hdr, (UINT32*)ipv6_pkt.GetBuffer()+(offset >> 2), ipv6_pkt.GetLength()-offset))
+        if (extension.InitFromBuffer(next_hdr, (UINT32*)ipv6_pkt.GetBuffer32()+(offset >> 2), ipv6_pkt.GetLength()-offset))
         {
             next_hdr = extension.GetNextHeader();
             offset += extension.GetLength();
@@ -1664,6 +1667,123 @@ bool ProtoPktDPD::SetTaggerId(const ProtoAddress& ipAddr)
     }
 }  // ProtoPktDPD::SetTaggerId(by address)
 
+
+
+// begin ProtoPktMobile implementation
+ProtoPktMobile::ProtoPktMobile(UINT32*        bufferPtr, 
+                               unsigned int   numBytes,
+                               bool           initFromBuffer,
+                               bool           freeOnDestruct)
+ : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
+{
+    if (NULL != bufferPtr)
+    {
+        if (initFromBuffer) 
+            InitFromBuffer();
+        else
+            InitIntoBuffer();
+    }
+}
+
+ProtoPktMobile::~ProtoPktMobile()
+{
+}
+
+bool ProtoPktMobile::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+{
+    if (NULL != bufferPtr) 
+    {
+        if (bufferBytes < 8)
+            return false;
+        else
+            AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
+    }
+    else if (GetBufferLength() < 8) 
+    {
+        return false;
+    }
+    SetProtocol(ProtoPktIP::RESERVED);
+    SetUINT8(OFFSET_RESERVED, 0);
+    SetChecksum(0);
+    SetLength(8);
+    return true;
+}  // end ProtoPktMobile::InitIntoBuffer()
+
+
+void ProtoPktMobile::SetDstAddr(const ProtoAddress& addr, bool calculateChecksum) 
+{   
+    memcpy((char*)(buffer_ptr+OFFSET_DST_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
+    if (calculateChecksum) CalculateChecksum();  // (TBD) is it worth it to incrementally update
+}  // end ProtoPktMobile::SetDstAddr() 
+
+bool ProtoPktMobile::SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum) 
+{   
+    if (GetBufferLength() < 12) return false;
+    memcpy((char*)(buffer_ptr+OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
+    if (calculateChecksum) CalculateChecksum();  // (TBD) is it worth it to incrementally update
+    SetFlag(FLAG_SRC);
+    SetLength(12);
+    return true;
+}  // end ProtoPktMobile::SetDstAddr() 
+
+// Return header checksum in host byte order
+UINT16 ProtoPktMobile::CalculateChecksum(bool set)
+{
+    UINT32 sum = 0;
+    UINT16 savedSum = GetChecksum();
+    SetChecksum(0);
+    UINT16* ptr = (UINT16*)buffer_ptr;
+    // Calculate checksum, skipping checksum field
+    unsigned int headerLen = FlagIsSet(FLAG_SRC) ? 12/2 : 8/2;
+    for (unsigned int i = 0; i < headerLen; i++)
+        sum += ntohs(ptr[i]);
+    while (sum >> 16)
+        sum = (sum & 0x0000ffff) + (sum >> 16);
+    sum = ~sum;
+    if (set) 
+        SetChecksum(sum);
+    else
+        SetChecksum(savedSum);
+    return sum;
+}  // ProtoPktMobile::CalculateChecksum()
+
+bool ProtoPktMobile::InitFromBuffer(UINT32*         bufferPtr, 
+                                    unsigned int    numBytes, 
+                                    bool            freeOnDestruct)
+{
+    if (NULL != bufferPtr) 
+        AttachBuffer(bufferPtr, numBytes, freeOnDestruct);    
+    UINT16 minBytes = 8;
+    if (buffer_bytes > OFFSET_FLAGS)
+    {
+        if (FlagIsSet(FLAG_SRC))
+            minBytes = 12;
+    }
+    if (buffer_bytes < minBytes)
+    {
+        pkt_length = 0;
+        if (NULL != bufferPtr) DetachBuffer();
+        return false;
+    }
+    pkt_length = numBytes;
+    return true;
+}  // end ProtoPktMobile::InitFromBuffer()
+
+bool ProtoPktMobile::GetSrcAddr(ProtoAddress& src) const
+{       
+    if (FlagIsSet(FLAG_SRC))
+    {
+        src.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_DST_ADDR), 4);
+        return true;
+    }
+    else
+    {
+        src.Invalidate();
+        return false;
+    }
+}  // end ProtoPktMobile::GetSrcAddr() 
+
+
 bool ProtoPktDPD::SetPktId(const char* pktId, UINT8 pktIdLength)
 {
     unsigned int taggerIdLength = GetTaggerIdLength();
@@ -1821,7 +1941,7 @@ UINT16 ProtoPktUDP::ComputeChecksum(ProtoPktIP& ipPkt) const
             return 0;   
     }
     // 2) UDP header part, sans "checksum" field
-    const UINT16* ptr = (const UINT16*)GetBuffer();
+    const UINT16* ptr = (const UINT16*)GetBuffer32();
     unsigned int i;
     for (i = 0; i < OFFSET_CHECKSUM; i++)
         sum += (UINT16)ntohs(ptr[i]);

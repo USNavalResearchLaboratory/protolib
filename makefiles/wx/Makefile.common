@@ -23,9 +23,9 @@ TARGETS = wxProtoExample
 	$(CC) -c $(CFLAGS) -o $*.o $*.cpp
     
 # wxProtoExample depends upon the NRL Protean Group's "Protokit" development library
-LIBPROTO = $(PROTOLIB)/unix/libProtokit.a
-$(PROTOLIB)/unix/libProtokit.a: 
-	cd $(PROTOLIB)/unix; $(MAKE) -f Makefile.$(SYSTEM) libProtokit.a
+LIBPROTO = $(PROTOLIB)/lib/libprotokit.a
+$(PROTOLIB)/lib/libprotokit.a: 
+	cd $(PROTOLIB)/makefiles; $(MAKE) -f Makefile.$(SYSTEM) libprotokit.a
          
 EXAMPLE_SRC = $(PROTOLIB)/examples/wxProtoExample.cpp $(PROTOLIB)/src/wx/wxProtoApp.cpp 
           
@@ -36,7 +36,7 @@ wxProtoExample: $(EXAMPLE_OBJ) $(LIBPROTO)
 	$(SYSTEM_REZ) $@
     
 clean: 
-	rm -f *.o ../src//common/*.o ../unix/*.o ../unix/*.a wxProtoExample
+	rm -f *.o ../src/common/*.o ../makefiles/*.o ../makefiles/*.a wxProtoExample
 
 # DO NOT DELETE THIS LINE -- mkdep uses it.
 # DO NOT PUT ANYTHING AFTER THIS LINE, IT WILL GO AWAY.

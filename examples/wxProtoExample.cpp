@@ -70,7 +70,7 @@ END_EVENT_TABLE()
 
         
 wxProtoExampleApp::wxProtoExampleApp()
- : counter(0), frame(NULL)
+ : wxProtoApp(false), counter(0), frame(NULL)
 {
     tx_timer.SetListener(this, &wxProtoExampleApp::OnTxTimeout);
 }

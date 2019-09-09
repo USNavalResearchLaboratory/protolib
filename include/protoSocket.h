@@ -2,7 +2,6 @@
 #define _PROTO_SOCKET
 
 #include "protoAddress.h"
-
 #include "protoDebug.h"  // temp
 
 #ifdef WIN32
@@ -16,9 +15,12 @@
 typedef GUID *LPGUID;
 #endif
 #include <winsock2.h>  // for SOCKET type, etc
+#include <MswSock.h>   // for WSARecvMsg() stuff
 #else  // !WIN32
 #include <errno.h> // for errno
 #include <net/if.h>  // for struct ifconf
+#include <unistd.h>  // for read()
+#include <stdio.h>
 #endif // if/else WIN32/UNIX
 /**
  * @class ProtoSocket
@@ -58,6 +60,13 @@ class ProtoSocket
 				ECN_CE   = 0x03   // ECN "Congestion Experienced" (old CE)
 		}; 
 
+        enum IPv6SupportStatus
+        {
+            IPV6_UNKNOWN,
+            IPV6_UNSUPPORTED,
+            IPV6_SUPPORTED
+        };
+
 #ifdef SIMULATE
 		class Proxy {};
 		typedef Proxy* Handle;
@@ -86,11 +95,24 @@ class ProtoSocket
 		bool Accept(ProtoSocket* theSocket = NULL);
 		bool Shutdown();
 		void Close();
-		bool JoinGroup(const ProtoAddress&  groupAddr, 
-				       const char*          interfaceName = NULL);
-		bool LeaveGroup(const ProtoAddress& groupAddr, 
-				        const char*         interfaceName = NULL);
 
+// First cut at IGMPv3 SSM support (TBD - refine this and expand platform support)
+// On Mac OSX, only version 10.7 and later support IGMPv3 
+// and the "MCAST_JOIN_GROUP" macro definition is a "tell" for this
+// (we _reallly_ need to go to a more sophisticated build system!)
+#if (!defined(WIN32) && !defined(ANDROID) && (!defined(MACOSX))) || (defined(MACOSX) && defined(MCAST_JOIN_GROUP))
+#define _PROTOSOCKET_IGMPV3_SSM
+#endif // !WIN32 && !ANDROID && (!MACOSX || MCAST_JOIN_GROUP)
+        
+		bool JoinGroup(const ProtoAddress&  groupAddress, 
+			           const char*          interfaceName = NULL,
+                       const ProtoAddress*  sourceAddress = NULL);
+		bool LeaveGroup(const ProtoAddress&  groupAddress, 
+			            const char*          interfaceName = NULL,
+                        const ProtoAddress*  sourceAddress = NULL);
+        
+        bool SetRawProtocol(Protocol theProtocol);
+ 
 		void SetState(State st){state = st;}  // JPH 7/14/06 - for tcp development testing
 #ifdef WIN32        
 		void SetClosing(bool status) {closing = status;}
@@ -116,9 +138,9 @@ class ProtoSocket
         // These are valid for connected sockets only
         const ProtoAddress& GetSourceAddr() const {return source_addr;}
 		const ProtoAddress& GetDestination() const {return destination;}
-		// I.T. to set the destination on a socket after an ACCEPT.
-		void SetDestination(const ProtoAddress& destin) 
-            {destination=destin;}
+		// I.T. helper method to set the destination on a socket after an ACCEPT.
+		void SetDestination(const ProtoAddress& theDestination) 
+            {destination = theDestination;}
 #endif  // OPNET
 #ifdef WIN32
 		HANDLE GetInputEventHandle() {return input_event_handle;}
@@ -145,13 +167,38 @@ class ProtoSocket
 		}
 
 		// Read/Write methods
-		bool SendTo(const char* buffer, unsigned int buflen, const ProtoAddress& dstAddr);
+		bool SendTo(const char* buffer, unsigned int &buflen, const ProtoAddress& dstAddr);
 		bool RecvFrom(char* buffer, unsigned int& numBytes, ProtoAddress& srcAddr);
+        bool RecvFrom(char* buffer, unsigned int& numBytes, ProtoAddress& srcAddr, ProtoAddress& dstAddr); 
 		bool Send(const char* buffer, unsigned int& numBytes);
 		bool Recv(char* buffer, unsigned int& numBytes);
-
+#if !defined(WIN32) && !defined(SIMULATE)        
+		// This was for debugging?? Remove??
+        bool Read(char* buffer, unsigned int &numBytes)
+        {
+            int result = read(handle, buffer, numBytes);
+            if (result < 0)
+            {
+                perror("read() error");
+                numBytes = 0;
+                switch (errno)
+                {
+                    case EAGAIN:
+                        return true;
+                    default:
+                        return false;
+                }
+            }   
+            else
+            {
+                numBytes = result;
+                return true;
+            }
+        }
+#endif // !WIN32
 		// Attributes
 		bool SetTTL(unsigned char ttl);
+		bool SetUnicastTTL(unsigned char ttl);
 		bool SetLoopback(bool loopback);
 		bool SetBroadcast(bool broadcast);
         bool SetFragmentation(bool enable);
@@ -164,11 +211,14 @@ class ProtoSocket
 		unsigned int GetTxBufferSize();
 		bool SetRxBufferSize(unsigned int bufferSize);
 		unsigned int GetRxBufferSize();
+        
+        void EnableRecvDstAddr();
 
 		// Helper methods
 #ifdef HAVE_IPV6
 		static bool HostIsIPv6Capable();
-		static bool SetHostIPv6Capable();
+        // Temporarily retained for backward compatability
+		static bool SetHostIPv6Capable() {return true;}
 		bool SetFlowLabel(UINT32 label);
 #endif //HAVE_IPV6
 
@@ -214,53 +264,23 @@ class ProtoSocket
             public:
                 virtual ~Notifier() {}
                 virtual bool UpdateSocketNotification(ProtoSocket& theSocket, 
-                                                      int          notifyFlags) {return true;} 
+                                                      int          notifyFlags) {return true;}
         };
-        Notifier* GetNotifier() const {return notifier;}
         bool SetNotifier(ProtoSocket::Notifier* theNotifier);
-        bool StartOutputNotification()
-        {
-            notify_output = true;
-            notify_output = UpdateNotification();
-#ifdef WIN32
-            output_ready = true;
-#endif // WIN32
-            return notify_output;   
-        }
-        void StopOutputNotification()
-        {
-            notify_output = false;
-            UpdateNotification();    
-        }  
-        bool NotifyOutput() {return notify_output;}
-
-        bool StartInputNotification()
-        {
-            notify_input = true;
-            notify_input = UpdateNotification();
-#ifdef WIN32
-            input_ready = true; 
-#endif // WIN32
-            return notify_input;   
-        }
-        void StopInputNotification()
-        {
-            notify_input = false;
-            UpdateNotification();    
-        }  
-        bool NotifyInput() {return notify_input;}
-
-        bool StartExceptionNotification()
-        {
-            notify_exception = true;
-            notify_exception = UpdateNotification();
-            return notify_exception;
-        }
-        void StopExceptionNotification()
-        {   
-            notify_exception = false;
-            UpdateNotification();
-        }
+		Notifier* GetNotifier() const {return notifier;}
+        
+        bool StartInputNotification();
+        void StopInputNotification();
+        bool InputNotification() const
+            {return notify_input;}
+		bool StartOutputNotification();
+        void StopOutputNotification();
+        bool OutputNotification() const
+            {return notify_output;}
+        bool StartExceptionNotification();
+        void StopExceptionNotification();
+        bool ExceptionNotification() const
+            {return notify_exception;}
 
         void OnNotify(ProtoSocket::Flag theFlag);
         
@@ -328,7 +348,6 @@ class ProtoSocket
                         
                         
                     private:
-                        const List&         list;
                         const class Item*   next;
                         
                 };  // end class ProtoSocketList::Iterator
@@ -390,7 +409,8 @@ class ProtoSocket
                 LISTENER_TYPE(listenerType* theListener, 
                               void(listenerType::*eventHandler)(ProtoSocket&, Event))
                     : listener(theListener), event_handler(eventHandler) {}
-                void on_event(ProtoSocket& theSocket, Event theEvent)                    {(listener->*event_handler)(theSocket, theEvent);}
+                void on_event(ProtoSocket& theSocket, Event theEvent) 
+                    {(listener->*event_handler)(theSocket, theEvent);}
                 Listener* duplicate()
                     {return (static_cast<Listener*>(new LISTENER_TYPE<listenerType>(listener, event_handler)));}
             private:
@@ -402,11 +422,13 @@ class ProtoSocket
     
         Domain                  domain;
         Protocol                protocol;    
+        Protocol                raw_protocol;  // only applies to raw sockets
         State                   state;       
         Handle                  handle; 
         int                     port; 
         UINT8                   tos;           // IPv4 TOS or IPv6 traffic class
         bool                    ecn_capable;
+        bool                    ip_recvdstaddr;  // set "true" if RecvFrom() w/ destAddr is invoked
 #ifdef HAVE_IPV6
         UINT32                  flow_label;    // IPv6 flow label      
 #endif // HAVE_IPV6
@@ -423,8 +445,8 @@ class ProtoSocket
 #ifdef WIN32
         HANDLE                  input_event_handle;
         HANDLE                  output_event_handle;
-        bool                    output_ready;
-        bool                    input_ready;
+        bool                    output_ready;  // used to morph edge triggered Win32 sockets to level-triggered behavior
+        bool                    input_ready;   // used to morph edge triggered Win32 sockets to level-triggered behavior
         bool                    closing;
 #endif // WIN32
         Listener*               listener;   
@@ -434,10 +456,16 @@ class ProtoSocket
 	private:
 		static const int IFBUFSIZ = 256;  // for GetHostAddressList
 		static const int IFIDXSIZ = 256;  //   "
-#ifndef WIN32
+
+#ifdef WIN32
+		static LPFN_WSARECVMSG  WSARecvMsg;
+#else
 		static int GetInterfaceList(struct ifconf& conf);  // helper fn
-#endif
+#endif  // if/else WIN32
+
+        static IPv6SupportStatus ipv6_support_status;
 
 };  // end class ProtoSocket
+
 
 #endif // _PROTO_SOCKET

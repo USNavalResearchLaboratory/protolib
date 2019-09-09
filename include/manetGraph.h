@@ -324,6 +324,9 @@ class NetGraph : public ProtoGraph
 
                 Node& GetNode() const
                     {return *node;}
+                
+                const Node* GetNodePtr() const
+                    {return node;}
 
                 bool ChangeNode(Node& theNode);
                  
@@ -450,7 +453,8 @@ class NetGraph : public ProtoGraph
                         }
                         
                         void Adjust(Interface& iface, const Cost& newCost);
-                        bool AdjustDownward(Interface& iface, const Cost& newCost);
+                        bool AdjustDownward(Interface& iface, const Cost& newCost,const Interface* newPrevHop = NULL);
+                        bool AdjustUpward(Interface& iface, const Cost& newCost);
                         
                         // Note use of this method does not maintain priority queue sorting order!
                         bool Append(Interface& iface);  // used for Dijkstra "tree walking" only
@@ -544,6 +548,9 @@ class NetGraph : public ProtoGraph
                         // Member variables
                         ProtoSortedTree iface_list;  // sorted by "Cost" value
                         ItemFactory&    item_factory;
+                        
+                    private:
+                        using Vertice::SortedList::Remove;   // gets rid of hidden overloaded virtual function warning
                     
                 };  // end NetGraph::Interface::PriorityQueue
             
@@ -607,7 +614,7 @@ class NetGraph : public ProtoGraph
                     {return AddInterface(iface, makeDefault);}   
                 
                 bool Contains(const Interface& iface) const
-                    {return iface_list.Contains(iface);}
+                    {return (iface.GetNodePtr() == this);}
                 
                 Interface* GetAnyInterface() const
                     {return static_cast<Interface*>(iface_list.GetRoot());}
@@ -750,7 +757,11 @@ class NetGraph : public ProtoGraph
                 
                 Interface* GetNextInterface();
                 
+                bool PrevHopIsValid(Interface& currentIface);
+                
                 void Update(Interface& startIface);
+                
+                void Update(Interface& ifaceA, Interface& ifaceB);
                 
                 // Override this method to filter which edges are included in traversal
                 // (return "false" to disallow specific links)
@@ -793,6 +804,7 @@ class NetGraph : public ProtoGraph
                 bool                        dijkstra_completed;
                 bool                        in_update;
                 bool                        traverse_nodes;
+                bool                        reset_required;
         };  // end class NetGraph::DijkstraTraversal 
         
         
@@ -839,6 +851,9 @@ class NetGraph : public ProtoGraph
 
                 NODE_TYPE& GetNode() const
                     {return static_cast<NODE_TYPE&>(Interface::GetNode());}  
+                
+                const NODE_TYPE* GetNodePtr() const
+                    {return static_cast<NODE_TYPE&>(Interface::GetNodePtr());}                   
                              
                 const COST_TYPE* GetCostTo(const InterfaceTemplate& dst) const
                 {

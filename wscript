@@ -90,8 +90,8 @@ def configure(ctx):
         ctx.env.DEFINES_BUILD_PROTOLIB += ['_CRT_SECURE_NO_WARNINGS',
                 'HAVE_ASSERT', 'WIN32', 'HAVE_IPV6']
         #ctx.env.CXXFLAGS += ['/EHsc']
-        ctx.check_libs_msvc(['ws2_32', 'iphlpapi', 'user32', 'gdi32'])
-        ctx.env.USE_BUILD_PROTOLIB += ['WS2_32', 'IPHLPAPI', 'USER32', 'GDI32']
+        ctx.check_libs_msvc(['ws2_32', 'iphlpapi', 'user32', 'gdi32', 'Advapi32'])
+        ctx.env.USE_BUILD_PROTOLIB += ['WS2_32', 'IPHLPAPI', 'USER32', 'GDI32', 'ADVAPI32']
 
     if ctx.options.build_python:
         ctx.load('python')
@@ -106,7 +106,9 @@ def configure(ctx):
     if ctx.options.build_java:
         ctx.load('java')
         ctx.check_jni_headers()
-        ctx.env.BUILD_JAVA = ctx.env.HAVE_JNI_H
+        for i in ctx.env.DEFINES:
+            if i == 'HAVE_JNI_H=1':
+                ctx.env.BUILD_JAVA = True
 
     # Compiler-specific flags
 
@@ -115,7 +117,7 @@ def configure(ctx):
     else:
         ctx.env.DEFINES_BUILD_PROTOLIB += ['NDEBUG']
 
-    if ctx.env.COMPILER_CXX == 'g++':
+    if ctx.env.COMPILER_CXX == 'g++' or ctx.env.COMPILER_CXX == 'clang++':
         ctx.env.CFLAGS += ['-fPIC']
         ctx.env.CXXFLAGS += ['-fPIC']
         if ctx.options.debug:
@@ -130,6 +132,7 @@ def configure(ctx):
             ctx.env.CFLAGS += ['/Od', '/RTC1', '/ZI']
         else:
             ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG']
+        	#ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG', '/DWINVER=0x0501']
         ctx.env.CFLAGS
 
 def build(ctx):

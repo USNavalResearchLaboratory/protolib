@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="C:\cygwin\home\nrl\WpdPack\include;&quot;C:\cygwin\home\nrl\openvpn-2.0.9&quot;;&quot;..\..\..\openvpn-2.0.9&quot;;..\..\..\src\common;..\..\..\src\win32;..\..\..\include;$(NOINHERIT)"
+				AdditionalIncludeDirectories="E:\cygwin\home\nrl\WpdPack\Include;C:\cygwin\home\nrl\WpdPack\include;&quot;C:\cygwin\home\nrl\openvpn-2.0.9&quot;;&quot;..\..\..\openvpn-2.0.9&quot;;..\..\..\src\common;..\..\..\src\win32;..\..\..\include;$(NOINHERIT)"
 				PreprocessorDefinitions="_DEBUG;PROTO_DEBUG;HAVE_IPV6;HAVE_ASSERT;WIN32;WPCAP;_CRT_SECURE_NO_DEPRECATE;_LIB;_WINDOWS"
 				MinimalRebuild="false"
 				BasicRuntimeChecks="3"
@@ -70,6 +70,7 @@
 				OutputFile=".\Debug/vifExample.exe"
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
+				AdditionalLibraryDirectories="C:\cygwin\home\nrl\WpdPack\Lib;E:\cygwin\home\nrl\WpdPack\Lib"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile=".\Debug/vifExample.pdb"
 				SubSystem="2"

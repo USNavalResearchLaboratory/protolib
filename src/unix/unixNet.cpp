@@ -39,84 +39,68 @@
 #endif  // if/else (SOLARIS || IRIX)
 #endif  // !SIOCGIFHWADDR
 
-#ifdef HAVE_IPV6
-// Although getifaddrs() is probably ok for non-ip6, Android doesn't like it
-// so we used the HAVE_IPV6 cue for this as well.  Proper Protolib Android support to come in the future! 
+#ifndef ANDROID
+// Android doesn't have getifaddrs(), so we have some netlink stuff
+// in "linuxNet.cpp" to implement specific some functions for Android
 #include <ifaddrs.h> 
-#endif  // HAVE_IPV6
-
+#endif // !ANDROID
 
 // Implementation of ProtoNet functions for Unix systems.  These are the mechanisms that are common to
 // most Unix systems.  Some additional ProtoNet mechanisms that have Linux- or MacOS-specific code are
 // implemented in "src/linux/linuxNet.cpp" or "src/macos/macosNet.cpp", etc.
-
-#ifndef HAVE_IPV6
-// Internal helper function for older (non-IPv6) systems,
-// returns number of interfaces, interface records in "struct ifconf"
-// conf.ifc_buf must be deleted by calling program when done
-// note that use of SIOCGIFCONF is deprecated
-static int GetInterfaceList(struct ifconf& conf)
+#ifndef ANDROID  // Android version implemented in linuxNet.cpp because no Android getifaddrs()
+unsigned int ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
 {
-    int sockFd = socket(PF_INET, SOCK_DGRAM, 0);
-    if (sockFd < 0) 
+    int family;
+    switch (ifAddr.GetType())
     {
-        PLOG(PL_ERROR, "ProtoNet::GetInterfaceList() socket() error: %s\n", GetErrorString());
+        case ProtoAddress::IPv4:
+            family = AF_INET;
+            break;
+#ifdef HAVE_IPV6
+        case ProtoAddress::IPv6:
+            family = AF_INET6;
+            break;
+#endif // HAVE_IPV6
+        default:
+            PLOG(PL_ERROR, "UnixNet::GetInterfaceName() error: invalid address type\n");
+            return 0;
+    }
+    struct ifaddrs* ifap;
+    if (0 == getifaddrs(&ifap))
+    {
+        // Look for addrType address for given "interfaceName"
+        struct ifaddrs* ptr = ifap;
+        unsigned int namelen = 0;
+        while (ptr)
+        {
+            if ((NULL != ptr->ifa_addr) && (family == ptr->ifa_addr->sa_family))
+            {
+                ProtoAddress theAddr;
+                theAddr.SetSockAddr(*(ptr->ifa_addr));
+                if (theAddr.HostIsEqual(ifAddr))
+                {
+                    namelen = strlen(ptr->ifa_name);
+                    if (namelen > IFNAMSIZ) namelen = IFNAMSIZ;
+                    if (NULL == buffer) break;
+                    unsigned int maxlen = (buflen > IFNAMSIZ) ? IFNAMSIZ : buflen;
+                    strncpy(buffer, ptr->ifa_name, maxlen);
+                    break;
+                }
+            }
+            ptr = ptr->ifa_next;
+        }
+        freeifaddrs(ifap);
+        if (0 == namelen)
+            PLOG(PL_ERROR, "UnixNet::GetInterfaceName() error: unknown interface address\n");
+        return namelen;
+    }
+    else
+    {
+        PLOG(PL_ERROR, "UnixNet::GetInterfaceName() getifaddrs() error: %s\n", GetErrorString());
         return 0;
     }
-
-    int ifNum = 32;  // first guess for max # of interfaces
-#ifdef SIOCGIFNUM  // Solaris has this, others might
-	if (ioctl(sock, SIOCGIFNUM, &ifNum) >= 0) ifNum++;
-#endif // SIOCGIFNUM
-    // We loop here until we get a fully successful SIOGIFCONF
-    // This returns us a list of all interfaces
-    int bufLen;
-    conf.ifc_buf = NULL;
-    do
-    {
-        if (NULL != conf.ifc_buf) delete[] conf.ifc_buf;  // remove previous buffer
-        bufLen = ifNum * sizeof(struct ifreq);
-        conf.ifc_len = bufLen;
-        conf.ifc_buf = new char[bufLen];
-        if ((NULL == conf.ifc_buf))
-        {
-            PLOG(PL_ERROR, "ProtoNet::GetInterfaceList() new conf.ifc_buf error: %s\n", GetErrorString());
-            conf.ifc_len = 0;
-            break;
-        }
-        if ((ioctl(sockFd, SIOCGIFCONF, &conf) < 0))
-        {
-            PLOG(PL_WARN, "ProtoNet::GetInterfaceList() ioctl(SIOCGIFCONF) warning: %s\n", GetErrorString());
-			conf.ifc_len = 0;  // reset for fall-through below
-        }
-        ifNum *= 2;  // last guess not big enough, so make bigger & try again
-    } while (conf.ifc_len >= bufLen);
-    close(sockFd);  // done with socket (whether error or not)
-    return (conf.ifc_len / sizeof(struct ifreq));  // number of interfaces (or 0)
-
-// above follows Stevens book & may be the most general for all *nix platforms
-// below is simpler, works (at least) on Fedora Linux
-// found it on http://codingrelic.geekhold.com/
-//
-//	conf.ifc_len = 0;
-//	conf.ifc_buf = NULL;
-//	int sockFd;
-//
-//	if (((sockFd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) ||  // get socket
-//	    (ioctl(sockFd, SIOCGIFCONF, &conf) < 0) ||  // get # of records
-//	    ((conf.ifc_buf = new char[conf.ifc_len]) == NULL) ||  // make if bfr
-//	    (ioctl(sockFd, SIOCGIFCONF, &conf) < 0))  // fill bfr with if records
-//	{
-//		PLOG(PL_ERROR, "ProtoNet::GetInterfaceList() error: %s\n",
-//		               GetErrorString());
-//		conf.ifc_len = 0;  // reset for below
-//	}
-//
-//	close(sockFd);  // done with socket, error or no
-//
-//	return (conf.ifc_len / sizeof(struct ifreq));  // # records (or 0)
-}  // end ProtoNet::GetInterfaceList()
-#endif // !HAVE_IPV6
+}  // end ProtoNet::GetInterfaceName(by address)
 
 bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                                        ProtoAddress::Type  addressType,
@@ -341,21 +325,21 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         }
         return true;
 #else
-        // For now, assume we're BSD and use ifaddrs()
+        // For now, assume we're BSD and use getifaddrs()
         close(socketFd);  // don't need the socket
         struct ifaddrs* ifap;
         if (0 == getifaddrs(&ifap))
         {
             // Look for AF_LINK address for given "interfaceName"
             struct ifaddrs* ptr = ifap;
-            while (ptr)
+            while (NULL != ptr)
             {
-                if (ptr->ifa_addr && (AF_LINK == ptr->ifa_addr->sa_family))
+                if ((NULL != ptr->ifa_addr) && (AF_LINK == ptr->ifa_addr->sa_family))
                 {
                     if (!strcmp(interfaceName, ptr->ifa_name))
                     {
-                        // (TBD) should we confirm sdl->sdl_type == IFT_ETHER?
-                        struct sockaddr_dl* sdl = (struct sockaddr_dl*)ptr->ifa_addr;
+                        // note the (void*) cast here gets rid of cast-align mis-warning
+                        struct sockaddr_dl* sdl = (struct sockaddr_dl*)((void*)ptr->ifa_addr);
                         if (IFT_ETHER != sdl->sdl_type)
                         {
                             freeifaddrs(ifap);
@@ -402,7 +386,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         // Look for addrType address for given "interfaceName"
         struct ifaddrs* ptr = ifap;
         bool foundIface = false;
-        while (ptr)
+        while (NULL != ptr)
         {
             char ifname[IFNAMSIZ+1];
             ifname[IFNAMSIZ] = '\0';
@@ -419,7 +403,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
 #endif // LINUX
             if (0 == strcmp(interfaceName, ifname))
             {
-                if (req.ifr_addr.sa_family == ptr->ifa_addr->sa_family)
+                if ((NULL != ptr->ifa_addr) && (ptr->ifa_addr->sa_family == req.ifr_addr.sa_family))
                 {
                     ProtoAddress ifAddr;
                     if (!ifAddr.SetSockAddr(*(ptr->ifa_addr)))
@@ -527,7 +511,6 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
     return true;
 }  // end ProtoNet::GetInterfaceAddressList()
 
-#ifdef HAVE_IPV6
 unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const ProtoAddress& theAddr)
 {
     int family;
@@ -549,9 +532,9 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
         // Look for addrType address for given "interfaceName"
         struct ifaddrs* ptr = ifap;
         bool foundIface = false;
-        while (ptr)
+        while (NULL != ptr)
         {
-            if (ptr->ifa_addr->sa_family != family)
+            if ((NULL == ptr->ifa_addr) || (ptr->ifa_addr->sa_family != family))
             {
                 ptr = ptr->ifa_next;
                 continue;
@@ -626,9 +609,88 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
     {
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() getifaddrs() error: %s\n");  
     }
-    return false;
+    return 0;
 } // end ProtoNet::GetInterfaceAddressMask()
-#endif // HAVE_IPV6
+#endif // !ANDROID
+
+#if defined(SIOCGIFINDEX) && (defined(ANDROID) || !defined(HAVE_IPV6)) 
+// Internal helper function for systems without getifaddrs() (e.g. Android or older stuff)
+static int GetInterfaceList(struct ifconf& conf)
+{
+    int sockFd = socket(PF_INET, SOCK_DGRAM, 0);
+    if (sockFd < 0) 
+    {
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceList() socket() error: %s\n", GetErrorString());
+        return 0;
+    }
+
+    int ifNum = 32;  // first guess for max # of interfaces
+#ifdef SIOCGIFNUM  // Solaris has this, others might
+	if (ioctl(sock, SIOCGIFNUM, &ifNum) >= 0) ifNum++;
+#endif // SIOCGIFNUM
+    // We loop here until we get a fully successful SIOGIFCONF
+    // This returns us a list of all interfaces
+    int bufLen;
+    conf.ifc_buf = NULL;
+    do
+    {
+        if (NULL != conf.ifc_buf) delete[] conf.ifc_buf;  // remove previous buffer
+        bufLen = ifNum * sizeof(struct ifreq);
+        conf.ifc_len = bufLen;
+        conf.ifc_buf = new char[bufLen];
+        if ((NULL == conf.ifc_buf))
+        {
+            PLOG(PL_ERROR, "ProtoNet::GetInterfaceList() new conf.ifc_buf error: %s\n", GetErrorString());
+            conf.ifc_len = 0;
+            break;
+        }
+        if ((ioctl(sockFd, SIOCGIFCONF, &conf) < 0))
+        {
+            PLOG(PL_WARN, "ProtoNet::GetInterfaceList() ioctl(SIOCGIFCONF) warning: %s\n", GetErrorString());
+			conf.ifc_len = 0;  // reset for fall-through below
+        }
+        ifNum *= 2;  // last guess not big enough, so make bigger & try again
+    } while (conf.ifc_len >= bufLen);
+    close(sockFd);  // done with socket (whether error or not)
+    return (conf.ifc_len / sizeof(struct ifreq));  // number of interfaces (or 0)
+}  // end ProtoNet::GetInterfaceList()
+#endif // SIOCGIFINDEX  && (ANDROID || !HAVE_IPV6)
+
+unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned int indexArraySize)
+{
+    unsigned int indexCount = 0;
+#if defined(HAVE_IPV6) && !defined(ANDROID)
+    struct if_nameindex* ifdx = if_nameindex();
+    if (NULL == ifdx) return 0;  // no interfaces found
+    struct if_nameindex* ifPtr = ifdx;
+	while ((0 != ifPtr->if_index))
+	{
+		// need to take into account (NULL, 0) input (see GetInterfaceName)
+		if ((NULL != indexArray) && (indexCount < indexArraySize))
+			indexArray[indexCount] = ifPtr->if_index;
+		indexCount++;         
+		ifPtr++;
+	} 
+	if_freenameindex(ifdx);
+#else  // !HAVE_IPV6  || ANDROID
+#ifdef SIOCGIFINDEX
+    struct ifconf conf;
+    conf.ifc_buf = NULL;  // initialize
+	indexCount = GetInterfaceList(conf);
+    if (NULL != indexArray)
+    {
+        if (indexCount < indexArraySize) indexArraySize = indexCount;
+        for (unsigned int i = 0; i < indexArraySize; i++)
+            indexArray[i] = GetInterfaceIndex(conf.ifc_req[i].ifr_name);
+    }
+    if (NULL != conf.ifc_buf) delete[] conf.ifc_buf;
+
+#else  // !SIOCGIFINDEX
+	PLOG(PL_ERROR, "ProtoNet::GetInterfaceIndices() error: interface indices not supported\n");
+#endif  // if/else SIOCGIFINDEX
+#endif  // if/else HAVE_IPV6  && !ANDROID
+    return indexCount;
+}  // end ProtoNet::GetInterfaceIndices()
 
 unsigned int ProtoNet::GetInterfaceIndex(const char* interfaceName)
 {
@@ -671,104 +733,18 @@ unsigned int ProtoNet::GetInterfaceIndex(const char* interfaceName)
     return index;
 }  // end ProtoNet::GetInterfaceIndex()
 
-unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned int indexArraySize)
-{
-    unsigned int indexCount = 0;
-#ifdef HAVE_IPV6
-    struct if_nameindex* ifdx = if_nameindex();
-    if (NULL == ifdx) return 0;  // no interfaces found
-    struct if_nameindex* ifPtr = ifdx;
-	while ((0 != ifPtr->if_index))
-	{
-		// need to take into account (NULL, 0) input (see GetInterfaceName)
-		if ((NULL != indexArray) && (indexCount < indexArraySize))
-			indexArray[indexCount] = ifPtr->if_index;
-		indexCount++;         
-		ifPtr++;
-	} 
-	if_freenameindex(ifdx);
-#else  // !HAVE_IPV6
-#ifdef SIOCGIFINDEX
-    struct ifconf conf;
-    conf.ifc_buf = NULL;  // initialize
-	indexCount = GetInterfaceList(conf);
-    if (NULL != indexArray)
-    {
-        if (indexCount < indexArraySize) indexArraySize = indexCount;
-        for (unsigned int i = 0; i < indexArraySize; i++)
-            indexArray[i] = GetInterfaceIndex(conf.ifc_req[i].ifr_name);
-    }
-    if (NULL != conf.ifc_buf) delete[] conf.ifc_buf;
-
-#else  // !SIOCGIFINDEX
-	PLOG(PL_ERROR, "ProtoNet::GetInterfaceIndices() error: interface indices not supported\n");
-#endif  // if/else SIOCGIFINDEX
-#endif  // if/else HAVE_IPV6
-    return indexCount;
-}  // end ProtoNet::GetInterfaceIndices()
-
-// given addrType, searches through interface list, returns first non-loopback address found
-// TBD - should we _try_ to find a non-link-local addr as well?
-bool ProtoNet::FindLocalAddress(ProtoAddress::Type addrType, ProtoAddress& theAddress)
-{
-	bool foundLocal = false;  // default
-#ifdef HAVE_IPV6
-	struct if_nameindex* ifdx = if_nameindex();
-    if (NULL == ifdx) return false;
-	struct if_nameindex* ifPtr = ifdx;  // first interface
-
-	while (0 != ifPtr->if_index)
-	{
-		if (GetInterfaceAddress(ifPtr->if_name, addrType, theAddress))
-		{
-            // Should we _try_ to find a non-link-local addr?
-            if (!theAddress.IsLoopback())
-			{
-				foundLocal = true;      
-				break;
-			}
-		}            
-		ifPtr++;
-	}
-	if_freenameindex(ifdx);
-#else  // !HAVE_IPV6
-	struct ifconf conf;
-	conf.ifc_buf = NULL;  // initialize
-	int ifCount = GetInterfaceList(conf);
-    for (int i = 0; i < ifCount; i++)
-	{
-		if (GetInterfaceAddress(conf.ifc_req[i].ifr_name, addrType, theAddress))
-		{
-			if (!theAddress.IsLoopback())
-			{
-                // Should we _try_ to find a non-link-local addr?
-				foundLocal = true;
-				break;
-			}
-		}
-	}
-	delete[] conf.ifc_buf;
-#endif // if/else HAVE_IPV6
-
-	// (TBD) set loopback addr if nothing else?
-	if (!foundLocal)
-		PLOG(PL_WARN, "ProtoNet::FindLocalAddress() no %s addr assigned\n",
-		              (ProtoAddress::IPv6 == addrType) ? "IPv6" : "IPv4");
-	return foundLocal;
-}  // end ProtoNet::FindLocalAddress()
-
-bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int buflen)
+unsigned int ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int buflen)
 {
 #ifdef HAVE_IPV6
     char ifName[IFNAMSIZ+1];
     if (NULL != if_indextoname(index, ifName))
     {
         strncpy(buffer, ifName, buflen);
-        return true;
+        return strlen(ifName);
     }
     else
     {
-        return false;
+        return 0;
     }
 #else
 #ifdef SIOCGIFNAME
@@ -777,7 +753,7 @@ bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int b
     {
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() socket() error: %s\n",
                        GetErrorString());
-        return false;
+        return 0;
     }
     struct ifreq req;
     req.ifr_ifindex = index;
@@ -786,170 +762,72 @@ bool ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsigned int b
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() ioctl(SIOCGIFNAME) error: %s\n",
                        GetErrorString());
         close(sockFd);
-        return false;
+        return 0;
     }
     close(sockFd);
-    if (buflen > IFNAMSIZ)
+    if (NULL != buffer)
     {
-        buffer[IFNAMSIZ] = '\0';
-        buflen = IFNAMSIZ;
+        if (buflen > IFNAMSIZ)
+        {
+            buffer[IFNAMSIZ] = '\0';
+            buflen = IFNAMSIZ;
+        }
+        strncpy(buffer, req.ifr_name, buflen);
     }
-    strncpy(buffer, req.ifr_name, buflen);
-    return true;
+    return strnlen(req.ifr_name, IFNAMSIZ);
 #else
     PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() error: getting name by index not supported\n");
-    return false;
+    return 0;
 #endif // if/else SIOCGIFNAME
 #endif // if/else HAVE_IPV6
 }  // end ProtoNet::GetInterfaceName(by index)
 
-bool ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
-{      
-#ifdef HAVE_IPV6
-    // Go through list, looking for matching address
-    struct if_nameindex* ifdx = if_nameindex();
-    struct if_nameindex* ptr = ifdx;
-    if (NULL == ifdx) return false;   // no interfaces?
-    while (0 != ptr->if_index)
-    {
-        ProtoAddressList addrList;
-        if (GetInterfaceAddressList(ptr->if_name, ifAddr.GetType(), addrList))
-        {
-            ProtoAddressList::Iterator iterator(addrList);
-            ProtoAddress theAddress;
-            while (iterator.GetNextAddress(theAddress))
-            {
-                if (ifAddr.HostIsEqual(theAddress))
-                {
-                    if (buflen > IFNAMSIZ)
-                    {
-                        buffer[IFNAMSIZ] = '\0';
-                        buflen = IFNAMSIZ;
-                    }
-                    strncpy(buffer, ptr->if_name, buflen);
-                    if_freenameindex(ifdx);
-                    return true;;
-                }   
-            }
-        }
-        ptr++;
-    }
-    if_freenameindex(ifdx);
-#else
-    // First, find out how many interfaces there are
-    unsigned int indexCount = GetInterfaceIndices(NULL, 0);
-    if (indexCount > 0)
-    {
-        unsigned int* indexArray = new unsigned int[indexCount];
-        if (NULL == indexArray)
-        {
-            PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() new indexArray error: %S\n",
-                    GetErrorString());
-            return false;
-        }
-        indexCount = GetInterfaceIndices(indexArray, indexCount);
-        for (unsigned int i = 0; i < indexCount; i++)
-        {
-            char ifName[IFNAMSIZ+1];
-            ifName[IFNAMSIZ] = '\0';
-            if (GetInterfaceName(indexArray[i], ifName, IFNAMSIZ))
-            {
-                ProtoAddressList addrList;
-                if (GetInterfaceAddressList(ifName, ifAddr.GetType(), addrList))
-                {
-                    ProtoAddressList::Iterator iterator(addrList);
-                    ProtoAddress theAddress;
-                    while (iterator.GetNextAddress(theAddress))
-                    {
-                        if (ifAddr.HostIsEqual(theAddress))
-                        {
-                            if (buflen > IFNAMSIZ)
-                            {
-                                buffer[IFNAMSIZ] = '\0';
-                                buflen = IFNAMSIZ;
-                            }
-                            strncpy(buffer, ifName, buflen);
-                            delete[] indexArray;
-                            return true;;
-                        }   
-                    }
-                }
-            }
-            else
-            {
-                PLOG(PL_WARN, "ProtoNet::GetInterfaceName() warning: GetInterfaceName(%d) failure\n",
-                              indexArray[i]);
-            }
-        }
-        delete[] indexArray;
-    }
-#endif // if/else HAVE_IPV6
-    return false;
-}  // end  ProtoNet::GetInterfaceName(by address)
-
-
-#ifdef LINUX
-#ifdef HAVE_IPV6
-static unsigned int GetInterfaceAlias(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
+ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(const char* ifaceName)
 {
-    int family;
-    switch (ifAddr.GetType())
+    int fd = socket(PF_INET, SOCK_DGRAM, 0);
+    if (fd < 0)
     {
-        case ProtoAddress::IPv4:
-            family = AF_INET;
-            break;
-        case ProtoAddress::IPv6:
-            family = AF_INET6;
-            break;
-        default:
-            PLOG(PL_ERROR, "UnixNet::GetInterfaceAliasName() error: invalid address type\n");
-            return 0;
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceStatus() socket() error: %s\n", GetErrorString());
+        return IFACE_UNKNOWN;
     }
-    struct ifaddrs* ifap;
-    if (0 == getifaddrs(&ifap))
+    struct ifreq req;
+    memset(&req, 0, sizeof(req));
+    strncpy(req.ifr_name, ifaceName, IFNAMSIZ);
+    if (ioctl(fd, SIOCGIFFLAGS, &req) < 0)
     {
-        // Look for addrType address for given "interfaceName"
-        struct ifaddrs* ptr = ifap;
-        unsigned int namelen = 0;
-        while (ptr)
-        {
-            if (family == ptr->ifa_addr->sa_family)
-            {
-                ProtoAddress theAddr;
-                theAddr.SetSockAddr(*(ptr->ifa_addr));
-                if (theAddr.HostIsEqual(ifAddr))
-                {
-                    namelen = strlen(ptr->ifa_name);
-                    if (namelen > IFNAMSIZ) namelen = IFNAMSIZ;
-                    if (NULL == buffer) break;
-                    unsigned int maxlen = (buflen > IFNAMSIZ) ? IFNAMSIZ : buflen;
-                    strncpy(buffer, ptr->ifa_name, maxlen);
-                    break;
-                }
-            }
-            ptr = ptr->ifa_next;
-        }
-        freeifaddrs(ifap);
-        if (0 == namelen)
-            PLOG(PL_ERROR, "UnixNet::GetInterfaceAliasName() error: unknown interface address\n");
-        return namelen;
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceStatus() ioctl(SIOCGIFFLAGS) error: %s\n", GetErrorString());
+        close(fd);
+        return IFACE_UNKNOWN;
     }
-    else
-    {
-        PLOG(PL_ERROR, "UnixNet::GetInterfaceAliasName() getifaddrs() error: %s\n", GetErrorString());
-        return false;
-    }
-}  // end GetInterfaceAlias()
-#endif // HAVE_IPV6
-#endif // LINUX (although this could work for others as well)
+    close(fd);
+    
+    if (0 != (req.ifr_flags & IFF_UP))
+        return IFACE_UP;
+    else 
+        return IFACE_DOWN;
+    
+}  // end ProtoNet::GetInterfaceStatus(by name)
 
+ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(unsigned int ifaceIndex)
+{
+    char ifaceName[IFNAMSIZ+1];
+    ifaceName[IFNAMSIZ] = '\0';
+    if (!GetInterfaceName(ifaceIndex, ifaceName, IFNAMSIZ))
+    {
+        PLOG(PL_ERROR, "ProtoNet::InterfaceIsUp() socket() error: %s\n", GetErrorString());
+        return IFACE_UNKNOWN;
+    }
+    return GetInterfaceStatus(ifaceName);
+}  // end ProtoNet::GetInterfaceStatus(by index)
 
-#ifdef HAVE_IPV6
 // TBD - implement with proper system APIs instead of "ifconfig" command
 bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& ifaceAddr, unsigned int maskLen)
 {
     char cmd[1024];
 #ifdef LINUX
+#ifdef __ANDROID__
+    sprintf(cmd, "ip addr add %s/%u dev %s", ifaceAddr.GetHostString(), maskLen, ifaceName); 
+#else
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
@@ -969,7 +847,7 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
                 {
                     char ifname[IFNAMSIZ+1];
                     ifname[IFNAMSIZ] = '\0';
-                    if (!GetInterfaceAlias(addr, ifname, IFNAMSIZ))
+                    if (!GetInterfaceName(addr, ifname, IFNAMSIZ))
                     {
                         PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() error: unable to get interface name for addr %s\n",
                                 addr.GetHostString());
@@ -1014,7 +892,10 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
                     if (!GetInterfaceAddress(aliasName, ProtoAddress::IPv4, ifAddr))
                     {
                         // This alias is available, so set address
-                        sprintf(cmd, "/sbin/ifconfig %s %s/%d", aliasName, ifaceAddr.GetHostString(), maskLen);
+                        if (32 == maskLen)
+                            sprintf(cmd, "/sbin/ifconfig %s %s broadcast 0.0.0.0 netmask 255.255.255.255", aliasName, ifaceAddr.GetHostString());
+                        else
+                            sprintf(cmd, "/sbin/ifconfig %s %s/%u", aliasName, ifaceAddr.GetHostString(), maskLen);
                         break;
                     }
                     index++;
@@ -1029,13 +910,16 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
             else
             {
                 // Set primary address for interface ifaceName
-                sprintf(cmd, "/sbin/ifconfig %s %s/%d", ifaceName, ifaceAddr.GetHostString(), maskLen);
+                if (32 == maskLen)
+                    sprintf(cmd, "/sbin/ifconfig %s %s broadcast 0.0.0.0 netmask 255.255.255.255", ifaceName, ifaceAddr.GetHostString());
+                else                            
+                    sprintf(cmd, "/sbin/ifconfig %s %s/%u", ifaceName, ifaceAddr.GetHostString(), maskLen);
             }
             break;
         }
         case ProtoAddress::IPv6:
         {
-            sprintf(cmd, "/sbin/ifconfig %s add %s/%d", ifaceName, ifaceAddr.GetHostString(), maskLen);
+            sprintf(cmd, "/sbin/ifconfig %s add %s/%u", ifaceName, ifaceAddr.GetHostString(), maskLen);
             break;
         }
         default:
@@ -1044,15 +928,18 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
             return false;
         }
     }
+#endif // if/else __ANDROID__
 #else
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
-            sprintf(cmd, "/sbin/ifconfig %s %s/%d alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
+            sprintf(cmd, "/sbin/ifconfig %s %s/%u alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
             break;
+#ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
-            sprintf(cmd, "/sbin/ifconfig %s inet6 %s/%d alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
+            sprintf(cmd, "/sbin/ifconfig %s inet6 %s/%u alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
             break;
+#endif // HAVE_IPV6
         default:
             PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() error: invalid address type\n");
             return false;
@@ -1069,8 +956,10 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
 bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress& ifaceAddr, unsigned int maskLen)
 {
     char cmd[1024];
-    
 #ifdef LINUX
+#ifdef __ANDROID__
+    sprintf(cmd, "ip addr del %s/%u dev %s", ifaceAddr.GetHostString(), maskLen, ifaceName);
+#else
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
@@ -1078,7 +967,7 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
             // On linux we need to find the right interface alias
             char ifname[IFNAMSIZ+1];
             ifname[IFNAMSIZ] = '\0';
-            if (!GetInterfaceAlias(ifaceAddr, ifname, IFNAMSIZ))
+            if (!GetInterfaceName(ifaceAddr, ifname, IFNAMSIZ))
             {
                 PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: unknown interface address\n");
                 return false;
@@ -1095,6 +984,7 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
             }
             break;
         }
+#ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
         {
             // delete IPv6 address
@@ -1104,22 +994,25 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
                 sprintf(cmd, "/sbin/ifconfig %s del %s", ifaceName, ifaceAddr.GetHostString());
             break;
         }
+#endif // HAVE_IPV8
         default:
         {
             PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: invalid address type\n");
             return false;
         }
     }    
-    
+#endif // if/else __ANDROID__
 #else  // BSD, MacOSX, etc       
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
             sprintf(cmd, "/sbin/ifconfig %s %s -alias", ifaceName, ifaceAddr.GetHostString());
             break;
+#ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
             sprintf(cmd, "/sbin/ifconfig %s inet6 %s -alias", ifaceName, ifaceAddr.GetHostString());
             break;
+#endif // HAVE_IPV6
         default:
             PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: invalid address type\n");
             return false;
@@ -1133,4 +1026,3 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
     return true;
 }   // end ProtoNet::RemoveInterfaceAddress()
 
-#endif // HAVE_IPV6

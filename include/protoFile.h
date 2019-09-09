@@ -135,7 +135,7 @@ class ProtoFile : public ProtoChannel
 #else
         //int     fd;
 #endif // if/else _WIN32_WCE
-        int     flags;
+        //int     flags;
 #ifdef WIN32
 		__int64 offset;
 #else
@@ -160,7 +160,7 @@ class ProtoDirectoryIterator
         bool GetPath(char* pathBuffer);
         // "buffer" here _MUST_ be PATH_MAX long!
         bool GetNextFile(char* buffer);
-        
+        void Recursive(bool stepIntoDirs = false);
     private:            
         class ProtoDirectory
         {
@@ -185,6 +185,7 @@ class ProtoDirectoryIterator
             
         ProtoDirectory* current;
         int             path_len;
+        bool            search_dirs;
 };  // end class ProtoDirectoryIterator
 
 

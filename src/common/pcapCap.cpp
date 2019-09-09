@@ -6,7 +6,7 @@
 #include "protoCap.h"  // for ProtoCap definition
 #include "protoSocket.h"
 #include "protoDebug.h"
-
+#include <errno.h>
 #ifdef WIN32
 //#include <winpcap.h>
 #include <pcap.h>
@@ -30,13 +30,11 @@ class PcapCap : public ProtoCap
         bool Open(const char* interfaceName = NULL);
         bool IsOpen(){return (NULL != pcap_device);}
         void Close();
-        bool Send(const char* buffer, unsigned int buflen);
-        bool Forward(char* buffer, unsigned int buflen);
+        bool Send(const char* buffer, unsigned int& numBytes);
         bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL);
     
     private:
-        pcap_t*         pcap_device; 
-        char            eth_addr[6];    
+        pcap_t*         pcap_device;    
 };  // end class PcapCap
 
 
@@ -95,13 +93,11 @@ bool PcapCap::Open(const char* interfaceName)
 			return false;
 		}
 	}
-    ProtoAddress macAddr;
-    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, macAddr))
+    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
     {
         PLOG(PL_ERROR, "PcapCap::Open() error getting interface MAC address\n");
         return false;   
     }
-    memcpy(eth_addr, macAddr.GetRawHostAddress(), 6);
     Close(); // just in case
     char errbuf[PCAP_ERRBUF_SIZE+1];
     errbuf[0] = '\0';
@@ -161,6 +157,7 @@ bool PcapCap::Open(const char* interfaceName)
         PLOG(PL_ERROR, "pcapExample: pcap_setnonblock() warning: %s\n", errbuf);
 #ifdef WIN32
     input_handle = pcap_getevent(pcap_device);
+	input_event_handle = input_handle;
 #else
     descriptor = pcap_get_selectable_fd(pcap_device);
 #endif // if/else WIN32/UNIX
@@ -208,8 +205,11 @@ bool PcapCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
             unsigned int copyLen = (numBytes > hdr->caplen) ? hdr->caplen : numBytes;
             memcpy(buffer, data, copyLen);
             numBytes = copyLen;
-            if ((NULL != direction) && (0 == memcmp(eth_addr, buffer+6, 6)))
-                *direction = OUTBOUND;
+            // We may get false INBOUND when raw frames are sent with different src MAC addr
+			if ((NULL != direction) && (0 == memcmp(if_addr.GetRawHostAddress(), buffer + 6, 6)))
+				*direction = OUTBOUND;
+			else
+				*direction = INBOUND;
             return true;
         }
         case 0:     // no pkt ready?
@@ -226,7 +226,7 @@ bool PcapCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     } 
 }  // end PcapCap::Recv()
 
-bool PcapCap::Send(const char* buffer, unsigned int buflen)
+bool PcapCap::Send(const char* buffer, unsigned int& numBytes)
 {
     // Make sure packet is a type that is OK for us to send
     // (Some packets seem to cause a PF_PACKET socket trouble)
@@ -240,74 +240,46 @@ bool PcapCap::Send(const char* buffer, unsigned int buflen)
     }
 
 #ifdef WIN32
-    int pcapreturn = pcap_sendpacket(pcap_device,(unsigned char*)buffer, buflen);
-    TRACE("pcapreturn value in send %d\n",pcapreturn);
-#else
-    unsigned int put = 0;
-    while (put < buflen)
+    int pcapreturn = pcap_sendpacket(pcap_device,(unsigned char*)buffer, numBytes);
+    if (0 != pcapreturn)
     {
-        ssize_t result = write(descriptor, buffer, buflen);
-        if (result > 0)
+        switch (errno)
         {
-            put += result;
+            case ENOBUFS:
+            case EWOULDBLOCK:
+                numBytes = 0;
+            default:
+                PLOG(PL_ERROR, "PcapCap::Send() error: %s", GetErrorString());
+                break;
+        }
+        return false;
+    }
+#else
+    for (;;)
+    {
+        ssize_t result = write(descriptor, buffer, numBytes);
+        if (result < 0)
+        {
+            switch (errno)
+            {
+                case EINTR:
+                    continue;  // try again
+                case EWOULDBLOCK:
+                    numBytes = 0;
+                case ENOBUFS:
+                    // since this doesn't block write() or select(), etc
+                default:
+                    PLOG(PL_ERROR, "PcapCap::Send() error: %s", GetErrorString());
+                    break;
+            }   
+            return false;              
         }
         else
         {
-            if (EINTR == errno)
-            {
-                continue;  // try again
-            }
-            else
-            {
-                PLOG(PL_ERROR, "PcapCap::Send() error: %s", GetErrorString());
-                return false;
-            }           
+            ASSERT(result == numBytes);
+            break;
         }
     }
 #endif
     return true;
 }  // end PcapCap::Send()
-
-bool PcapCap::Forward(char* buffer, unsigned int buflen)
-{
-    // Make sure packet is a type that is OK for us to send
-    // (Some packets seem to cause a PF_PACKET socket trouble)
-    UINT16 type;
-    memcpy(&type, buffer+12, 2);
-    type = ntohs(type);
-    if (type <=  0x05dc) // assume it's 802.3 Length and ignore
-    {
-            PLOG(PL_DEBUG, "PcapCap::Forward() unsupported 802.3 frame (len = %04x)\n", type);
-            return false;
-    }
-    // Change the src MAC addr to our own
-    // (TBD) allow caller to specify dst MAC addr ???
-    memcpy(buffer+6, eth_addr, 6);
-#ifdef WIN32
-    int pcapreturn = pcap_sendpacket(pcap_device, (unsigned char*)buffer, buflen);
-	TRACE("this is the pcapreturn value in Forward %d\n",pcapreturn);
-#else
-    unsigned int put = 0;
-    while (put < buflen)
-    {
-        ssize_t result = write(descriptor, buffer, buflen);
-        if (result > 0)
-        {
-            put += result;
-        }
-        else
-        {
-            if (EINTR == errno)
-            {
-                continue;  // try again
-            }
-            else
-            {
-                PLOG(PL_ERROR, "PcapCap::Forward() error: %s", GetErrorString());
-                return false;
-            }           
-        }
-    }
-#endif
-    return true;
-}  // end PcapCap::Forward()

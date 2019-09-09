@@ -5,17 +5,24 @@
 */
 #include "protoRouteMgr.h"
 #include "protoDebug.h"
+
+ProtoRouteMgr::ProtoRouteMgr()
+ : savedRoutesIPv4(NULL), savedRoutesIPv6(NULL)
+{
+}
+
 ProtoRouteMgr::~ProtoRouteMgr()
 {
-    if(NULL != savedRoutesIPv4)
-        delete savedRoutesIPv4;
-    if(NULL != savedRoutesIPv6)
-        delete savedRoutesIPv6;
+    if(NULL != savedRoutesIPv4) delete savedRoutesIPv4;
+    if(NULL != savedRoutesIPv6) delete savedRoutesIPv6;
 }
+
+
 bool ProtoRouteMgr::DeleteAllRoutes()
 {
     return DeleteAllRoutes(ProtoAddress::IPv4) && DeleteAllRoutes(ProtoAddress::IPv6);
 }
+
 bool ProtoRouteMgr::DeleteAllRoutes(ProtoAddress::Type addrType, unsigned int maxIterations)
 {
     ProtoRouteTable rt;
@@ -96,13 +103,13 @@ bool ProtoRouteMgr::SetRoutes(ProtoRouteTable& routeTable)
     return result;
 }  // end ProtoRouteMgr::SetRoutes()
 bool
-ProtoRouteMgr::UpdateRoutes(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable)
+ProtoRouteMgr::GetDiff(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable, ProtoRouteTable& settedRouteTable, ProtoRouteTable& deletedRouteTable)
 {
     //this can be sped up by only going through a single list instead of both and adding routes directly instead of in sets. TBD
-    ProtoRouteTable removeRoutes;
-    ProtoRouteTable updateRoutes;
-    removeRoutes.Init();
-    updateRoutes.Init();
+    ProtoRouteTable updateRoutesMetric; //this was added so we only get a diff on changed routes via the settedRoute table
+    
+    settedRouteTable.Init();
+    deletedRouteTable.Init();
     ProtoRouteTable::Iterator it_old(oldRouteTable);
     ProtoRouteTable::Iterator it_new(newRouteTable);
     ProtoRouteTable::Entry* entry;
@@ -120,7 +127,7 @@ ProtoRouteMgr::UpdateRoutes(ProtoRouteTable& oldRouteTable, ProtoRouteTable& new
         int          metric     = entry->GetMetric();
         if(!newRouteTable.FindRoute(dstAddr,prefixLen,gwAddrLookup,ifaceIndexLookup,metricLookup))
         {
-            if(!removeRoutes.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric)) 
+            if(!deletedRouteTable.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric)) 
             {
                 PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table\n");
                 return false;
@@ -136,30 +143,108 @@ ProtoRouteMgr::UpdateRoutes(ProtoRouteTable& oldRouteTable, ProtoRouteTable& new
         int          metric     = entry->GetMetric();
         if(!oldRouteTable.FindRoute(dstAddr,prefixLen,gwAddrLookup,ifaceIndexLookup,metricLookup))
         {
-            if(!updateRoutes.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
+            if(!settedRouteTable.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
             {
                 PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in new section\n");
                 return false;
             }
-        } else {
-            if((gwAddrLookup != gwAddr) ||
-               (ifaceIndexLookup != ifaceIndex) ||
-               (metricLookup != metric))
+        } else if((gwAddrLookup != gwAddr) || (ifaceIndexLookup != ifaceIndex)) {
+            if(!settedRouteTable.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
             {
-                if(!updateRoutes.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
-                {
-                    PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in change section\n");
-                    return false;
-                }
+                PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in change section\n");
+                return false;
+            }
+        } else if(metricLookup != metric) {
+            if(!updateRoutesMetric.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
+            {
+                PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in change section\n");
+                return false;
             }
         }
     }
-    if(!DeleteRoutes(removeRoutes)) {
+    return true;
+}
+bool
+ProtoRouteMgr::UpdateRoutes(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable, ProtoRouteTable* settedRouteTable, ProtoRouteTable* deletedRouteTable)
+{
+    //this can be sped up by only going through a single list instead of both and adding routes directly instead of in sets. TBD
+    ProtoRouteTable removeRoutes;
+    ProtoRouteTable updateRoutes;
+    ProtoRouteTable updateRoutesMetric; //this was added so we only get a diff on changed routes via the settedRoute table
+    ProtoRouteTable* removeRoutesPtr = &removeRoutes;
+    ProtoRouteTable* updateRoutesPtr = &updateRoutes;
+    if( NULL != settedRouteTable)
+    {
+        updateRoutesPtr = settedRouteTable;
+    }
+    if( NULL != deletedRouteTable)
+    {
+        removeRoutesPtr = deletedRouteTable;
+    }
+    removeRoutesPtr->Init();
+    updateRoutesPtr->Init();
+    ProtoRouteTable::Iterator it_old(oldRouteTable);
+    ProtoRouteTable::Iterator it_new(newRouteTable);
+    ProtoRouteTable::Entry* entry;
+    
+    ProtoAddress gwAddrLookup;
+    unsigned int ifaceIndexLookup;
+    int metricLookup;
+    
+    while(NULL != (entry = it_old.GetNextEntry()))
+    {
+        ProtoAddress dstAddr    = entry->GetDestination();
+        ProtoAddress gwAddr     = entry->GetGateway();
+        unsigned int prefixLen  = entry->GetPrefixSize();
+        unsigned int ifaceIndex = entry->GetInterfaceIndex();
+        int          metric     = entry->GetMetric();
+        if(!newRouteTable.FindRoute(dstAddr,prefixLen,gwAddrLookup,ifaceIndexLookup,metricLookup))
+        {
+            if(!removeRoutesPtr->SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric)) 
+            {
+                PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table\n");
+                return false;
+            }
+        }
+    }
+    while(NULL != (entry = it_new.GetNextEntry()))
+    {
+        ProtoAddress dstAddr    = entry->GetDestination();
+        ProtoAddress gwAddr     = entry->GetGateway();
+        unsigned int prefixLen  = entry->GetPrefixSize();
+        unsigned int ifaceIndex = entry->GetInterfaceIndex();
+        int          metric     = entry->GetMetric();
+        if(!oldRouteTable.FindRoute(dstAddr,prefixLen,gwAddrLookup,ifaceIndexLookup,metricLookup))
+        {
+            if(!updateRoutesPtr->SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
+            {
+                PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in new section\n");
+                return false;
+            }
+        } else if((gwAddrLookup != gwAddr) || (ifaceIndexLookup != ifaceIndex)) {
+            if(!updateRoutesPtr->SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
+            {
+                PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in change section\n");
+                return false;
+            }
+        } else if(metricLookup != metric) {
+            if(!updateRoutesMetric.SetRoute(dstAddr,prefixLen,gwAddr,ifaceIndex,metric))
+            {
+                PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed add an old route to the removeRoutes table in change section\n");
+                return false;
+            }
+        }
+    }
+    if(!DeleteRoutes(*removeRoutesPtr)) {
         PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed delete old routes\n");
         return false;
     }
-    if(!SetRoutes(updateRoutes)) {
+    if(!SetRoutes(*updateRoutesPtr)) {
         PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed update routes\n");
+        return false;
+    }
+    if(!SetRoutes(updateRoutesMetric)) {
+        PLOG(PL_ERROR,"ProtoRouteMgr::UpdateRoutes() failed update routes metric only\n");
         return false;
     }
     return true;
@@ -222,13 +307,12 @@ bool ProtoRouteMgr::DeleteRoutes(ProtoRouteTable& routeTable)
     return result;
 }  // end ProtoRouteMgr::DeleteRoutes()
 
-bool
-ProtoRouteMgr::SaveAllRoutes()
+bool ProtoRouteMgr::SaveAllRoutes()
 {
     return SaveAllRoutes(ProtoAddress::IPv4) || SaveAllRoutes(ProtoAddress::IPv6);
-}
-bool
-ProtoRouteMgr::SaveAllRoutes(ProtoAddress::Type addrType) 
+}  // end ProtoRouteMgr::SaveAllRoutes()
+
+bool ProtoRouteMgr::SaveAllRoutes(ProtoAddress::Type addrType) 
 {
     switch (addrType) 
     {
@@ -271,9 +355,9 @@ ProtoRouteMgr::SaveAllRoutes(ProtoAddress::Type addrType)
             return false;
     }
     return true;
-}
-bool
-ProtoRouteMgr::RestoreSavedRoutes()
+}  // ProtoRouteMgr::SaveAllRoutes()
+
+bool ProtoRouteMgr::RestoreSavedRoutes()
 {
     bool returnvalue = false;
     if(NULL != savedRoutesIPv6)
@@ -289,9 +373,9 @@ ProtoRouteMgr::RestoreSavedRoutes()
         PLOG(PL_ERROR,"ProtoRouteMgr::RestoreSavedRoutes() couldn't restore routes, did you save any first?");
     }
     return returnvalue;
-}
-bool
-ProtoRouteMgr::RestoreSavedRoutes(ProtoAddress::Type addrType)
+}  // end ProtoRouteMgr::RestoreSavedRoutes()
+
+bool ProtoRouteMgr::RestoreSavedRoutes(ProtoAddress::Type addrType)
 {
     switch(addrType)
     {
@@ -316,4 +400,22 @@ ProtoRouteMgr::RestoreSavedRoutes(ProtoAddress::Type addrType)
             return false;
     }
     return true;
-}
+}  // end ProtoRouteMgr::RestoreSavedRoutes()
+
+void ProtoRouteMgr::ClearSavedRoutes()
+{
+    // the ProtoRouteMgr base class constructor now inits
+    // these pointers to NULL as it should, so the Init()
+    // method here is probably unecessary, but now can be
+    // used to "clear" any saved route info
+    if (NULL != savedRoutesIPv4)
+    {
+        delete savedRoutesIPv4;
+        savedRoutesIPv4 = NULL;
+    }
+    if (NULL != savedRoutesIPv6)
+    {
+        delete savedRoutesIPv6;
+        savedRoutesIPv6 = NULL;
+    }
+}  // end ProtoRouteMgr::ClearSavedRoutes()

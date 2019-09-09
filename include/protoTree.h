@@ -100,8 +100,10 @@ class ProtoTree : public ProtoIterable
         // Remove the "item" from the tree
         void Remove(Item& item); 
         
-        bool Contains(const Item& item) const
-            {return (NULL != Find(item.GetKey(), item.GetKeysize()));}
+        // This should be implemented as shown here.  I commented it out
+        // to detect if anything was using its old, incorrect implementation 
+        //bool Contains(const Item& item) const
+        //    {return (&item == Find(item.GetKey(), item.GetKeysize()));}
         
         // Find item with exact match to "key" and "keysize" (keysize is in bits)
         ProtoTree::Item* Find(const char* key, unsigned int keysize) const;
@@ -109,6 +111,8 @@ class ProtoTree : public ProtoIterable
         ProtoTree::Item* FindString(const char* keyString) const
             {return Find(keyString, (unsigned int)(8*strlen(keyString)));}
         
+        // Find shortest item to which 'key' is a prefix, or secondly the item that
+        // is  the largest prefix of 'key' (i.e. the closet prefix match)
         ProtoTree::Item* FindClosestMatch(const char* key, unsigned int keysize) const;
         
         // Find item which is largest prefix of the "key" (keysize is in bits)
@@ -164,6 +168,22 @@ class ProtoTree : public ProtoIterable
 #endif
                 // Returns how deep in its tree this Item lies
                 unsigned int GetDepth() const;
+                
+                
+                // Debug helper for keys that are strings
+                const char* GetKeyText() const
+                {
+                    static char text[256];
+                    unsigned int tlen = GetKeysize() >> 3;
+                    if (tlen > 255) tlen = 255;
+#ifdef WIN32
+					strncpy_s(text, 256, GetKey(), tlen);
+#else
+                    strncpy(text, GetKey(), tlen);
+#endif // if/else WIN32
+                    text[tlen] = '\0';
+                    return text;
+                }
                 
             protected:    
                 Item* GetParent() const {return parent;}
@@ -258,10 +278,10 @@ class ProtoTree : public ProtoIterable
         
         
         /**
-         * @class Iterator
+         * @class SimpleIterator
          *
          * @brief This can be used to iterate over the entire data set. Note
-         * it does _not_ iterator in lexical order, but also (beneficially)
+         * it does _not_ iterate in lexical order, but also (beneficially)
          * does _not_ make any virtual function calls (e.g. GetKey(), etc)
          * on the ProtoTree::Item members and is thus safe to call most all
          * of the time (i.e., such as during destructor calls)
@@ -285,7 +305,10 @@ class ProtoTree : public ProtoIterable
                 
         };  // end class ProtoTree::SimpleIterator
             
-        bool Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian) const;
+        static bool Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian);
+        
+        static bool ItemIsEqual(const Item& item, const char* key, unsigned int keysize);
+        static bool ItemsAreEqual(const Item& item1, const Item& item2);
         
     protected:
         // This finds the closest matching item with backpointer to "item"
@@ -295,20 +318,16 @@ class ProtoTree : public ProtoIterable
         ProtoTree::Item* FindPrefixSubtree(const char*     prefix, 
                                            unsigned int    prefixLen) const;
         
-        bool KeysAreEqual(const char*  key1, 
-                          const char*  key2, 
-                          unsigned int keysize,
-                          Endian       keyEndian) const;
+        static bool KeysAreEqual(const char*  key1, 
+                                 const char*  key2, 
+                                 unsigned int keysize,
+                                 Endian       keyEndian);
         
-        bool ItemsAreEqual(const Item& item1, const Item& item2) const;
-        
-        bool ItemIsEqual(const Item& item, const char* key, unsigned int keysize) const;
-
-        bool PrefixIsEqual(const char*  key, 
-                           unsigned int keysize,
-                           const char*  prefix, 
-                           unsigned int prefixSize,
-                           Endian       keyEndian) const;
+        static bool PrefixIsEqual(const char*  key, 
+                                  unsigned int keysize,
+                                  const char*  prefix, 
+                                  unsigned int prefixSize,
+                                  Endian       keyEndian);
         
         // Member variables
         Item*   root;  
@@ -323,7 +342,13 @@ class ProtoTreeTemplate : public ProtoTree
 {
     public:
         ProtoTreeTemplate() {}
-        virtual ~ProtoTreeTemplate() {}    
+        virtual ~ProtoTreeTemplate() {}   
+        
+        bool Insert(ITEM_TYPE& item)
+            {return ProtoTree::Insert(item);}
+        
+        void Remove(ITEM_TYPE& item)
+            {ProtoTree::Remove(item);}
         
         // Find item with exact match to "key" and "keysize" (keysize is in bits)
         ITEM_TYPE* Find(const char* key, unsigned int keysize) const
@@ -378,8 +403,11 @@ class ProtoTreeTemplate : public ProtoTree
             public:
                 ItemPool() {}
                 ~ItemPool() {}
+                
+                void Put(ITEM_TYPE& item)
+                    {ProtoTree::ItemPool::Put(item);}
 
-                ITEM_TYPE Get()
+                ITEM_TYPE* Get()
                     {return static_cast<ITEM_TYPE*>(ProtoTree::ItemPool::Get());}
         };  // end class ProtoTreeTemplate::ItemPool
                 
@@ -481,13 +509,25 @@ class ProtoSortedTree
             {return static_cast<Item*>(item_tree.GetRoot());}
         
         // Random access methods (uses ProtoTree)
+        // Note that since a ProtoSortedTree can have multiple items
+        // with the same key, you should generally use the
+        // ProtoSortedTree::Iterator and set the keyMin/keysize
+        // parameters to find _all_ items for a given "key"
+        // (i.e., iterate until the next item key doesn't match)
         Item* Find(const char* key, unsigned int keysize) const
             {return item_tree.Find(key, keysize);}
+        
+        Item* FindString(const char* keyString) const
+            {return Find(keyString, (unsigned int)(8*strlen(keyString)));}
             
+        // Find item which _is_ largest prefix of the "key" (keysize is in bits)
+        Item* FindPrefix(const char* key, unsigned int keysize) const
+            {return item_tree.FindPrefix(key, keysize);}
+        
         void Remove(Item& item);
         
-        bool Contains(const Item& item) const
-            {return item_tree.Contains(item);}
+        //bool Contains(const Item& item) const
+        //   {return item_tree.Contains(item);}
         
         void Empty();  // empties tree without deleting items contained
         
@@ -529,10 +569,16 @@ class ProtoSortedTree
                 /// Note if "reverse" is "true", then "keyMin" is really "keyMax"
                 void Reset(bool reverse = false, const char* keyMin = NULL, unsigned int keysize = 0);
                 
+                void SetCursor(Item* item)
+                    {list_iterator.SetCursor(item);}
+                
                 // This flips the reversal state, moving 
                 // cursor forward or backward one item
                 void Reverse()
                     {list_iterator.Reverse();}
+                
+                bool IsReversed() const
+                    {return list_iterator.IsReversed();}
                 
             private:
                 /**
@@ -592,6 +638,15 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
         // Find item with exact match to "key" and "keysize"
         ITEM_TYPE* Find(const char* key, unsigned int keysize) const
             {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::Find(key, keysize)));}
+        
+        // Find item which _is_ largest prefix of the "key" (keysize is in bits)
+        ITEM_TYPE* FindPrefix(const char* key, unsigned int keysize) const
+            {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::FindPrefix(key, keysize)));}
+        
+        ITEM_TYPE* GetHead() const
+            {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::GetHead()));}      
+        ITEM_TYPE* GetTail() const
+            {return (static_cast<ITEM_TYPE*>(ProtoSortedTree::GetTail()));}
         
         class Iterator : public ProtoSortedTree::Iterator
         {

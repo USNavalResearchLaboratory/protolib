@@ -86,6 +86,18 @@ void ProtoQueue::Item::Cleanup()
     }
 }  // end ProtoQueue::Item::Cleanup()
 
+bool ProtoQueue::Item::IsInOtherQueue(const ProtoQueue& queue)
+{
+    ProtoTree::Iterator iterator(container_list);
+    const ProtoQueue::Container::Entry* entry;
+    while (NULL != (entry = static_cast<const Container::Entry*>(iterator.GetNextItem())))
+    {
+        if (&queue != entry->GetContainer().GetQueue())
+            return true;
+    }
+    return false;
+}  // end ProtoQueue::IsInOtherQueue()
+
 ProtoQueue::ContainerPool::ContainerPool()
 {
 }
@@ -235,14 +247,6 @@ ProtoSimpleQueue::Container::~Container()
     Cleanup();
 }
 
-ProtoSimpleQueue::ContainerPool::ContainerPool()
-{
-}
-
-ProtoSimpleQueue::ContainerPool::~ContainerPool()
-{
-}
-
 ProtoIndexedQueue::ProtoIndexedQueue(bool usePool)
  : ProtoQueue(usePool)
 {
@@ -264,6 +268,8 @@ bool ProtoIndexedQueue::Insert(Item& theItem)
     if (NULL == theContainer) theContainer = CreateContainer();
     if (NULL == theContainer) return false;
     Associate(theItem, *theContainer);
+    //return item_tree.Insert(*theContainer);
+    //bunny Brian should we always return true here seems wrong...I'll let you do the update above or not.
     item_tree.Insert(*theContainer);
     return true;
 }  // end ProtoIndexedQueue::Insert()

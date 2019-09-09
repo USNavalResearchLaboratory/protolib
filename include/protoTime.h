@@ -40,6 +40,9 @@ class ProtoTime
         
 	    bool IsZero() const
 	        {return ((0 == tval.tv_sec) && (0 == tval.tv_usec));}
+        void Zeroize()
+            {tval.tv_sec = tval.tv_usec = 0;}
+                
         
         const struct timeval& GetTimeVal() const
             {return tval;}
@@ -88,7 +91,7 @@ class ProtoTime
         // Computes (t1 - t2)
         static double Delta(const ProtoTime& t1, const ProtoTime& t2);
         double operator-(const ProtoTime& t)
-            {return Delta(*this, t);}    
+            {return Delta(*this, t);} 
     
     private:
         // (TBD) for now we use struct timeval for convenience, but in future

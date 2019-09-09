@@ -15,12 +15,10 @@ PYTHON = "src/python/"
     
 srcFiles = [PYTHON + 'protokit.cpp']
 
-
 # Determine system-specific macro definitions, etc
 # (For now we support only "linux", "darwin" (MacOS), "freebsd", and "win32")
 
 system = platform.system().lower()
-
 
 sys_macros = [('HAVE_ASSERT',None), ('HAVE_IPV6',None), ('PROTO_DEBUG', None)]
 sys_libs = ['protokit']
@@ -34,7 +32,6 @@ else:
  
 if system == 'darwin':
     sys_libs.append('resolv') 
- 
         
 setup(name='protokit', 
       version = '1.0',

@@ -73,7 +73,7 @@ PipeExample::PipeExample()
 
 PipeExample::~PipeExample()
 {
-    if (msg_buffer)
+    if (NULL != msg_buffer)
     {
         delete[] msg_buffer;
         msg_buffer = NULL;   

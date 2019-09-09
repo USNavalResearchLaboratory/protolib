@@ -146,6 +146,13 @@ ProtoList::Item* ProtoList::RemoveHead()
     return item;
 }  // end ProtoList::RemoveHead()
 
+ProtoList::Item* ProtoList::RemoveTail()
+{
+    Item* item = tail;
+    if (NULL != item) Remove(*item);
+    return item;
+}  // end ProtoList::RemoveTail()
+
 void ProtoList::Empty()
 {
     UpdateIterators(NULL, Iterator::EMPTY);
@@ -206,7 +213,7 @@ void ProtoList::ItemPool::Destroy()
 
 
 ProtoList::Iterator::Iterator(ProtoList& theList, bool reverse)
- : ProtoIterable::Iterator(theList), ilist_prev(NULL), ilist_next(NULL)
+ : ProtoIterable::Iterator(theList)
 {
     Reset(reverse);
 }

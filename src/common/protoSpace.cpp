@@ -327,7 +327,11 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
             if (inBox)
             {
                 ord_tree.RemoveHead();
-                if (NULL != distance) *distance = sqrt(nextOrd->GetValue());
+                if (NULL != distance) 
+                {
+                    *distance = sqrt(nextOrd->GetValue());
+                    //TRACE("ProtoSpace returning node01x distance %lf\n", *distance);
+                }
                 space.ReturnOrdinateToPool(*nextOrd);
                 return nextNode;
             }
