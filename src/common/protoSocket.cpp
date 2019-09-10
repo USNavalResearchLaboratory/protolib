@@ -1350,7 +1350,7 @@ bool ProtoSocket::Send(const char*         buffer,
             return true;
         }
 #else
-        ssize_t result = send(handle, buffer, (size_t)numBytes, 0);
+        ssize_t result = send(handle, buffer, (size_t)numBytes, MSG_NOSIGNAL);
         if (result < 0)
 	    {
             numBytes = 0;
@@ -1364,6 +1364,7 @@ bool ProtoSocket::Send(const char*         buffer,
                 case ECONNRESET:
                 case ESHUTDOWN:
                 case ENOTCONN:
+                case EPIPE:
                     OnNotify(NOTIFY_ERROR);
                     break;
                 case ENOBUFS:
