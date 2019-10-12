@@ -46,6 +46,7 @@ SYSTEM_HAVES = -DHAVE_GETLOGIN -DHAVE_LOCKF -DHAVE_ASSERT -DHAVE_DIRFD $(DNETSEC
 CC = ntox86_64-g++
 SYSTEM_CFLAGS = -fPIC -Wall -pedantic -Wcast-align -Wno-variadic-macros
 SYSTEM_SOFLAGS = -shared 
+SYSTEM_SOEXT = so
 RANLIB = ntox86_64-ranlib
 AR = ntox86_64-ar
 
