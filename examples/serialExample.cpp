@@ -298,7 +298,7 @@ bool SerialApp::OnTxTimeout(ProtoTimer& /*theTimer*/)
         serial->Set(ProtoSerial::RTS);
     
     
-    char* buffer = "Hello, serial world.\n";
+    const char* buffer = "Hello, serial world.\n";
     unsigned int numBytes = strlen(buffer);
     if (serial->Write(buffer, numBytes))
     {

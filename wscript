@@ -14,6 +14,8 @@ build), use the -o (--out) flag when configuring.  For example:
 
 '''
 
+import subprocess
+
 import platform
 
 import waflib
@@ -99,6 +101,17 @@ def configure(ctx):
     if system == "gnu":
         ctx.check_cxx(lib='pcap')
         ctx.env.LDFLAGS += ['-lpcap']
+        
+    # libxml2 is needed for a subset of Protolib classes (i.e., not always be required)
+    # This looks for the libxml2 include path using the "xml2-config" command that should be 
+    # available if libxml2-dev is installed.
+    try:
+        libxml2Include = subprocess.check_output(['xml2-config', '--cflags']).strip().split('I', 1)[1]
+        ctx.env.append_value('INCLUDES', [libxml2Include])
+        print ("Added '%s' to INCLUDES" % libxml2Include)
+    except:
+        print ("\nWARNING: libxml2 not found! Some Protolib code may not build.  Install 'libxml2-dev' package.\n")
+    
 
     if ctx.options.build_python:
         ctx.load('python')
@@ -202,6 +215,7 @@ def build(ctx):
             'linuxNet',
             'linuxRouteMgr',
         ]])
+        protolib.source.append('src/unix/zebraRouteMgr.cpp')
         if ctx.env.HAVE_NETFILTER_QUEUE:
             protolib.source.append('src/linux/linuxDetour.cpp')
             protolib.use.append('NETFILTER_QUEUE')
@@ -259,12 +273,11 @@ def build(ctx):
             'detourExample',
             'eventExample',
             'graphExample',
-            'graphRider',
+            #'graphRider', (this depends on manetGraphML.cpp so doesn't work as a "simple example"
             'lfsrExample',
             'msg2MsgExample',
-            'msgExample',
+            #'msgExample',  (this depends on examples/testFuncs.cpp so doesn't work as a "simple example"
             'netExample',
-            'pcapExample',
             'pipe2SockExample',
             'pipeExample',
             'protoCapExample',
@@ -278,7 +291,7 @@ def build(ctx):
             'timerTest',
             'vifExample',
             'vifLan',
-            'wxProtoExample',
+            #'wxProtoExample', (this depends on wxWidgets (could use wx-config to test) so doesn't work as a "simple example"
             'udptest'
             ):
         _make_simple_example(ctx, example)

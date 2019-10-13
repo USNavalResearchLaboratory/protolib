@@ -125,7 +125,7 @@ void NetExample::MonitorEventHandler(ProtoChannel&               theChannel,
 					PLOG(PL_ERROR, "NetExample::MonitorEventHandler(event:%d) error: unable to get name for iface index %d\n",
 						theEvent.GetType(),theEvent.GetInterfaceIndex());
                     continue; // we want to report "down" interfaces on win32 that we won't have interface names for
-#endif WIN32
+#endif // WIN32
 				}
             }               
             switch(theEvent.GetType())
