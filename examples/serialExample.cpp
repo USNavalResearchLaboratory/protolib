@@ -37,7 +37,7 @@ class SerialApp : public ProtoApp
       
       bool OnTxTimeout(ProtoTimer&  theTimer);
               
-      char          device_name[PATH_MAX];
+      char          device_name[PATH_MAX+1];
       unsigned int  baud_rate;
       
       ProtoSerial*  serial;
