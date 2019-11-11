@@ -43,7 +43,7 @@ KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase
           $(COMMON)/protoRouteMgr.cpp $(COMMON)/protoRouteTable.cpp \
           $(COMMON)/protoTime.cpp $(COMMON)/protoTimer.cpp \
           $(COMMON)/protoTree.cpp $(COMMON)/protoList.cpp $(COMMON)/protoQueue.cpp \
-          $(COMMON)/protoVif.cpp $(COMMON)/protoCap.cpp  \
+          $(COMMON)/protoVif.cpp  \
           $(COMMON)/protoSerial.cpp $(COMMON)/protoLFSR.cpp \
           $(COMMON)/protoNet.cpp $(COMMON)/protoFile.cpp $(COMMON)/protoString.cpp \
           $(SYSTEM_SRC)
