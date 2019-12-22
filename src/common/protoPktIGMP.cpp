@@ -376,7 +376,7 @@ UINT16 ProtoPktIGMP::ComputeChecksum(bool set)
 {
     UINT32 sum = 0;
     if (set) SetUINT16(OFFSET_CHECKSUM, (UINT16)0);
-    const UINT16* ptr = (const UINT16*)GetBuffer();
+    const UINT16* ptr = (const UINT16*)GetBuffer32();
     // Compute before checksum
     unsigned int end = OFFSET_CHECKSUM/2;
     //for (unsigned int i = 0; i < end; i++)
