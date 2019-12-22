@@ -1,6 +1,15 @@
 # main build
 bin/
 lib/
+build/
+
+# Any compiled object files
+*.o
+*.a
+
+# waf generated files
+.waf*
+.lock-waf*
 
 # build executables
 makefiles/arposer
