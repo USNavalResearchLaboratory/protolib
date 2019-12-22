@@ -33,9 +33,10 @@ class ProtoTokenator
     public:
         ProtoTokenator(const char*  text, 
                        char         delimiter=' ', 
-                       bool         strip=true,
+                       bool         stripWhitespace=true,
                        unsigned int maxCount = 0,
-                       bool         reverse=false);
+                       bool         reverse=false,
+                       bool         stripTokens=false);
         ~ProtoTokenator();
         
         const char* const GetNextItem(bool detach=false);
@@ -50,10 +51,12 @@ class ProtoTokenator
             prev_item = NULL;
             return item;
         }
+        bool TokenMatch(char c) const;
         
     private:
         char         token;
-        bool         strip;
+        bool         strip_whitespace; // strip leading/trailing whitespace if true
+        bool         strip_tokens;     // string leading/trailing tokens if true
         bool         reverse;
         unsigned int max_count;
         unsigned int remain;

@@ -239,10 +239,10 @@ class ProtoFileList
             protected:        
                 const char* Path() {return path;}
             
-                char			 path[PATH_MAX];
-				ProtoFile::Offset size;
-                FileItem*		 prev;
-                FileItem*		 next;
+                char			    path[PATH_MAX];
+				ProtoFile::Offset   size;
+                FileItem*		    prev;
+                FileItem*		    next;
         };
         class DirectoryItem : public FileItem
         {
@@ -269,5 +269,46 @@ class ProtoFileList
         FileItem*       next;
         bool            reset;
 };  // end class ProtoFileList
+
+/* TBD - reimplement using following class hierarchy:
+
+class ProtoFile : public ProtoChannel
+{
+    public:
+        class Path : ProtoQueue::Item
+        {
+            
+            // wrapper around file path string
+            // with helper methods like GetBaseName(), GetDirName(), 
+            // IsDirectory(), etc
+            public:
+                Path(const char* path) {SetPath(path)'}
+                ~Path {}
+                const char* GetPath() {return path_nams};
+                void SetPath(const char* path)
+                {
+                    strncpy(path_name, path, PATH_MAX];
+                    path_name[PATH_MAX] = '\0';
+                }
+                
+            private:
+                char    path_name[PATH_MAX + 1];
+        };  // end class ProtoFile::Path
+        
+        class PathList : public ProtoSimpleQueue<Path> {}; // linked list of Path items
+        class PathTable : public class ProtoIndexedQueue<Path> 
+        {
+            // Table of Path items, indexed by path name for quick lookup
+            private:
+                const char* GetKey(const ProtoQueue::Item& item) const
+                    {return static_cast<const Path&>(item).GetPath();}
+                unsigned int GetKeysize(const ProtoQueue::Item& item) const
+                    {return (strlen(GetPath() << 3);}
+        };  // end class ProtoFile::PathTable
+        
+    private:
+        Path*   file_path;  // to optionally keep path (name) saved
+        
+};
 
 #endif // _PROTO_FILE
