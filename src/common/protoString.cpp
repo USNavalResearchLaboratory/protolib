@@ -1,6 +1,10 @@
 #include "protoString.h"
 #include "protoDebug.h"
 
+#include <string.h>
+#include <stdio.h>
+#include <ctype.h>  // for isspace()
+
 ProtoTokenator::ProtoTokenator(const char*  text, 
                                char         delimiter, 
                                bool         stripWhiteSpace, 
@@ -120,14 +124,14 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
                 const char* tailPtr = headPtr + itemLen - 1;
                 while ((0 != itemLen) && TokenMatch(*tailPtr))
                 {
-                    *tailPtr--;
+                    tailPtr--;
                     itemLen--;
                 }
             }
             if (NULL != prev_item) delete[] prev_item;
             if (NULL == (prev_item = new char[itemLen+1]))
             {
-                perror("ProtoTokenator::GetNextItem() new char[] error");
+                PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
                 return NULL;
             }
             strncpy(prev_item, headPtr, itemLen); 
@@ -145,36 +149,6 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
             }
         }
         const char* ptr = next_ptr;
-        /*
-        if (isspace(token))
-        {
-            while (text_ptr != ptr)
-            {
-                if (isspace(*ptr))
-                {
-                    break;
-                }
-                else
-                {
-                    ptr--;
-                }
-            }
-        }
-        else
-        {
-            while (text_ptr != ptr)
-            {
-                if (*ptr == token)
-                {
-                    break;
-                }
-                else
-                {
-                    ptr--;
-                }
-            }
-        }
-        */
         // Advance to next token
         while (text_ptr != ptr)
         {
@@ -209,7 +183,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         if (NULL != prev_item) delete[] prev_item;
         if (NULL == (prev_item = new char[itemLen+1]))
         {
-            perror("ProtoTokenator::GetNextItem() new char[] error");
+            PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
             return NULL;
         }
         strncpy(prev_item, headPtr, itemLen);
@@ -280,7 +254,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
             if (NULL != prev_item) delete[] prev_item;
             if (NULL == (prev_item = new char[itemLen+1]))
             {
-                perror("ProtoTokenator::GetNextItem() new char[] error");
+                PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
                 return NULL;
             }
             strncpy(prev_item, next_ptr, itemLen + 1); 
@@ -326,7 +300,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         if (NULL != prev_item) delete[] prev_item;
         if (NULL == (prev_item = new char[itemLen+1]))
         {
-            perror("ProtoTokenator::GetNextItem() new char[] error");
+            PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
             return NULL;
         }
         strncpy(prev_item, next_ptr, itemLen);

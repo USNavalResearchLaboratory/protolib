@@ -2,6 +2,7 @@
 
 #include <string.h>  // for strerror()
 #include <stdio.h>   // for rename()
+#include <time.h>  // for difftime()
 #ifdef WIN32
 #ifndef _WIN32_WCE
 #include <errno.h>
@@ -36,8 +37,7 @@ ProtoFile::~ProtoFile()
     if (IsOpen()) Close();
 }  // end ProtoFile::~ProtoFile()
 
-
-// This should be called with a full path only!
+// This should be called with a full path only! (Why?)
 bool ProtoFile::Open(const char* thePath, int theFlags)
 {
     bool returnvalue=false;
@@ -45,7 +45,8 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
     if (theFlags & O_CREAT)
     {
         // Create sub-directories as needed.
-        char tempPath[PATH_MAX];
+        char tempPath[PATH_MAX+1];
+        tempPath[PATH_MAX] = '\0';
         strncpy(tempPath, thePath, PATH_MAX);
         char* ptr = strrchr(tempPath, PROTO_PATH_DELIMITER);
         if (NULL != ptr) 
@@ -118,7 +119,7 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
     {
         offset = 0;
 		flags = theFlags;
-        returnvalue=true;  // no error
+        returnvalue = true;  // no error
     }
     else
     {       
@@ -130,7 +131,7 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
     if((descriptor = open(thePath, theFlags, 0640)) >= 0)
     {
         offset = 0;
-        returnvalue=true;  // no error
+        returnvalue = true;  // no error
     }
     else
     {    
@@ -138,8 +139,9 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
                              thePath, GetErrorString());
         return false;
     }
-    if(returnvalue){
-        return ProtoChannel::Open();
+    if (returnvalue)
+    {
+        return ProtoChannel::Open();  // why don't we support files as ProtoChannel on WIN32?
     }
 #endif // if/else WIN32
 	return returnvalue;
@@ -164,7 +166,6 @@ void ProtoFile::Close()
         ProtoChannel::Close();
     }
 }  // end ProtoFile::Close()
-
 
 // Routines to try to get an exclusive lock on a file
 bool ProtoFile::Lock()
@@ -252,7 +253,8 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
 	}  
 #endif  // WIN32
     // Create sub-directories as needed.
-    char tempPath[PATH_MAX];
+    char tempPath[PATH_MAX+1];
+    tempPath[PATH_MAX] = '\0';
     strncpy(tempPath, newName, PATH_MAX);
     char* ptr = strrchr(tempPath, PROTO_PATH_DELIMITER);
     if (ptr) *ptr = '\0';
@@ -368,12 +370,13 @@ bool ProtoFile::Read(char* buffer, unsigned int& numBytes)
                 case EINTR: 
                     continue;
                 case EAGAIN:
-                    return true;//reached eof
+                    numBytes = 0;
+                    return true; // nothing more to read for the moment
                 default:
-                  break;//bad error will print and return false;
+                  break; 
             }
 #endif // !_WIN32_WCE
-            PLOG(PL_ERROR, "ProtoFile::Read() error: %s\n",GetErrorString());
+            PLOG(PL_ERROR, "ProtoFile::Read() error: %s\n", GetErrorString());
             return false;
         } 
         else 
@@ -382,76 +385,88 @@ bool ProtoFile::Read(char* buffer, unsigned int& numBytes)
             return true;
         }
     }  // end while true
-    //return false;//this shouldn't ever happen
 }  // end ProtoFile::Read()
-bool ProtoFile::bufferedRead(char* buffer, unsigned int& numBytes)
+
+bool ProtoFile::ReadPrivate(char* buffer, unsigned int& numBytes)
 {
     unsigned int want = numBytes;
-    if (savecount)
+    if (read_count > 0)
     {
-        unsigned int ncopy = MIN(want, savecount);
-        memcpy(buffer,saveptr,ncopy);
-        savecount -= ncopy;
-        saveptr += ncopy;
+        unsigned int ncopy = MIN(want, read_count);
+        memcpy(buffer, read_ptr, ncopy);
+        read_count -= ncopy;
+        read_ptr += ncopy;
         buffer +=ncopy;
         want -= ncopy;
     }
-    while(want){
-        unsigned int blocksize=BLOCKSIZE;
-        if(!Read(savebuf,blocksize)){
-            PLOG(PL_ERROR, "ProtoFile::bufferedRead() error calling Read()\n");
+    while (want > 0)
+    {
+        unsigned int blocksize = BUFFER_SIZE;
+        if (!Read(read_buffer, blocksize))
+        {
+            PLOG(PL_ERROR, "ProtoFile::ReadPrivate() error: Read() failure\n");
             return false;
         }
-        if(blocksize>0)
+        if (blocksize > 0)
         {
             // This check skips NULLs that have been read on some
             // use of trpr via tail from an NFS mounted file
-            if (!isprint(*savebuf) &&
-                ('\t' != *savebuf) &&
-                ('\n' != *savebuf) &&
-                ('\r' != *savebuf))
+            if (!isprint(*read_buffer) &&
+                ('\t' != *read_buffer) &&
+                ('\n' != *read_buffer) &&
+                ('\r' != *read_buffer))
+            {
                     continue;
-            unsigned int ncopy= MIN(want, blocksize);
-            memcpy(buffer, savebuf, ncopy);
-            savecount = blocksize - ncopy;
-            saveptr = savebuf + ncopy;
+            }
+            unsigned int ncopy = MIN(want, blocksize);
+            memcpy(buffer, read_buffer, ncopy);
+            read_count = blocksize - ncopy;
+            read_ptr = read_buffer + ncopy;
             buffer += ncopy;
             want -= ncopy;
         }
         else 
-        {//nothing was read in
-            numBytes-=want;
+        {
+            // Nothing more available (EOF or EAGAIN)
+            numBytes -= want;
             return true;
         }
     }
-    //we finished filling in the buffer up to numBytes
+    // Filled "buffer" with requested "numBytes"
     return true;
-}
+}  // end ProtoFile::ReadPrivate()
+
 bool ProtoFile::Readline(char*         buffer,
                          unsigned int& bufferSize)
 {
-//    TRACE("ProtoFile::Readline: enter\n");
     unsigned int count = 0;
     unsigned int length = bufferSize;
     char* ptr = buffer;
     while (count < length)
     {
         unsigned int one = 1;
-        if(bufferedRead(ptr,one))
+        if (ReadPrivate(ptr, one))
         {
-            if(one==0){//hit eof return;
-                //TRACE("ProtoFile::Readline: Hit end of file returning false.\n");
-                bufferSize=count;//this is checked to see how much was read in
-                return false;
+            if (0 == one)
+            {
+                // Must have reached EOF (treat as end of line)
+                if (count > 0)
+                {
+                    *ptr = '\0';
+                    bufferSize = count + 1; 
+                    return true;
+                }
+                else
+                {
+                    bufferSize = 0;
+                    return false;
+                }
             }
             else 
-            { //read in a char check to see if its end of line char
+            { 
+                // Check to see if its end of line char
                 if (('\n' == *ptr) || ('\r' == *ptr))
                 {
-                   // if('\r'==*ptr) 
-                    //    TRACE("ProtoFile::ReadLine: returning true r\n");
-                    //if('\n'==*ptr) 
-                     //   TRACE("ProtoFile::ReadLine: returning true n\n");
                     *ptr = '\0';
                     bufferSize = count;
                     return true;
@@ -461,15 +476,16 @@ bool ProtoFile::Readline(char*         buffer,
             }
         }
         else 
-        { //error on calling ReadBuffer
-            PLOG(PL_ERROR,"ProtoFile::Readline() error: ReadBuffer call failed\n");
+        { 
+            PLOG(PL_ERROR,"ProtoFile::Readline() error: ReadPrivate() failure\n");
             return false;
         }
     }
-    //We've filled up the buffer provided with no end-of-line
-    PLOG(PL_ERROR, "ProtoFile::Readline() error: bufferSize %d is too small)\n",bufferSize);
+    // We've filled up the buffer provided with no end-of-line reached
+    PLOG(PL_ERROR, "ProtoFile::Readline() error: line length exceeds\n", bufferSize);
     return false;
-}
+}  // end ProtoFile::Readline()
+
 size_t ProtoFile::Write(const char* buffer, size_t len)
 {
     ASSERT(IsOpen());
@@ -579,24 +595,24 @@ ProtoFile::Offset ProtoFile::GetSize() const
 
 
 /***********************************************
- * The ProtoDirectoryIterator classes is used to
- * walk directory trees for file transmission
+ * The ProtoFile::DirectoryIterator classes are used to
+ * walk directory trees
  */
 
-ProtoDirectoryIterator::ProtoDirectoryIterator()
+ProtoFile::DirectoryIterator::DirectoryIterator()
     : current(NULL)
 {
 
 }
 
-ProtoDirectoryIterator::~ProtoDirectoryIterator()
+ProtoFile::DirectoryIterator::~DirectoryIterator()
 {
     Close();
 }
 
-bool ProtoDirectoryIterator::Open(const char *thePath)
+bool ProtoFile::DirectoryIterator::Open(const char *thePath)
 {
-    if (current) Close();
+    if (NULL != current) Close();
 #ifdef WIN32
 #ifdef _WIN32_WCE
     if (thePath && !ProtoFile::Exists(thePath))
@@ -607,11 +623,11 @@ bool ProtoDirectoryIterator::Open(const char *thePath)
     if (thePath && access(thePath, X_OK))
 #endif // if/else WIN32
     {
-        PLOG(PL_FATAL, "ProtoDirectoryIterator: can't access directory: %s\n", thePath);
+        PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() error: can't access directory: %s\n", thePath);
         return false;
     }
-    current = new ProtoDirectory(thePath);
-    if (current && current->Open())
+    current = new Directory(thePath);
+    if ((NULL != current) && current->Open())
     {
         path_len = (int)strlen(current->Path());
         path_len = MIN(PATH_MAX, path_len);
@@ -619,30 +635,30 @@ bool ProtoDirectoryIterator::Open(const char *thePath)
     }
     else
     {
-        PLOG(PL_FATAL, "ProtoDirectoryIterator: can't open directory: %s\n", thePath);
+        PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() error: can't open directory: %s\n", thePath);
         if (current) delete current;
         current = NULL;
         return false;
     }
-}  // end ProtoDirectoryIterator::Init()
+}  // end ProtoFile::DirectoryIterator::Open()
 
-void ProtoDirectoryIterator::Close()
+void ProtoFile::DirectoryIterator::Close()
 {
-    ProtoDirectory* d;
-    while ((d = current))
+    Directory* d;
+    while (NULL != (d = current))
     {
         current = d->parent;
         d->Close();
         delete d;
     }
-}  // end ProtoDirectoryIterator::Close()
+}  // end ProtoFile::DirectoryIterator::Close()
 
-bool ProtoDirectoryIterator::GetPath(char* pathBuffer)
+bool ProtoFile::DirectoryIterator::GetPath(char* pathBuffer) const
 {
-    if (current)
+    if (NULL != current)
     {
-        ProtoDirectory* d = current;
-        while (d->parent) d = d->parent;
+        Directory* d = current;
+        while (NULL != d->parent) d = d->parent;
         strncpy(pathBuffer, d->Path(), PATH_MAX);
         return true;
     }
@@ -651,10 +667,10 @@ bool ProtoDirectoryIterator::GetPath(char* pathBuffer)
         pathBuffer[0] = '\0';
         return false;
     }
-}
+}  // end DirectoryIterator::GetPath()
 
 #ifdef WIN32
-bool ProtoDirectoryIterator::GetNextFile(char* fileName)
+bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles, bool includeDirs)
 {
 	if (!current) return false;
 	bool success = true;
@@ -715,29 +731,43 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
 			current->GetFullName(fileName);
 			strcat(fileName, ptr);
 			ProtoFile::Type type = ProtoFile::GetType(fileName);
-			if (ProtoFile::NORMAL == type)
+			if (includeFiles && (ProtoFile::NORMAL == type))
 			{
-                size_t nameLen = strlen(fileName);
-                nameLen = MIN(PATH_MAX, nameLen);
-				nameLen -= path_len;
-				memmove(fileName, fileName+path_len, nameLen);
-				if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
+                // I don't think this commented code is needed anymore
+                //size_t nameLen = strlen(fileName);
+                //nameLen = MIN(PATH_MAX, nameLen);
+				//nameLen -= path_len;
+				//memmove(fileName, fileName+path_len, nameLen);
+				//if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
 				return true;
 			}
-			else if (ProtoFile::DIRECTORY == type && search_dirs)
+			else if (ProtoFile::DIRECTORY == type)
 			{
-
-				ProtoDirectory *dir = new ProtoDirectory(ptr, current);
-				if (dir && dir->Open())
+				Directory *dir = new Directory(ptr, current);
+				if ((NULL != dir) && dir->Open())
 				{
 					// Push sub-directory onto stack and search it
 					current = dir;
-					return GetNextFile(fileName);
+                    if (includeDirs)
+                    {
+                        // TBD - should we remove trailing PATH_DELIMITER?
+                        current->GetFullName(fileName);
+                        return true;
+                    }  
+					return GetNextPath(fileName, includeFiles, includeDirs);
 				}
 				else
 				{
 					// Couldn't open try next one
-					if (dir) delete dir;
+                    if (NULL != dir)
+                    {
+                        // if "includeDirs", return path, even if we can't open it
+					    if (includeDirs)
+                            dir->GetFullName(fileName);
+                        delete dir;
+                        if (includeDirs)
+                            return true;
+                    }
 				}
 			}
 			else
@@ -751,10 +781,10 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
 	if (current->parent)
 	{
 		current->Close();
-		ProtoDirectory *dir = current;
+		Directory *dir = current;
 		current = current->parent;
 		delete dir;
-		return GetNextFile(fileName);
+		return GetNextPath(fileName, includeFiles, includeDirs);
 	}
 	else
 	{
@@ -763,13 +793,14 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
 		current = NULL;
 		return false;
 	}	
-}  // end ProtoDirectoryIterator::GetNextFile()  (WIN32)
+}  // end ProtoFile::DirectoryIterator::GetNextPath()  (WIN32)
 #else
-bool ProtoDirectoryIterator::GetNextFile(char* fileName)
+bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles, bool includeDirs)
 {   
-    if (!current) return false;
+    //TRACE("enter ProtoFile::DirectoryIterator::GetNextPath() current:%p files:%d dirs:%d ...\n", current, includeFiles, includeDirs);
+    if (NULL == current) return false;
     struct dirent *dp;
-    while((dp = readdir(current->dptr)))
+    while (NULL != (dp = readdir(current->dptr)))
     {
         // Make sure it's not "." or ".."
         if (dp->d_name[0] == '.')
@@ -782,33 +813,44 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
         }
         current->GetFullName(fileName);
         strcat(fileName, dp->d_name);
+        //TRACE("Getting type for %s ... ", fileName);
         ProtoFile::Type type = ProtoFile::GetType(fileName);        
-        if (ProtoFile::NORMAL == type)
+        if (includeFiles && (ProtoFile::NORMAL == type))
         {
-            size_t nameLen = strlen(fileName);
-            nameLen = MIN(PATH_MAX, nameLen);
-            nameLen -= path_len;
-            memmove(fileName, fileName+path_len, nameLen);
-            if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
+            //TRACE("NORMAL type\n");
             return true;
         } 
-        else if (ProtoFile::DIRECTORY == type && search_dirs)
+        else if (ProtoFile::DIRECTORY == type)
         {
-            ProtoDirectory *dir = new ProtoDirectory(dp->d_name, current);
-            if (dir && dir->Open())
+            //TRACE("DIRECTORY type\n");
+            Directory *dir = new Directory(dp->d_name, current);
+            if ((NULL != dir) && dir->Open())
             {
                 // Push sub-directory onto stack and search it
                 current = dir;
-                return GetNextFile(fileName);
+                if (includeDirs)
+                {
+                    current->GetFullName(fileName);
+                    return true;
+                }
+                return GetNextPath(fileName, includeFiles, includeDirs);
             }
             else
             {
-                // Couldn't open this one, try next one
-                if (dir) delete dir;
-            }
+				// Couldn't open try next one
+                if (NULL != dir)
+                {
+					if (includeDirs)
+                        dir->GetFullName(fileName);
+                    delete dir;
+                    if (includeDirs)
+                        return true;
+                }
+			}
         }
         else
         {
+            //TRACE("INVALID type\n");
             // ProtoFile::INVALID, try next one
         }
     }  // end while(readdir())
@@ -816,13 +858,14 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
     // Pop up a level and recursively continue or finish if done
     if (current->parent)
     {
-        char path[PATH_MAX];
+        char path[PATH_MAX+1];
+        path[PATH_MAX] = '\0';
         current->parent->GetFullName(path);
         current->Close();
-        ProtoDirectory *dir = current;
+        Directory *dir = current;
         current = current->parent;
         delete dir;
-        return GetNextFile(fileName);
+        return GetNextPath(fileName, includeFiles, includeDirs);
     }
     else
     {
@@ -831,16 +874,12 @@ bool ProtoDirectoryIterator::GetNextFile(char* fileName)
         current = NULL;
         return false;  // no more files remain
     }      
-}  // end ProtoDirectoryIterator::GetNextFile() (UNIX)
+}  // end ProtoFile::DirectoryIterator::GetNextPath() (UNIX)
+
 #endif // if/else WIN32
-void
-ProtoDirectoryIterator::Recursive(bool stepIntoDirs)
-{
-    search_dirs = stepIntoDirs;
-    return;
-}
-ProtoDirectoryIterator::ProtoDirectory::ProtoDirectory(const char*    thePath, 
-                                                       ProtoDirectory* theParent)
+
+ProtoFile::Directory::Directory(const char* thePath, 
+                                Directory*  theParent)
     : parent(theParent),
 #ifdef WIN32
     hSearch((HANDLE)-1)
@@ -849,6 +888,7 @@ ProtoDirectoryIterator::ProtoDirectory::ProtoDirectory(const char*    thePath,
 #endif // if/else WIN32 
 {
     strncpy(path, thePath, PATH_MAX);
+    path[PATH_MAX] = '\0';
     size_t len  = MIN(PATH_MAX, strlen(path));
     if ((len < PATH_MAX) && (PROTO_PATH_DELIMITER != path[len-1]))
     {
@@ -857,15 +897,16 @@ ProtoDirectoryIterator::ProtoDirectory::ProtoDirectory(const char*    thePath,
     }
 }
 
-ProtoDirectoryIterator::ProtoDirectory::~ProtoDirectory()
+ProtoFile::Directory::~Directory()
 {
     Close();
 }
 
-bool ProtoDirectoryIterator::ProtoDirectory::Open()
+bool ProtoFile::Directory::Open()
 {
     Close();  // in case it's already open   
-    char fullName[PATH_MAX];
+    char fullName[PATH_MAX+1];
+    fullName[PATH_MAX] = '\0';
     GetFullName(fullName);  
     // Get rid of trailing PROTO_PATH_DELIMITER
     size_t len = MIN(PATH_MAX, strlen(fullName));
@@ -878,22 +919,35 @@ bool ProtoDirectoryIterator::ProtoDirectory::Open()
 #else
     DWORD attr = GetFileAttributes(fullName);
 #endif // if/else _UNICODE
-	if (0xFFFFFFFF == attr)
-		return false;
-	else if (attr & FILE_ATTRIBUTE_DIRECTORY)
-		return true;
-	else
-		return false;
-#else
-    if((dptr = opendir(fullName)))
-        return true;
-    else    
+	if (0xFFFFFFFF == attr)   
+    {
+        PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: %s\n", fullName, GetErrorString());
         return false;
+    }
+	else if ((0 != attr) & FILE_ATTRIBUTE_DIRECTORY)
+    {
+		return true;
+    }
+	else   
+    {
+        PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: not a directory\n", fullName);
+        return false;
+    }
+#else
+    if (NULL != (dptr = opendir(fullName)))
+    {
+        return true;
+    }
+    else    
+    {
+        PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: %s\n", fullName, GetErrorString());
+        return false;
+    }
 #endif // if/else WIN32
     
-} // end ProtoDirectoryIterator::ProtoDirectory::Open()
+} // end ProtoFile::Directory::Open()
 
-void ProtoDirectoryIterator::ProtoDirectory::Close()
+void ProtoFile::Directory::Close()
 {
 #ifdef WIN32
     if (hSearch != (HANDLE)-1) 
@@ -902,27 +956,26 @@ void ProtoDirectoryIterator::ProtoDirectory::Close()
 		hSearch = (HANDLE)-1;
 	}
 #else
-    if (dptr)
+    if (NULL != dptr)
     {
         closedir(dptr);
         dptr = NULL;
     }
 #endif  // if/else WIN32
-}  // end ProtoDirectoryIterator::ProtoDirectory::Close()
+}  // end ProtoFile::Directory::Close()
 
-
-void ProtoDirectoryIterator::ProtoDirectory::GetFullName(char* ptr)
+void ProtoFile::Directory::GetFullName(char* ptr)
 {
     ptr[0] = '\0';
     RecursiveCatName(ptr);
-}  // end ProtoDirectoryIterator::ProtoDirectory::GetFullName()
+}  // end ProtoFile::Directory::GetFullName()
 
-void ProtoDirectoryIterator::ProtoDirectory::RecursiveCatName(char* ptr)
+void ProtoFile::Directory::RecursiveCatName(char* ptr)
 {
-    if (parent) parent->RecursiveCatName(ptr);
+    if (NULL != parent) parent->RecursiveCatName(ptr);
     size_t len = MIN(PATH_MAX, strlen(ptr));
     strncat(ptr, path, PATH_MAX-len);
-}  // end ProtoDirectoryIterator::ProtoDirectory::RecursiveCatName()
+}  // end ProtoFile::Directory::RecursiveCatName()
 
 // Below are some static routines for getting file/directory information
 
@@ -995,7 +1048,6 @@ ProtoFile::Offset ProtoFile::GetSize(const char* path)
     }
 #endif // if/else _WIN32_WCE
 }  // end ProtoFile::GetSize()
-
 
 time_t ProtoFile::GetUpdateTime(const char* path)
 {
@@ -1120,272 +1172,84 @@ bool ProtoFile::Unlink(const char* path)
 
 }  // end ProtoFile::Unlink()
 
-ProtoFileList::ProtoFileList()
- : this_time(0), big_time(0), last_time(0),
-   updates_only(false), head(NULL), tail(NULL), next(NULL)
-{ 
-}
-        
-ProtoFileList::~ProtoFileList()
-{
-    Destroy();
-}
 
-void ProtoFileList::Destroy()
+bool ProtoFile::PathList::AppendPath(const char* thePath)
 {
-    while ((next = head))
+    Path* pathItem = new Path(thePath);
+    if (NULL == pathItem)
     {
-        head = next->next;
-        delete next;   
-    }
-    tail = NULL;
-}  // end ProtoFileList::Destroy()
-
-bool ProtoFileList::Append(const char* path)
-{
-    FileItem* theItem = NULL;
-    switch(ProtoFile::GetType(path))
-    {
-        case ProtoFile::NORMAL:
-            theItem = new FileItem(path);
-            break;
-        case ProtoFile::DIRECTORY:
-            theItem = new DirectoryItem(path);
-            break;
-        default:
-            // Allow non-existent files for update_only mode
-            // (TBD) allow non-existent directories?
-            if (updates_only) 
-            {
-                theItem = new FileItem(path);
-            }
-            else
-            {
-                PLOG(PL_FATAL, "ProtoFileList::Append() Bad file/directory name: %s\n",
-                        path);
-                return false;
-            }
-            break;
-    }
-    if (theItem)
-    {
-        theItem->next = NULL;
-        if ((theItem->prev = tail))
-            tail->next = theItem;
-        else
-            head = theItem;
-        tail = theItem;
-        return true;
-    }
-    else
-    {
-        PLOG(PL_FATAL, "ProtoFileList::Append() Error creating file/directory item: %s\n",
-                GetErrorString());
+        PLOG(PL_ERROR, "ProtoFile::PathList::Append() new Path error: %s\n", GetErrorString());
         return false;
     }
-}  // end ProtoFileList::Append()
+    Append(*pathItem);
+    return true;
+}  // end  ProtoFile::PathList::AppendPath()
 
-bool ProtoFileList::Remove(const char* path)
+ProtoFile::PathList::PathIterator::PathIterator(PathList& pathList, bool updatesOnly, time_t initTime)
+    : list_iterator(pathList)
 {
-    FileItem* nextItem = head;
-    size_t pathLen = strlen(path);
-    pathLen = MIN(pathLen, PATH_MAX);
-    while (nextItem)
+    Init(updatesOnly, initTime);
+}
+
+ProtoFile::PathList::PathIterator::~PathIterator()
+{
+    dir_iterator.Close();
+}
+
+bool ProtoFile::PathList::PathIterator::GetNextPath(char* path, bool includeFiles, bool includeDirs)
+{
+    while (true)
     {
-        size_t nameLen = strlen(nextItem->Path());
-        nameLen = MIN(nameLen, PATH_MAX);
-        nameLen = MAX(nameLen, pathLen);
-        if (!strncmp(path, nextItem->Path(), nameLen))
+        // First, get any files from pending directory iterator
+        while (dir_iterator.GetNextPath(path, includeFiles, includeDirs))
         {
-            if (nextItem == next) next = nextItem->next;
-            if (nextItem->prev)
-                nextItem->prev = next = nextItem->next;
-            else
-                head = nextItem->next;
-            if (nextItem->next)
-                nextItem->next->prev = nextItem->prev;
-            else
-                tail = nextItem->prev;
+            if (updates_only)
+            {
+                time_t updateTime = ProtoFile::GetUpdateTime(path);
+                //TRACE("path:%s updateTime:%ld last_time:%ld big_time:%ld\n", path, updateTime, last_time, big_time);
+                if (difftime(updateTime, big_time) > 0.0) big_time = updateTime;
+                if (difftime(updateTime, last_time) <= 0.0)
+                    continue;  // this file has not been updated
+            }
+            return true;
+        }
+        dir_iterator.Close();
+        Path* nextPath = list_iterator.GetNextItem();
+        if (NULL == nextPath)
+        {
+            break;  // reached end of list
+        }
+        bool validPath = false;
+        switch (ProtoFile::GetType(nextPath->GetPath()))
+        {
+            case DIRECTORY:
+                if (!dir_iterator.Open(nextPath->GetPath()))
+                    PLOG(PL_ERROR, "ProtoFile::PathList::PathIterator::GetNextPath() error: unable to open directory: %s\n", 
+                                   nextPath->GetPath());
+                if (includeDirs)
+                    validPath = true;  // even return paths for directories we can't open
+                break;
+            case NORMAL:
+                if (includeFiles)
+                    validPath = true;
+                break;
+            default:
+                break;
+        }
+        if (validPath)
+        {
+            if (updates_only)
+            {
+                time_t updateTime = ProtoFile::GetUpdateTime(nextPath->GetPath());
+                //TRACE("path:%s updateTime:%ld last_time:%ld big_time:%ld\n", path, updateTime, last_time, big_time);
+                if (difftime(updateTime, big_time) > 0.0) big_time = updateTime;
+                if (difftime(updateTime, last_time) <= 0.0)
+                    continue;  // this file has not been updated
+            }
+            strncpy(path, nextPath->GetPath(), PATH_MAX);
             return true;
         }
     }
     return false;
-}  // end ProtoFileList::Remove()
-
-bool ProtoFileList::GetNextFile(char* pathBuffer)
-{
-    if (!next)
-    {
-        next = head;
-        reset = true;
-    }
-    if (next)
-    {
-        if (next->GetNextFile(pathBuffer, reset, updates_only,
-                              last_time, this_time, big_time))
-        {
-            reset = false;
-            return true;
-        }
-        else
-        {
-            if (next->next)
-            {
-                next = next->next;
-                reset = true;
-                return GetNextFile(pathBuffer);
-            }
-            else
-            {
-                reset = false;
-                return false;  // end of list
-            }   
-        }
-    }
-    else
-    {
-        return false;  // empty list
-    }
-}  // end ProtoFileList::GetNextFile()
-
-void ProtoFileList::GetCurrentBasePath(char* pathBuffer)
-{
-    if (next)
-    {
-        if (ProtoFile::DIRECTORY == next->GetType())
-        {
-            strncpy(pathBuffer, next->Path(), PATH_MAX);
-            size_t len = strlen(pathBuffer);
-            len = MIN(len, PATH_MAX);
-            if (PROTO_PATH_DELIMITER != pathBuffer[len-1])
-            {
-                if (len < PATH_MAX) pathBuffer[len++] = PROTO_PATH_DELIMITER;
-                if (len < PATH_MAX) pathBuffer[len] = '\0';
-            }   
-        }
-        else  // ProtoFile::NORMAL
-        {
-            const char* ptr = strrchr(next->Path(), PROTO_PATH_DELIMITER);
-            if (ptr++)
-            {
-                size_t len = ptr - next->Path();
-                strncpy(pathBuffer, next->Path(), len);
-                pathBuffer[len] = '\0';
-            }
-            else
-            {
-                pathBuffer[0] = '\0';
-            }
-        }        
-    }
-    else
-    {
-        pathBuffer[0] = '\0';
-    }
-}  // end ProtoFileList::GetBasePath()
-
-
-ProtoFileList::FileItem::FileItem(const char* thePath)
- : prev(NULL), next(NULL)
-{
-    size_t len = strlen(thePath);
-    len = MIN(len, PATH_MAX);
-    strncpy(path, thePath, PATH_MAX);
-    size = ProtoFile::GetSize(thePath);    
-} 
-
-ProtoFileList::FileItem::~FileItem()
-{
-}
-
-bool ProtoFileList::FileItem::GetNextFile(char*   thePath,
-                                         bool    reset,
-                                         bool    updatesOnly,
-                                         time_t  lastTime,
-                                         time_t  thisTime,
-                                         time_t& bigTime)
-{
-    if (reset)
-    {
-        if (updatesOnly)
-        {
-            time_t updateTime = ProtoFile::GetUpdateTime(thePath);
-            if (updateTime > bigTime) bigTime = updateTime;
-            if ((updateTime <= lastTime) || (updateTime > thisTime))
-                return false;
-        }
-        strncpy(thePath, path, PATH_MAX);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}  // end ProtoFileList::FileItem::GetNextFile()
-
-ProtoFileList::DirectoryItem::DirectoryItem(const char* thePath)
- : ProtoFileList::FileItem(thePath)
-{    
-    
-}
-
-ProtoFileList::DirectoryItem::~DirectoryItem()
-{
-    diterator.Close();
-}
-
-bool ProtoFileList::DirectoryItem::GetNextFile(char*   thePath,
-                                               bool    reset,
-                                               bool    updatesOnly,
-                                               time_t  lastTime,
-                                               time_t  thisTime,
-                                               time_t& bigTime)
-{
-     if (reset)
-     {
-         /* For now we are going to poll all files in a directory individually
-           since directory update times aren't always changed when files are
-           are replaced within the directory tree ... uncomment this code
-           if you only want to check directory nodes that have had their
-           change time updated
-        if (updates_only)
-        {
-            // Check to see if directory has been touched
-            time_t update_time = ProtoFile::GetUpdateTime(path);
-            if (updateTime > bigTime) *bigTime = updateTime;
-            if ((updateTime <= lastTime) || (updateTime > thisTime))
-                return false;
-        } */
-        if (!diterator.Open(path))
-        {
-            PLOG(PL_FATAL, "ProtoFileList::DirectoryItem::GetNextFile() Directory iterator init error\n");
-            return false;   
-        } 
-     }
-     strncpy(thePath, path, PATH_MAX);
-     size_t len = strlen(thePath);
-     len = MIN(len, PATH_MAX);
-     if ((PROTO_PATH_DELIMITER != thePath[len-1]) && (len < PATH_MAX))
-     {
-         thePath[len++] = PROTO_PATH_DELIMITER;
-         if (len < PATH_MAX) thePath[len] = '\0';
-     }  
-     char tempPath[PATH_MAX];
-     while (diterator.GetNextFile(tempPath))
-     {
-         size_t maxLen = PATH_MAX - len;
-         strncat(thePath, tempPath, maxLen);
-         if (updatesOnly)
-         {
-            time_t updateTime = ProtoFile::GetUpdateTime(thePath);
-            if (updateTime > bigTime) bigTime = updateTime;
-            if ((updateTime <= lastTime) || (updateTime > thisTime))
-            {
-                thePath[len] = '\0';
-                continue;
-            }
-         }
-         return true;
-     }
-     return false;
-}  // end ProtoFileList::DirectoryItem::GetNextFile()
+}  // end ProtoFile::PathList::PathIterator::GetNextPath()
+        
