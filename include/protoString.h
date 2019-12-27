@@ -51,6 +51,10 @@ class ProtoTokenator
         
         void Reset(const char* text=NULL, char delimiter='\0');  // default args retain current text/delimiter values
         
+        void SetNullDelimiter() // with "stripWhitespace" enabled, this enables
+            {token = '\0';}     // simple leading/trailing stripping
+            
+        
         // If this is called, caller is responsible to delete
         // the memory allocated for the previous item returned.
         // (This enables deferred, 'detach' decision)
