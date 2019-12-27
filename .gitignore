@@ -17,6 +17,7 @@ makefiles/averageExample
 makefiles/base64Example
 makefiles/detourExample
 makefiles/eventExample
+makefiles/fileTest
 makefiles/graphExample
 makefiles/graphRider
 makefiles/graphXMLExample
