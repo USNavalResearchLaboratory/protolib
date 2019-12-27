@@ -171,6 +171,7 @@ def build(ctx):
             'protoDebug',
             'protoDispatcher',
             'protoEvent',
+			'protoFile',
             'protoGraph',
             'protoJson',
             'protoLFSR',
@@ -272,6 +273,7 @@ def build(ctx):
             'base64Example',
             'detourExample',
             'eventExample',
+			'fileTest',
             'graphExample',
             #'graphRider', (this depends on manetGraphML.cpp so doesn't work as a "simple example"
             'lfsrExample',

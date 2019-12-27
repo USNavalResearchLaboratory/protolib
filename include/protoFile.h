@@ -74,7 +74,7 @@ class ProtoFile : public ProtoChannel
 #ifdef _WIN32_WCE
             return ((NULL != file_ptr) && ProtoChannel::IsOpen());
 #else
-            return ((descriptor >= 0) && ProtoChannel::IsOpen());
+			return ((descriptor >= 0) && ProtoChannel::IsOpen());
 #endif // _WIN32_WCE
         }
         bool Read(char* buffer, unsigned int& numBytes);//numBytes going is is requested amount comming out is amount read.  Note that a return value of true with numBytes =0 means nothing was read.
@@ -243,9 +243,9 @@ class ProtoFile : public ProtoChannel
                 Directory*  parent;
 #ifdef WIN32
                 HANDLE      hSearch;
-#else
+#else  // UNIX
                 DIR*        dptr;
-#endif  // if/else WIN32    
+#endif  // if/else WIN32/UNIX    
                 Directory(const char *thePath, Directory* theParent = NULL);
                 ~Directory();
                 void GetFullName(char* namePtr);
@@ -256,18 +256,17 @@ class ProtoFile : public ProtoChannel
                 void RecursiveCatName(char* ptr);
         };  // end class ProtoFile::Directory    
             
+#ifdef WIN32
 #ifdef _WIN32_WCE
         FILE*           file_ptr;
 #else
-        //int     fd;
+		int				descriptor;
 #endif // if/else _WIN32_WCE
-        //int     flags;
-#ifdef WIN32
 		__int64         offset;
-#else
+#else  // UNIX
         off_t           offset;
 #endif // if/else WIN32/UNIX
-        
+		int				flags;
         // This is used for buffered reading that enables
         // better performance for ProtoFile::Readline()
         // (TBD - allocate this only when needed or split to separate "FastReader" class?)

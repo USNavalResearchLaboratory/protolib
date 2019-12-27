@@ -114,6 +114,8 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
 		descriptor = _sopen(thePath, theFlags, _SH_DENYNO);
     else
 		descriptor = _open(thePath, theFlags, 0640);
+	input_handle = (HANDLE)_get_osfhandle(descriptor);
+	input_event_handle = output_handle = output_event_handle = input_handle;
     if(descriptor >= 0)
 #endif // if/else _WIN32_WCE
     {
@@ -139,11 +141,11 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
                              thePath, GetErrorString());
         return false;
     }
+#endif // if/else WIN32/UNIX
     if (returnvalue)
     {
-        return ProtoChannel::Open();  // why don't we support files as ProtoChannel on WIN32?
+        return ProtoChannel::Open();  
     }
-#endif // if/else WIN32
 	return returnvalue;
 }  // end ProtoFile::Open()
 
@@ -924,7 +926,7 @@ bool ProtoFile::Directory::Open()
         PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: %s\n", fullName, GetErrorString());
         return false;
     }
-	else if ((0 != attr) & FILE_ATTRIBUTE_DIRECTORY)
+	else if (0 != (attr & FILE_ATTRIBUTE_DIRECTORY))
     {
 		return true;
     }
