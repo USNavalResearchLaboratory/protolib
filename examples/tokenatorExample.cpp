@@ -1,6 +1,8 @@
 
 #include "protoString.h"
 #include "protoDefs.h"  // for PATH_MAX
+#include <ctype.h>
+#include <string.h>
 
 int main(int argc, char* argv[])
 {
