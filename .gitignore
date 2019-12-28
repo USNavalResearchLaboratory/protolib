@@ -44,6 +44,8 @@ makefiles/tokenatorExample
 makefiles/unitTests
 makefiles/vifExample
 makefiles/vifLan
+makefiles/win32/Release
+makefiles/win32/Debug
 
 # OS generated files #
 .DS_Store
