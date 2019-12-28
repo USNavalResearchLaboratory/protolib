@@ -3,7 +3,11 @@
 
 #include "protoFile.h"
 #include <stdio.h>
+#ifdef WIN32
+#include <windows.h>  // for Sleep()
+#else  // UNIX
 #include <unistd.h>  // for sleep()
+#endif // if/else WIN32/UNIX
 
 // Usage:  fileTest path1 [path2  path3 ...]
 
@@ -34,9 +38,13 @@ int main(int argc, char* argv[])
     }
     
     fprintf(stderr, "fileTest: sleeping 5 seconds before 2nd iteration for updated files\n");
-    
+
+#ifdef WIN32
+	Sleep(5000);
+#else  // UNIX
     sleep(5);  // This provides an opportunity to touch a file to illustrate "updateOnly" iteration 
-    
+#endif  // if/else WIN32/UNIX
+
     iterator.Reset();
     while (iterator.GetNextFile(path))
         printf("2nd iteration  to \"%s\"\n", path);

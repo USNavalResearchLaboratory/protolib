@@ -86,7 +86,7 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
             if (!CreateDirectory(tempPath, NULL))
 #endif  // if/else _UNICODE
 #else
-            if (mkdir(tempPath))
+            if (_mkdir(tempPath))
 #endif // if/else _WIN32_WCE
 #else
             if (mkdir(tempPath, 0755))
@@ -293,7 +293,7 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
             if (!CreateDirectory(tempPath, NULL))
 #endif  // if/else _UNICODE
 #else
-            if (0 != mkdir(tempPath))
+            if (0 != _mkdir(tempPath))
 #endif // if/else _WIN32_WCE
 #else
         if (mkdir(tempPath, 0755))

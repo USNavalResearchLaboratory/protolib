@@ -205,6 +205,7 @@
     <ClCompile Include="..\..\src\common\protoDebug.cpp" />
     <ClCompile Include="..\..\src\common\protoDispatcher.cpp" />
     <ClCompile Include="..\..\src\common\protoEvent.cpp" />
+    <ClCompile Include="..\..\src\common\protoFile.cpp" />
     <ClCompile Include="..\..\src\common\protoGraph.cpp" />
     <ClCompile Include="..\..\src\common\protoLFSR.cpp" />
     <ClCompile Include="..\..\src\common\protoList.cpp" />
@@ -221,6 +222,7 @@
     <ClCompile Include="..\..\src\common\protoSerial.cpp" />
     <ClCompile Include="..\..\src\common\protoSocket.cpp" />
     <ClCompile Include="..\..\src\common\protoSpace.cpp" />
+    <ClCompile Include="..\..\src\common\protoString.cpp" />
     <ClCompile Include="..\..\src\common\protoTime.cpp" />
     <ClCompile Include="..\..\src\common\protoTimer.cpp" />
     <ClCompile Include="..\..\src\common\protoTree.cpp" />

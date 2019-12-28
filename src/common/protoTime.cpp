@@ -88,10 +88,10 @@ double ProtoTime::Delta(const ProtoTime& t1, const ProtoTime& t2)
     double delta = (t1.sec() >= t2.sec()) ?
                         (double)(t1.sec() - t2.sec()) :
                         -(double)(t2.sec() - t1.sec());
-    if (t1.usec() > t2.usec())
-        delta += 1.0e-06 * (double)(t1.usec() - t2.usec());
-    else
-        delta -= 1.0e-06 * (double)(t2.usec() - t1.usec());
+	if (t1.usec() > t2.usec())
+		delta += 1.0e-06 * (double)(t1.usec() - t2.usec());
+	else
+		delta -= 1.0e-06 * (double)(t2.usec() - t1.usec());
     return delta;
 }  // end ProtoTime::Delta()
 
