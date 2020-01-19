@@ -37,13 +37,14 @@ class ProtoPktIP : public ProtoPkt
         }
         
         UINT8 GetVersion() const
-            {return ((pkt_length > OFFSET_VERSION) ? 
-                        (((UINT8*)buffer_ptr)[OFFSET_VERSION] >> 4) : 0);}
+            {return ((ProtoPkt::GetLength() > OFFSET_VERSION) ? 
+                        (GetUINT8(OFFSET_VERSION) >> 4) : 0);}
         
         void SetVersion(UINT8 version)
         {
-            ((UINT8*)buffer_ptr)[OFFSET_VERSION] &= 0x0f;
-            ((UINT8*)buffer_ptr)[OFFSET_VERSION] |= (version << 4);
+            UINT8& byte = AccessUINT8(OFFSET_VERSION);
+            byte &= 0x0f;
+            byte |= (version << 4);
         }
         
         bool SetDstAddr(ProtoAddress& dst); 
@@ -122,16 +123,28 @@ class ProtoPktIP : public ProtoPkt
                 
                 const char* GetBuffer() const 
                     {return buffer_ptr;}
-                char* AccessBuffer() const 
+                const char* GetBuffer(unsigned byteOffset) const
+                    {return buffer_ptr + byteOffset;}
+                char* AccessBuffer()  
                     {return buffer_ptr;}
+                char* AccessBuffer(unsigned byteOffset) const
+                    {return buffer_ptr + byteOffset;}
                 unsigned int GetBufferLength() const 
                     {return buffer_bytes;}
+                
+                UINT8 GetUINT8(unsigned int byteOffset) const
+                    {return buffer_ptr[byteOffset];}
+                UINT8& AccessUINT8(unsigned int byteOffset) const
+                    {return (UINT8&)buffer_ptr[byteOffset];}
+                
+                void SetUINT8(unsigned int byteOffset, UINT8 value)
+                    {buffer_ptr[byteOffset] = value;}
                 
             protected:
                 OptionBase(char*        bufferPtr = NULL, 
                            unsigned int numBytes = 0, 
                            bool         freeOnDestruct = false);
-            
+            //private:
                 char*           buffer_ptr;
                 char*           buffer_allocated;
                 unsigned int    buffer_bytes;
@@ -231,13 +244,13 @@ class ProtoPktIPv4 : public ProtoPktIP
                                     bool         freeOnDestruct = false);
                 
                 Type GetType() const
-                    {return (Type)((UINT8)buffer_ptr[OFFSET_TYPE]);}
+                    {return (Type)GetUINT8(OFFSET_TYPE);}
                 
                 unsigned int GetLength() const
                     {return opt_length;}
                 
                 const char* GetData() const
-                    {return (buffer_ptr + OffsetData());}
+                    {return GetBuffer(OffsetData());}
                 
                 unsigned int GetDataLength() const
                     {return (opt_length - ((OffsetData() != OFFSET_LENGTH) ? 2 : 1));}
@@ -295,42 +308,44 @@ class ProtoPktIPv4 : public ProtoPktIP
                             bool freeOnDestruct     = false);
         
         UINT8 GetHeaderLength() const  // in bytes
-            {return ((((UINT8*)buffer_ptr)[OFFSET_HDR_LEN] & 0x0f) << 2); }
+            {return ((GetUINT8(OFFSET_HDR_LEN) & 0x0f) << 2); }
         UINT8 GetTOS() const
-            {return (((UINT8*)buffer_ptr)[OFFSET_TOS]);}
+            {return GetUINT8(OFFSET_TOS);}
         UINT16 GetTotalLength() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_LEN]);}
+            {return GetWord16(OFFSET_LEN);}
         UINT16 GetID() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_ID]);}
+            {return GetWord16(OFFSET_ID);}
         bool FlagIsSet(Flag flag) const
-            {return (0 != (flag & (((UINT8*)buffer_ptr)[OFFSET_FLAGS])));}
+            {return (0 != (flag & GetUINT8(OFFSET_FLAGS)));}
         UINT16 GetFragmentOffset() const
-            {return (0x1fff & ntohs(((UINT16*)buffer_ptr)[OFFSET_FRAGMENT]));}
+            {return (0x1fff & GetWord16(OFFSET_FRAGMENT));}
         UINT8 GetTTL() const
-            {return (((UINT8*)buffer_ptr)[OFFSET_TTL]);}
+            {return GetUINT8(OFFSET_TTL);}
         Protocol GetProtocol() const
-            {return (Protocol)(((UINT8*)buffer_ptr)[OFFSET_PROTOCOL]);}
+            {return (Protocol)GetUINT8(OFFSET_PROTOCOL);}
         UINT16 GetChecksum() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_CHECKSUM]);} // (TBD) ??? is ntohs() needed ???   
+            {return GetWord16(OFFSET_CHECKSUM);}  
         void GetSrcAddr(ProtoAddress& addr) const
-            {addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_SRC_ADDR), 4);}
+            {addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_SRC_ADDR), 4);}
         void GetDstAddr(ProtoAddress& addr) const
-            {addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_DST_ADDR), 4);}
+            {addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_DST_ADDR), 4);}
         
         /// Helper method to get pointer to ID portion of IPv4 header
         const char* GetIDPtr() const
-            {return ((char*)buffer_ptr + (OFFSET_ID*2));}
+            {return ((char*)GetBuffer16(OFFSET_ID));}
         /// Helper methods for UDP checksum calculation, etc
-        const UINT32* GetSrcAddrPtr() const {return (buffer_ptr + OFFSET_SRC_ADDR);}
-        const UINT32* GetDstAddrPtr() const {return (buffer_ptr + OFFSET_DST_ADDR);}
+        const UINT32* GetSrcAddrPtr() const {return GetBuffer32(OFFSET_SRC_ADDR);}
+        const UINT32* GetDstAddrPtr() const {return GetBuffer32(OFFSET_DST_ADDR);}
         
         // (TBD) provide methods to get any header extensions
         
         UINT16 GetPayloadLength() const {return (GetTotalLength() - GetHeaderLength());}
-        const char* GetPayload() const 
-            {return ((const char*)buffer_ptr + GetHeaderLength());}
+        const UINT32* GetPayload32() const
+            {return GetBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
+        const char* GetPayloadX() const 
+            {return ((const char*)GetPayload32());}
         UINT32* AccessPayload() 
-            {return (buffer_ptr + (((UINT8*)buffer_ptr)[OFFSET_HDR_LEN] & 0x0f));}
+            {return AccessBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
         
         /// Use these to build a packet
         bool InitIntoBuffer(UINT32*         bufferPtr = NULL, 
@@ -345,7 +360,7 @@ class ProtoPktIPv4 : public ProtoPktIP
         void SetTTL(UINT8 ttl, bool updateChecksum = false) ;
         void SetProtocol(Protocol protocol, bool updateChecksum = false);
         void SetChecksum(UINT16 checksum)
-            {((UINT16*)buffer_ptr)[OFFSET_CHECKSUM] = htons(checksum);}  
+            {SetWord32(OFFSET_CHECKSUM, checksum);}
         void SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum = false);
         void SetDstAddr(const ProtoAddress& addr, bool calculateChecksum = false);
         /// (TBD) support header extensions for IPv4
@@ -405,14 +420,15 @@ class ProtoPktIPv4 : public ProtoPktIP
     private:
         void SetHeaderLength(UINT8 hdrBytes) 
         {  
-            ((UINT8*)buffer_ptr)[OFFSET_HDR_LEN] &= 0xf0;
-            ((UINT8*)buffer_ptr)[OFFSET_HDR_LEN] |= (hdrBytes >> 2);
-            ProtoPkt::SetLength(hdrBytes);
+            UINT8& byte = AccessUINT8(OFFSET_HDR_LEN);
+            byte &= 0xf0;
+            byte |= (hdrBytes >> 2);
+            SetTotalLength(hdrBytes);
         }
         void SetTotalLength(UINT16 numBytes) 
         {
-            ((UINT16*)buffer_ptr)[OFFSET_LEN] = htons(numBytes);
-            pkt_length = numBytes;
+            SetWord16(OFFSET_LEN, numBytes);
+            ProtoPkt::SetLength(numBytes);
         }
         
         enum
@@ -483,23 +499,22 @@ class ProtoPktIPv6 : public ProtoPktIP
                     PAD1    = 0,   
                     PADN    = 1,
                     SMF_DPD = 2  /// SMF duplicate packet detection option (temp value assignment)
-                };
-                   
+                }; 
                  
                 UnknownPolicy GetUnknownPolicy() const
-                    {return (UnknownPolicy)(((UINT8)buffer_ptr[OFFSET_TYPE]) >> 6);}
+                    {return (UnknownPolicy)(GetUINT8(OFFSET_TYPE) >> 6);}
                 bool IsMutable() const
-                    {return (0 != (FLAG_MUTABLE & buffer_ptr[OFFSET_TYPE]));}
+                    {return (0 != (FLAG_MUTABLE & GetUINT8(OFFSET_TYPE)));}
                 Type GetType() const
-                    {return (Type)(((UINT8)buffer_ptr[OFFSET_TYPE]) & 0x1f);}
+                    {return (Type)(GetUINT8(OFFSET_TYPE) & 0x1f);}
                 UINT8 GetDataLength() const
-                    {return ((PAD1 == GetType()) ? 0 : ((UINT8)buffer_ptr[OFFSET_DATA_LENGTH]));}
+                    {return ((PAD1 == GetType()) ? 0 : GetUINT8(OFFSET_DATA_LENGTH));}
                 bool HasData() {return (GetDataLength() > 0);}
                 const char* GetData() const
-                    {return (buffer_ptr + OFFSET_DATA);}
+                    {return GetBuffer(OFFSET_DATA);}
                 unsigned int GetLength() const
                 {
-                    return ((0 == buffer_bytes) ? 
+                    return ((0 == GetBufferLength()) ? 
                                 0 : ((PAD1 == GetType()) ? 
                                         1 : 2 + GetDataLength()));  
                 }
@@ -510,19 +525,20 @@ class ProtoPktIPv6 : public ProtoPktIP
                                     bool         freeOnDestruct = false);
                 void SetUnknownPolicy(UnknownPolicy policy)
                 {
-                    buffer_ptr[OFFSET_TYPE] &= ~((char)(0x03 << 6));
-                    buffer_ptr[OFFSET_TYPE] |= ((char)policy) << 6;    
+                    UINT8& byte = AccessUINT8(OFFSET_TYPE);
+                    byte &= ~((char)(0x03 << 6));
+                    byte |= ((char)policy) << 6;    
                 }    
                 void SetMutable(bool state)
                 {
-                    buffer_ptr[OFFSET_TYPE] = state ? 
-                                            (buffer_ptr[OFFSET_TYPE] | FLAG_MUTABLE) :
-                                            (buffer_ptr[OFFSET_TYPE] & ~FLAG_MUTABLE);
+                    UINT8& byte = AccessUINT8(OFFSET_TYPE);
+                    byte = state ? (byte | FLAG_MUTABLE) : (byte & ~FLAG_MUTABLE);
                 }
                 void SetType(Type type)
                 {
-                    buffer_ptr[OFFSET_TYPE] &= ~((char)0x1f);
-                    buffer_ptr[OFFSET_TYPE] |= (char)(type & 0x1f);
+                    UINT8& byte = AccessUINT8(OFFSET_TYPE);
+                    byte &= ~((char)0x1f);
+                    byte |= (char)(type & 0x1f);
                 }
                 bool SetData(char* dataPtr, UINT8 dataLen);
                 bool MakePad(UINT8 numBytes);
@@ -549,7 +565,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 
             protected:
                 void SetDataLength(UINT8 dataLen)
-                    {buffer_ptr[OFFSET_DATA_LENGTH] = (char)dataLen;}
+                    {SetUINT8(OFFSET_DATA_LENGTH, dataLen);}
                 
                 enum {FLAG_MUTABLE = 0x20};
                 enum
@@ -587,8 +603,8 @@ class ProtoPktIPv6 : public ProtoPktIP
                     {ext_type = extensionType;}
                 void SetNextHeader(Protocol protocol)
                 {
-                    ASSERT(buffer_bytes > OFFSET_NEXT_HDR);
-                    ((UINT8*)buffer_ptr)[OFFSET_NEXT_HDR] = (UINT8)protocol;
+                    ASSERT(GetBufferLength() > OFFSET_NEXT_HDR);
+                    SetUINT8(OFFSET_NEXT_HDR, (UINT8)protocol);
                 }
                 void SetExtensionLength(UINT16 numBytes);  
                 
@@ -602,7 +618,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 Protocol GetType() const 
                     {return ext_type;}
                 Protocol GetNextHeader() const
-                    {return (Protocol)(((UINT8*)buffer_ptr)[OFFSET_NEXT_HDR]);}
+                    {return (Protocol)GetUINT8(OFFSET_NEXT_HDR);}
                 /** 
 				* This gets the extension's length embedded in the assumed "payload length" field
                 * (Note the FRAGMENT extension doesn't have this field and is of fixed length)
@@ -668,30 +684,30 @@ class ProtoPktIPv6 : public ProtoPktIP
         
         void SetTrafficClass(UINT8 trafficClass) 
         {
-            ((UINT8*)buffer_ptr)[OFFSET_CLASS_MSN] &= 0xf0;
-            ((UINT8*)buffer_ptr)[OFFSET_CLASS_MSN] |= (trafficClass >> 4);
-            ((UINT8*)buffer_ptr)[OFFSET_CLASS_LSN] &= 0x0f;
-            ((UINT8*)buffer_ptr)[OFFSET_CLASS_LSN] |= (trafficClass << 4);
+            UINT8* ptr = (UINT8*)AccessBuffer(OFFSET_CLASS_MSN);
+            *ptr &= 0xf0;
+            *ptr++ |= (trafficClass >> 4);  // post-increment ptr of OFFSET_CLASS_LSN
+            *ptr &= 0x0f;
+            *ptr |= (trafficClass << 4);
         }
         void SetFlowLabel(UINT32 flowLabel) 
         {
-            flowLabel = (0xfc00 & ntohl(buffer_ptr[OFFSET_LABEL])) | (flowLabel & 0x03ff);
-            buffer_ptr[OFFSET_LABEL] = htonl(flowLabel);
+            flowLabel = (0xfc00 & GetWord32(OFFSET_LABEL)) | (flowLabel & 0x03ff);
+            SetWord32(OFFSET_LABEL, flowLabel);
         }
         void SetPayloadLength(UINT16 numBytes) 
         {
-            ((UINT16*)buffer_ptr)[OFFSET_LENGTH] = htons(numBytes);
-            pkt_length = 40 + numBytes;    
+            SetWord16(OFFSET_LENGTH, numBytes);
+            ProtoPkt::SetLength(40 + numBytes);    
         }
         void SetNextHeader(Protocol protocol) 
-            {((UINT8*)buffer_ptr)[OFFSET_NEXT_HDR] = (UINT8)protocol;}
+            {SetUINT8(OFFSET_NEXT_HDR, (UINT8)protocol);}
         void SetHopLimit(UINT8 hopLimit) 
-            {((UINT8*)buffer_ptr)[OFFSET_HOP_LIMIT] = hopLimit;}
+            {SetUINT8(OFFSET_HOP_LIMIT, hopLimit);}
         void SetSrcAddr(ProtoAddress& addr) 
-            {memcpy((char*)(buffer_ptr+OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 16);}
+            {memcpy((char*)AccessBuffer32(OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 16);}
         void SetDstAddr(ProtoAddress& addr) 
-            {memcpy((char*)(buffer_ptr+OFFSET_DST_ADDR), addr.GetRawHostAddress(), 16);}
-        
+            {memcpy((char*)AccessBuffer32(OFFSET_DST_ADDR), addr.GetRawHostAddress(), 16);}
         
         // Map extension to end of current IPv6 packet header
         Extension* AddExtension(Protocol extType);
@@ -711,34 +727,36 @@ class ProtoPktIPv6 : public ProtoPktIP
                             bool freeOnDestruct     = false);
         UINT8 GetTrafficClass() const
         {
-            return (((((UINT8*)buffer_ptr)[OFFSET_CLASS_MSN] & 0x0f) << 4) |
-                    ((((UINT8*)buffer_ptr)[OFFSET_CLASS_LSN] & 0xf0) >> 4));
+           const UINT8* ptr = (UINT8*)GetBuffer(OFFSET_CLASS_MSN);
+           UINT8 trafficClass = (*ptr++ & 0x0f) << 4;  // post-increment ptr to OFFSET_CLASS_LSN
+           trafficClass |= (*ptr & 0xf0) >> 4;
+           return trafficClass;
         }
         UINT32 GetFlowLabel() const
-            {return (ntohl(buffer_ptr[OFFSET_LABEL]) & 0x03ff);}
+            {return (GetWord32(OFFSET_LABEL) & 0x03ff);}
         Protocol GetNextHeader() const
-            {return (Protocol)((UINT8*)buffer_ptr)[OFFSET_NEXT_HDR];}
+            {return (Protocol)GetUINT8(OFFSET_NEXT_HDR);}
         Protocol GetLastHeader() const; // returns type of final extension/transport in packet
         UINT8 GetHopLimit() const
-            {return ((UINT8*)buffer_ptr)[OFFSET_HOP_LIMIT];}
+            {return GetUINT8(OFFSET_HOP_LIMIT);}
         void GetSrcAddr(ProtoAddress& addr) const
-            {addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)(buffer_ptr+OFFSET_SRC_ADDR), 16);}
+            {addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)GetBuffer32(OFFSET_SRC_ADDR), 16);}
         const UINT32* GetSrcAddrPtr() const
-            {return (buffer_ptr+OFFSET_SRC_ADDR);}
+            {return GetBuffer32(OFFSET_SRC_ADDR);}
         void GetDstAddr(ProtoAddress& addr) const
-                {addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)(buffer_ptr+OFFSET_DST_ADDR), 16);}
+                {addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)GetBuffer32(OFFSET_DST_ADDR), 16);}
         const UINT32* GetDstAddrPtr() const
-            {return (buffer_ptr+OFFSET_DST_ADDR);}
+            {return GetBuffer32(OFFSET_DST_ADDR);}
                 
         bool HasExtendedHeader() const 
             {return IsExtension(GetNextHeader());}
         
         const UINT32* GetPayload() const 
-            {return (buffer_ptr + BASE_HDR_LENGTH/4);}
+            {return GetBuffer32(BASE_HDR_LENGTH/4);}
         UINT32* AccessPayload() 
-            {return (buffer_ptr + BASE_HDR_LENGTH/4);}
+            {return AccessBuffer32(BASE_HDR_LENGTH/4);}
         UINT16 GetPayloadLength() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_LENGTH]);}
+            {return GetWord16(OFFSET_LENGTH);}
         
     private:
         enum
@@ -782,18 +800,18 @@ class ProtoPktFRAG : public ProtoPktIPv6::Extension
         void SetFragmentOffset(UINT16 offsetValue)
         {
             /// mask flags and "or" in new "offsetValue"
-            UINT16 frag = ntohs(((UINT16*)buffer_ptr)[OFFSET_FRAGMENT]);
+            UINT16 frag = GetWord16(OFFSET_FRAGMENT);
             frag = (frag & 0x0007) | (offsetValue << 3);   
-            ((UINT16*)buffer_ptr)[OFFSET_FRAGMENT] = htons(frag);
+            SetWord16(OFFSET_FRAGMENT, frag);
         }
         
         void SetMF()
-            {((UINT8*)buffer_ptr)[OFFSET_FLAGS] |= ((UINT8)FLAG_MF);}
+            {AccessUINT8(OFFSET_FLAGS) |= ((UINT8)FLAG_MF);}
         void ClearMF()
-            {((UINT8*)buffer_ptr)[OFFSET_FLAGS] &= ~((UINT8)FLAG_MF);}
+            {AccessUINT8(OFFSET_FLAGS) &= ~((UINT8)FLAG_MF);}
         
         void SetID(UINT32 identifier)
-            {buffer_ptr[OFFSET_ID] = htonl(identifier);}
+            {SetWord32(OFFSET_ID, identifier);}
         
         /// Use these to parse a FRAG extension
         bool InitFromBuffer(UINT32*         bufferPtr = NULL, 
@@ -804,16 +822,16 @@ class ProtoPktFRAG : public ProtoPktIPv6::Extension
         }
         
         UINT16 GetFragmentOffset() const
-            {return (ntohs(((UINT16*)buffer_ptr)[OFFSET_FRAGMENT]) >> 3);}
+            {return (GetWord16(OFFSET_FRAGMENT) >> 3);}
         
         const char* GetFragmentOffsetPtr() const
-            {return ((char*)buffer_ptr + (2*OFFSET_FRAGMENT));}
+            {return (const char*)GetBuffer16(OFFSET_FRAGMENT);}
         
         bool GetMF() const
-            {return (0 != (((UINT8*)buffer_ptr)[OFFSET_FLAGS] & ((UINT8)FLAG_MF)));}
+            {return (0 != (GetUINT8(OFFSET_FLAGS) & ((UINT8)FLAG_MF)));}
                 
         UINT32 GetID() const
-            {return ntohl(buffer_ptr[OFFSET_ID]);}
+            {return GetWord32(OFFSET_ID);}
         
     private:
         enum
@@ -846,10 +864,10 @@ class ProtoPktAUTH : public ProtoPktIPv6::Extension
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         void SetSPI(UINT32 spi)
-            {buffer_ptr[OFFSET_SPI] = htonl(spi);}
+            {SetWord32(OFFSET_SPI, spi);}
         
         void SetSequence(UINT32 sequence)
-            {buffer_ptr[OFFSET_SEQUENCE] = htonl(sequence);}
+            {SetWord32(OFFSET_SEQUENCE, sequence);}
         // (TBD) add a method to set the ICV field
         
         /// Use these to parse an AUTH extension
@@ -858,16 +876,16 @@ class ProtoPktAUTH : public ProtoPktIPv6::Extension
                             bool            freeOnDestruct = false);
         
         UINT32 GetSPI() const
-            {return ntohl(buffer_ptr[OFFSET_SPI]);}
+            {return GetWord32(OFFSET_SPI);}
         
-        UINT32* GetSPIPtr() const
-            {return (buffer_ptr + OFFSET_SPI);}
+        const UINT32* GetSPIPtr() const
+            {return GetBuffer32(OFFSET_SPI);}
         
         UINT32 GetSequence() const
-            {return ntohl(buffer_ptr[OFFSET_SEQUENCE]);}
+            {return GetWord32(OFFSET_SEQUENCE);}
         
         const UINT32* GetSequencePtr() const
-            {return (buffer_ptr + OFFSET_SEQUENCE);}
+            {return GetBuffer32(OFFSET_SEQUENCE);}
         
     private:
         enum
@@ -898,10 +916,10 @@ class ProtoPktESP : public ProtoPkt
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         void SetSPI(UINT32 spi)
-            {buffer_ptr[OFFSET_SPI] = htonl(spi);}
+            {SetWord32(OFFSET_SPI, spi);}
         
         void SetSequence(UINT32 sequence)
-            {buffer_ptr[OFFSET_SEQUENCE] = htonl(sequence);}
+            {SetWord32(OFFSET_SEQUENCE, sequence);}
         // (TBD) add a method to set the ICV field
         
         // Use these to parse an ESP extension
@@ -911,16 +929,16 @@ class ProtoPktESP : public ProtoPkt
                             bool            freeOnDestruct = false);
         
         UINT32 GetSPI() const
-            {return ntohl(buffer_ptr[OFFSET_SPI]);}
+            {return GetWord32(OFFSET_SPI);}
         
-        UINT32* GetSPIPtr() const
-            {return (buffer_ptr + OFFSET_SPI);}
+        const UINT32* GetSPIPtr() const
+            {return GetBuffer32(OFFSET_SPI);}
         
         UINT32 GetSequence() const
-            {return ntohl(buffer_ptr[OFFSET_SEQUENCE]);}
+            {return GetWord32(OFFSET_SEQUENCE);}
         
         const UINT32* GetSequencePtr() const
-            {return (buffer_ptr + OFFSET_SEQUENCE);}
+            {return GetBuffer32(OFFSET_SEQUENCE);}
         
     private:
         enum
@@ -953,16 +971,16 @@ class ProtoPktMobile : public ProtoPkt
         void SetProtocol(ProtoPktIP::Protocol protocol)
             {SetUINT8(OFFSET_PROTOCOL, (UINT8)protocol);}
         void SetFlag(Flag flag)
-            {((UINT8*)buffer_ptr)[OFFSET_FLAGS] |= flag;}
+            {AccessUINT8(OFFSET_FLAGS) |= flag;}
         void ClearFlag(Flag flag)
-            {((UINT8*)buffer_ptr)[OFFSET_FLAGS] &= ~flag;}
+            {AccessUINT8(OFFSET_FLAGS) &= ~flag;}
         void SetChecksum(UINT16 checksum)
-            {((UINT16*)buffer_ptr)[OFFSET_CHECKSUM] = htons(checksum);}  
+            {SetWord32(OFFSET_CHECKSUM, checksum);}  
         void SetDstAddr(const ProtoAddress& addr, bool calculateChecksum = false);
         bool SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum = false);
         void SetPayload(const char* payload, UINT16 numBytes)
         {
-            memcpy((char*)(buffer_ptr+OffsetPayload()), payload, numBytes);
+            memcpy(AccessBuffer32(OffsetPayload()), payload, numBytes);
             if (FlagIsSet(FLAG_SRC))
                 SetLength(12 + numBytes);
             else
@@ -977,19 +995,19 @@ class ProtoPktMobile : public ProtoPkt
         ProtoPktIP::Protocol GetProtocol() const
             {return (ProtoPktIP::Protocol)GetUINT8(OFFSET_PROTOCOL);}
         bool FlagIsSet(Flag flag) const
-            {return (0 != (flag & (((UINT8*)buffer_ptr)[OFFSET_FLAGS])));}    
+            {return (0 != (flag & GetUINT32(OFFSET_FLAGS)));}    
         UINT16 GetChecksum() const
-            {return GetUINT16(OFFSET_CHECKSUM);}    
+            {return GetWord16(OFFSET_CHECKSUM);}    
         void GetDstAddr(ProtoAddress& dst) const
-            {dst.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_DST_ADDR), 4);}
+            {dst.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_DST_ADDR), 4);}
         bool GetSrcAddr(ProtoAddress& src) const;
         
         UINT16 GetPayloadLength() const
             {return GetLength() - 4*OffsetPayload();}
         const UINT32* GetPayload() const
-            {return (buffer_ptr + OffsetPayload());}
+            {return GetBuffer32(OffsetPayload());}
         UINT32* AccessPayload()
-            {return (buffer_ptr + OffsetPayload());}
+            {return AccessBuffer32(OffsetPayload());}
         
     private:
         enum 
@@ -1065,33 +1083,33 @@ class ProtoPktDPD : public ProtoPktIPv6::Option
                             bool            freeOnDestruct = false);
         
         bool HasHAV() const
-            {return (0 != (0x80 & ((UINT8*)buffer_ptr)[OFFSET_HAV]));}
+            {return (0 != (0x80 & GetUINT8(OFFSET_HAV)));}
         
         UINT8 GetHAVLength() const
             {return GetDataLength();}
         
         const char* GetHAV() const
-            {return (HasHAV() ? (((const char*)buffer_ptr) + OFFSET_HAV) : NULL);}
+            {return (HasHAV() ? GetBuffer(OFFSET_HAV) : NULL);}
             
         
         TaggerIdType GetTaggerIdType() const
-            {return (HasHAV() ? TID_NULL : (TaggerIdType)((buffer_ptr[OFFSET_TID_TYPE] >> 4) & 0x0f));}
+            {return (HasHAV() ? TID_NULL : (TaggerIdType)((GetUINT8(OFFSET_TID_TYPE) >> 4) & 0x0f));}
         
         UINT8 GetTaggerIdLength() const
         {
-            UINT8 tidType = (HasHAV() ? TID_NULL : buffer_ptr[OFFSET_TID_TYPE]);
+            UINT8 tidType = HasHAV() ? TID_NULL : GetUINT8(OFFSET_TID_TYPE);
             return ((TID_NULL != (TaggerIdType)tidType) ? ((tidType & 0x0f) + 1) : 0);  
         }
             
         const char* GetTaggerId() const
-            {return (buffer_ptr + OFFSET_TID_VALUE);}
+            {return GetBuffer(OFFSET_TID_VALUE);}
         bool GetTaggerId(ProtoAddress& addr) const;
         
         UINT8 GetPktIdLength() const
             {return (GetDataLength() - GetTaggerIdLength() - (HasHAV() ? 0 : 1));}
         
         const char* GetPktId() const
-            {return (buffer_ptr + OffsetPktId());}
+            {return GetBuffer(OffsetPktId());}
         bool GetPktId(UINT8& value) const;
         bool GetPktId(UINT16& value) const;
         bool GetPktId(UINT32& value) const;
@@ -1128,17 +1146,17 @@ class ProtoPktUDP : public ProtoPkt
                             bool freeOnDestruct     = false);
         bool InitFromPacket(ProtoPktIP& pkt);
         UINT16 GetSrcPort() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_SRC]);}
+            {return GetWord16(OFFSET_SRC);}
         UINT16 GetDstPort() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_DST]);}
+            {return GetWord16(OFFSET_DST);}
         UINT16 GetChecksum() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_CHECKSUM]);}
+            {return GetWord16(OFFSET_CHECKSUM);}
         UINT16 GetPayloadLength() const
-            {return (ntohs(((UINT16*)buffer_ptr)[OFFSET_LENGTH]) - 8);}
+            {return (GetWord16(OFFSET_LENGTH) - 8);}
         const UINT32* GetPayload() const
-            {return (buffer_ptr + OFFSET_PAYLOAD);}
+            {return GetBuffer32(OFFSET_PAYLOAD);}
         UINT32* AccessPayload()
-            {return (buffer_ptr + OFFSET_PAYLOAD);}
+            {return AccessBuffer32(OFFSET_PAYLOAD);}
         UINT16 ComputeChecksum(ProtoPktIP& ipPkt) const;
         bool ChecksumIsValid(ProtoPktIP& ipPkt) const
             {return (GetChecksum() == ComputeChecksum(ipPkt));}
@@ -1148,21 +1166,21 @@ class ProtoPktUDP : public ProtoPkt
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetSrcPort(UINT16 port)
-            {((UINT16*)buffer_ptr)[OFFSET_SRC] = htons(port);}
+            {SetWord16(OFFSET_SRC, port);}
         void SetDstPort(UINT16 port)
-            {((UINT16*)buffer_ptr)[OFFSET_DST] = htons(port);}
+            {SetWord16(OFFSET_DST, port);}
         void SetChecksum(UINT16 checksum)
-            {((UINT16*)buffer_ptr)[OFFSET_CHECKSUM] = htons(checksum);}
+            {SetWord16(OFFSET_CHECKSUM, checksum);}
         void SetPayload(const char* payload, UINT16 numBytes)
         {
-            memcpy((char*)(buffer_ptr+OFFSET_PAYLOAD), payload, numBytes);
+            memcpy(AccessBuffer32(OFFSET_PAYLOAD), payload, numBytes);
             SetPayloadLength(numBytes);
         }    
         void SetPayloadLength(UINT16 numBytes)
         {
-            UINT16 len = 8 + numBytes;
-            ((UINT16*)buffer_ptr)[OFFSET_LENGTH] = htons(len);
-            pkt_length = len;    
+            numBytes += 8;
+            SetWord16(OFFSET_LENGTH, numBytes);
+            ProtoPkt::SetLength(numBytes);   
         }
         void FinalizeChecksum(ProtoPktIP& ipPkt)
             {SetChecksum(ComputeChecksum(ipPkt));}

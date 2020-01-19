@@ -31,7 +31,7 @@ bool ProtoPktETH::InitIntoBuffer(UINT32*         bufferPtr,
     {
         return false;
     }
-    memset(buffer_ptr, 0, 14);
+    memset(AccessBuffer(), 0, 14);
     SetLength(14);
     return true;
 }  // end ProtoPktETH::InitIntoBuffer()

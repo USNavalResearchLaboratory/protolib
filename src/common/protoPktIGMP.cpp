@@ -111,8 +111,7 @@ bool ProtoPktIGMP::GetSourceAddress(UINT16 index, ProtoAddress& srcAddr) const
 {
     if (index <  GetNumSources())
     {
-        const char* ptr = (const char*)buffer_ptr + OFFSET_SRC_LIST + index*4;
-        srcAddr.SetRawHostAddress(ProtoAddress::IPv4, ptr, 4);
+        srcAddr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OFFSET_SRC_LIST + index*4), 4);
         return true;
     }
     else
@@ -122,7 +121,7 @@ bool ProtoPktIGMP::GetSourceAddress(UINT16 index, ProtoAddress& srcAddr) const
     }
 }  // end ProtoPktIGMP::GetSourceAddress()
 
-bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bool first) const
+bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bool first)
 {
     if (0 == GetNumRecords()) return false;
     UINT32* recordPtr;
@@ -130,14 +129,14 @@ bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bo
     if (first || (NULL == groupRecord.GetBuffer()))
     {
         // Point to first record
-        recordPtr = buffer_ptr + (OFFSET_REC_LIST >> 2);
+        recordPtr = AccessBuffer32(OFFSET_REC_LIST >> 2);
         bufferSpace = GetLength() - OFFSET_REC_LIST;
     }    
     else
     {   
         recordPtr = groupRecord.AccessBuffer() + (groupRecord.GetLength() >> 2);
         // Make sure it's in scope of this IGMP message size.
-        size_t offset = 4*(recordPtr - buffer_ptr);
+        size_t offset = 4*(recordPtr - GetBuffer32());
         if (offset > GetLength())
             return false;  // out of bounds
         bufferSpace = GetLength() - (unsigned int)offset;
@@ -186,7 +185,7 @@ bool ProtoPktIGMP::InitIntoBuffer(Type         type,
             AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
     }
     if (GetBufferLength() < minLength) return false;
-    memset(buffer_ptr, 0, minLength);
+    memset(AccessBuffer(), 0, minLength);
     SetUINT8(OFFSET_TYPE, type);
     SetLength(minLength);
     if (QUERY == type)
@@ -234,7 +233,7 @@ void ProtoPktIGMP::SetMaxResponseTime(double seconds, bool updateChecksum)
 
 void ProtoPktIGMP::SetGroupAddress(ProtoAddress* groupAddr, bool updateChecksum)
 {
-    char* ptr = ((char*)buffer_ptr) + OFFSET_GROUP;
+    char* ptr = AccessBuffer(OFFSET_GROUP);
     if ((NULL == groupAddr) || (ProtoAddress::IPv4 != groupAddr->GetType()) || (!groupAddr->IsMulticast()))
         memset(ptr, 0, 4);
     else 
@@ -327,7 +326,7 @@ bool ProtoPktIGMP::AppendSourceAddress(ProtoAddress& srcAddr, bool updateChecksu
         PLOG(PL_ERROR, "ProtoPktIGMP::AppendSourceAddress() error: insufficient buffer space\n");
         return false;
     }
-    memcpy(((char*)buffer_ptr) + offset, srcAddr.GetRawHostAddress(), 4);
+    memcpy(AccessBuffer(offset), srcAddr.GetRawHostAddress(), 4);
     SetUINT16(OFFSET_NUM_SRC, numSrc + 1);
     SetLength(newLength);
     if (updateChecksum) ComputeChecksum();
@@ -341,7 +340,7 @@ bool ProtoPktIGMP::AttachGroupRecord(GroupRecord& groupRecord)
 {
     UINT32 currentLength = GetLength();
     ASSERT(0 == (currentLength & 0x00000003));  // should be multiple of 4
-    UINT32* bufferPtr = buffer_ptr + (currentLength >> 2);
+    UINT32* bufferPtr = AccessBuffer32(currentLength >> 2);
     unsigned int bufferSpace = GetBufferLength() - currentLength;
     if (!groupRecord.InitIntoBuffer(bufferPtr, bufferSpace))
     {
@@ -361,13 +360,12 @@ bool ProtoPktIGMP::AppendGroupRecord(const GroupRecord& groupRecord, bool update
         PLOG(PL_ERROR, "ProtoPktIGMP::AppendGroupRecord() error: insufficient buffer space\n");
         return false;
     }    
-    char* ptr = ((char*)buffer_ptr + currentLength);
+    char* ptr = AccessBuffer(currentLength);
     // Check if we need to copy since this is _not_ an attached group record
     if (ptr != groupRecord.GetBuffer())
         memcpy(ptr, groupRecord.GetBuffer(), groupRecord.GetLength());
     SetUINT16(OFFSET_NUM_REC, GetNumRecords() + 1);    
     SetLength(currentLength + groupRecord.GetLength());
-    
     if (updateChecksum) ComputeChecksum();
     return true;
 }  // end ProtoPktIGMP::AppendGroupRecord()
@@ -445,7 +443,7 @@ bool ProtoPktIGMP::GroupRecord::GetSourceAddress(UINT16 index, ProtoAddress& src
         srcAddr.Invalidate();        
         return false;
     }
-    const char* ptr = (char*)buffer_ptr + OFFSET_SRC_LIST + (index << 2);
+    const char* ptr = GetBuffer(OFFSET_SRC_LIST + (index << 2));
     srcAddr.SetRawHostAddress(ProtoAddress::IPv4, ptr, 4);
     return true;
 }  // end ProtoPktIGMP::GroupRecord::GetSourceAddress()
@@ -463,14 +461,14 @@ bool ProtoPktIGMP::GroupRecord::InitIntoBuffer(UINT32*      bufferPtr,
             AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
     }
     if (GetBufferLength() < minLength) return false;
-    memset(buffer_ptr, 0, OFFSET_SRC_LIST);
+    memset(AccessBuffer(), 0, OFFSET_SRC_LIST);
     SetLength(minLength);
     return true;
 }  // end ProtoPktIGMP::GroupRecord::InitIntoBuffer()
 
 void ProtoPktIGMP::GroupRecord::SetGroupAddress(const ProtoAddress* groupAddr)
 {
-    char* ptr = ((char*)buffer_ptr) + OFFSET_GROUP;
+    char* ptr = AccessBuffer(OFFSET_GROUP);
     if ((NULL == groupAddr) || (ProtoAddress::IPv4 != groupAddr->GetType()) || (!groupAddr->IsMulticast()))
         memset(ptr, 0, 4);
     else 
@@ -500,7 +498,7 @@ bool ProtoPktIGMP::GroupRecord::AppendSourceAddress(const ProtoAddress& srcAddr)
         PLOG(PL_ERROR, "ProtoPktIGMP::GroupRecord::AppendSourceAddress() error: insufficient buffer space\n");
         return false;
     }
-    memcpy(((char*)buffer_ptr) + offset, srcAddr.GetRawHostAddress(), 4);
+    memcpy(AccessBuffer(offset), srcAddr.GetRawHostAddress(), 4);
     SetUINT16(OFFSET_NUM_SRC, numSrc + 1);
     SetLength(newLength);
     return true;
@@ -521,7 +519,7 @@ bool ProtoPktIGMP::GroupRecord::AppendAuxiliaryData(const char* data, UINT16 len
         PLOG(PL_ERROR, "ProtoPktIGMP::GroupRecord::AppendAuxiliaryData() error: insufficient buffer space\n");
         return false;
     }
-    char* ptr = ((char*)buffer_ptr) + currentLength;
+    char* ptr = AccessBuffer(currentLength);
     memcpy(ptr, data, len);
     SetUINT8(OFFSET_AUX_LEN,len >> 2);
     SetLength(currentLength + len);

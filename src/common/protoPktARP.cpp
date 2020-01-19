@@ -55,7 +55,7 @@ bool ProtoPktARP::GetSenderHardwareAddress(ProtoAddress& addr) const
     {
         case ETHERNET:
         case IEEE802:
-            addr.SetRawHostAddress(ProtoAddress::ETH, ((char*)buffer_ptr) + OffsetSenderHardwareAddr(), GetHardwareAddrLen());
+            addr.SetRawHostAddress(ProtoAddress::ETH, GetBuffer(OffsetSenderHardwareAddr()), GetHardwareAddrLen());
             break;
         default:
             PLOG(PL_ERROR, "ProtoPktARP::GetSenderHardwareAddress() error: unsupported hardware type\n");
@@ -72,11 +72,11 @@ bool ProtoPktARP::GetSenderProtocolAddress(ProtoAddress& addr) const
         case ProtoPktETH::IPv6:
             if (4 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv4, ((char*)buffer_ptr) + OffsetSenderProtocolAddr(), 4);
+                addr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OffsetSenderProtocolAddr()), 4);
             }
             else if (16 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv6, ((char*)buffer_ptr) + OffsetSenderProtocolAddr(), 16);
+                addr.SetRawHostAddress(ProtoAddress::IPv6, GetBuffer(OffsetSenderProtocolAddr()), 16);
             }
             else
             {
@@ -97,7 +97,7 @@ bool ProtoPktARP::GetTargetHardwareAddress(ProtoAddress& addr) const
     {
         case ETHERNET:
         case IEEE802:
-            addr.SetRawHostAddress(ProtoAddress::ETH, ((char*)buffer_ptr) + OffsetTargetHardwareAddr(), GetHardwareAddrLen());
+            addr.SetRawHostAddress(ProtoAddress::ETH, GetBuffer(OffsetTargetHardwareAddr()), GetHardwareAddrLen());
             break;
         default:
             PLOG(PL_ERROR, "ProtoPktARP::GetTargetHardwareAddress() error: unsupported hardware type\n");
@@ -114,11 +114,11 @@ bool ProtoPktARP::GetTargetProtocolAddress(ProtoAddress& addr) const
         case ProtoPktETH::IPv6:
             if (4 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv4, ((char*)buffer_ptr) + OffsetTargetProtocolAddr(), 4);
+                addr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OffsetTargetProtocolAddr()), 4);
             }
             else if (16 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv6, ((char*)buffer_ptr) + OffsetTargetProtocolAddr(), 16);
+                addr.SetRawHostAddress(ProtoAddress::IPv6, GetBuffer(OffsetTargetProtocolAddr()), 16);
             }
             else
             {
@@ -163,7 +163,7 @@ bool ProtoPktARP::SetSenderHardwareAddress(const ProtoAddress& addr)
     }
     SetHardwareType(ETHERNET);
     SetHardwareAddrLen(addr.GetLength());
-    memcpy(((char*)buffer_ptr) + OffsetSenderHardwareAddr(), addr.GetRawHostAddress(), addr.GetLength());
+    memcpy(AccessBuffer(OffsetSenderHardwareAddr()), addr.GetRawHostAddress(), addr.GetLength());
     SetLength(GetLength() + addr.GetLength());
     return true;
 }  // end ProtoPktARP::SetSenderHardwareAddress()
@@ -185,7 +185,7 @@ bool ProtoPktARP::SetSenderProtocolAddress(const ProtoAddress& addr)
     }
     SetEtherType(etherType);
     SetProtocolAddrLen(addr.GetLength());
-    memcpy(((char*)buffer_ptr) + OffsetSenderProtocolAddr(), addr.GetRawHostAddress(), addr.GetLength());
+    memcpy(AccessBuffer(OffsetSenderProtocolAddr()), addr.GetRawHostAddress(), addr.GetLength());
     SetLength(GetLength() + addr.GetLength());
     return true;
 }  // end ProtoPktARP::SetSenderProtocolAddress()
@@ -200,7 +200,7 @@ bool ProtoPktARP::SetTargetHardwareAddress(const ProtoAddress& addr)
     }
     SetHardwareType(ETHERNET);
     SetHardwareAddrLen(addr.GetLength());
-    memcpy(((char*)buffer_ptr) + OffsetTargetHardwareAddr(), addr.GetRawHostAddress(), addr.GetLength());
+    memcpy(AccessBuffer(OffsetTargetHardwareAddr()), addr.GetRawHostAddress(), addr.GetLength());
     SetLength(GetLength() + addr.GetLength());
     return true;
 }  // end ProtoPktARP::SetTargetHardwareAddress()
@@ -222,7 +222,7 @@ bool ProtoPktARP::SetTargetProtocolAddress(const ProtoAddress& addr)
     }
     SetEtherType(etherType);
     SetProtocolAddrLen(addr.GetLength());
-    memcpy(((char*)buffer_ptr) + OffsetTargetProtocolAddr(), addr.GetRawHostAddress(), addr.GetLength());
+    memcpy(AccessBuffer(OffsetTargetProtocolAddr()), addr.GetRawHostAddress(), addr.GetLength());
     SetLength(GetLength() + addr.GetLength());
     return true;
 }  // end ProtoPktARP::SetTargetProtocolAddress()

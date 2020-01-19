@@ -50,19 +50,19 @@ class ProtoPktARP : public ProtoPkt
                             bool freeOnDestruct     = false);
         
         HardwareType GetHardwareType() const
-            {return ((HardwareType)ntohs(((UINT16*)buffer_ptr)[OFFSET_HRD]));}
+            {return (HardwareType)GetUINT16(GetBuffer16(OFFSET_HRD));}
         
         ProtoPktETH::Type GetEtherType() const
-            {return ((ProtoPktETH::Type)ntohs(((UINT16*)buffer_ptr)[OFFSET_PRO]));}
+            {return (ProtoPktETH::Type)GetUINT16(GetBuffer16(OFFSET_PRO));} 
         
         UINT8 GetHardwareAddrLen() const
-            {return ((UINT8*)buffer_ptr)[OFFSET_HLN];}
+            {return GetUINT8(OFFSET_HLN);}
         
         UINT8 GetProtocolAddrLen() const
-            {return ((UINT8*)buffer_ptr)[OFFSET_PLN];}
+            {return GetUINT8(OFFSET_PLN);}
         
         Opcode GetOpcode() const
-            {return ((Opcode)ntohs(((UINT16*)buffer_ptr)[OFFSET_OP]));}
+            {return (Opcode)GetUINT16(OFFSET_OP);}
         
         bool GetSenderHardwareAddress(ProtoAddress& addr) const;
         
@@ -79,7 +79,7 @@ class ProtoPktARP : public ProtoPkt
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetOpcode(Opcode opcode)
-            {((UINT16*)buffer_ptr)[OFFSET_OP] = htons((UINT16)opcode);}
+            {SetUINT16(AccessBuffer16(OFFSET_OP), (UINT16)opcode);}
         bool SetSenderHardwareAddress(const ProtoAddress& addr);
         bool SetSenderProtocolAddress(const ProtoAddress& addr);
         bool SetTargetHardwareAddress(const ProtoAddress& addr);
@@ -88,13 +88,15 @@ class ProtoPktARP : public ProtoPkt
         
     private:
         void SetHardwareType(HardwareType hwType)
-            {((UINT16*)buffer_ptr)[OFFSET_HRD] = htons((UINT16)hwType);}
+            {SetUINT16(AccessBuffer16(OFFSET_HRD), (UINT16)hwType);}
+    
+    
         void SetEtherType(ProtoPktETH::Type etherType)  // protocol address type
-            {((UINT16*)buffer_ptr)[OFFSET_PRO] = htons((UINT16)etherType);}
-        void SetHardwareAddrLen(UINT8 numBytes) const
-            {((UINT8*)buffer_ptr)[OFFSET_HLN] = numBytes;}
-        void SetProtocolAddrLen(UINT8 numBytes) const
-            {((UINT8*)buffer_ptr)[OFFSET_PLN] = numBytes;}
+            {SetUINT16(AccessBuffer16(OFFSET_PRO), (UINT16)etherType);}
+        void SetHardwareAddrLen(UINT8 numBytes) 
+            {SetUINT8(OFFSET_HLN, numBytes);}
+        void SetProtocolAddrLen(UINT8 numBytes)
+            {SetUINT8(OFFSET_PLN, numBytes);}
            
         enum
         {
