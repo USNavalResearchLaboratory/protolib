@@ -133,11 +133,11 @@ class ProtoTree : public ProtoIterable
         static ProtoTree::Endian GetNativeEndian()
         {
 #if BYTE_ORDER == LITTLE_ENDIAN
-                    return ProtoTree::ENDIAN_LITTLE;
+            return ProtoTree::ENDIAN_LITTLE;
 #else
-                    return ProtoTree::ENDIAN_BIG;
-#endif  // end if/else (BYTE_ORDER == LITTLE_ENDIAN)                
-        }
+            return ProtoTree::ENDIAN_BIG;
+#endif // end if/else (BYTE_ORDER == LITTLE_ENDIAN)                
+        }  // end ProtoTree::GetNativeEndian()
         
         /**
          * @class Item
@@ -155,11 +155,13 @@ class ProtoTree : public ProtoIterable
                 Item();
                 virtual ~Item();
                 
-                // Require overrides
+                // Required overrides
                 virtual const char* GetKey() const = 0;
                 virtual unsigned int GetKeysize() const = 0;
                 
                 // Optional overrides 
+                // TBD - make the GetEndian() member of ProtoTree instead
+                // i.e., just like UseSignBit() and UseComplementTwo()
 #ifdef WIN32
                 // Some windows compilers don't like the other format
                 virtual Endian GetEndian() const;
@@ -168,7 +170,6 @@ class ProtoTree : public ProtoIterable
 #endif
                 // Returns how deep in its tree this Item lies
                 unsigned int GetDepth() const;
-                
                 
                 // Debug helper for keys that are strings
                 const char* GetKeyText() const
@@ -676,4 +677,31 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
         
 };  // end class ProtoSortedTreeTemplate
 
+// Here's an example use of ProtoSortedTree configured to keep a table of items indexed
+// by a "double" key.  Note that multiple equal-valued items _can_ be included in a 
+// ProtoSortedTree (the basic ProtoTree only allows a single item with a given key).
+/*
+class ExampleItem : public ProtoSortedTree::Item
+{
+    public:
+        ExampleItem(double key);
+            
+    private:
+        const char* GetKey() const
+            {return (char*)&item_key;}
+        unsigned int GetKeysize() const
+            {return (sizeof(double) << 3);}
+        double  item_key;
+};  // end class ExampleItem
+
+class ExampleTree : public ProtoSortedTreeTemplate<ExampleItem>
+{
+    private:
+        // These configure the key interpretation to properly sort "double" type key values
+        virtual bool UseSignBit() const {return true;}
+        virtual bool UseComplement2() const {return false;}
+        virtual ProtoTree::Endian GetEndian() const {return ProtoTree::GetNativeEndian();}
+};
+*/
+        
 #endif // PROTO_TREE
