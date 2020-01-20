@@ -55,13 +55,13 @@ class ProtoPktTCP : public ProtoPkt
             {return GetWord16(OFFSET_URGENT);}
         bool HasOptions() const
             {return (OffsetPayload() > 5);}
-        const UINT32* GetOptions() const
+        const void* GetOptions() const
             {return GetBuffer32(OFFSET_OPTIONS);}
         UINT16 GetPayloadLength() const
             {return (GetLength() - (OffsetPayload() << 2));}
-        const UINT32* GetPayload() const
+        const void* GetPayload() const
             {return GetBuffer32(OffsetPayload());}
-        UINT32* AccessPayload()
+        void* AccessPayload()
             {return AccessBuffer32(OffsetPayload());}
         UINT16 ComputeChecksum(ProtoPktIP& ipPkt) const;
         bool ChecksumIsValid(ProtoPktIP& ipPkt) const

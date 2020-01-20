@@ -63,11 +63,11 @@ class ProtoPktIGMP : public ProtoPkt
                     {return GetUINT16(OFFSET_NUM_SRC);}
                 bool GetGroupAddress(ProtoAddress& groupAddr)
                 {
-                    groupAddr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OFFSET_GROUP), 4);
+                    groupAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OFFSET_GROUP), 4);
                     return groupAddr.IsMulticast();
                 }
                 bool GetSourceAddress(UINT16 index, ProtoAddress& srcAddr) const;
-                const char* GetAuxData() const
+                const void* GetAuxData() const
                     {return GetBuffer(OffsetAuxData());}
                 
                 // Use these to create group records
@@ -75,7 +75,7 @@ class ProtoPktIGMP : public ProtoPkt
                                     unsigned int numBytes = 0, 
                                     bool         freeOnDestruct = false);
                 void SetType(Type type)
-                    {SetUINT8(OFFSET_TYPE, type);}
+                    {SetUINT8(OFFSET_TYPE, (UINT8)type);}
                 void SetGroupAddress(const ProtoAddress* groupAddr = NULL);
                 bool AppendSourceAddress(const ProtoAddress& srcAddr);
                 bool AppendAuxiliaryData(const char* data, UINT16 len);
@@ -109,7 +109,7 @@ class ProtoPktIGMP : public ProtoPkt
         // For QUERY, REPORT_V1, REPORT_V2, LEAVE only
         bool GetGroupAddress(ProtoAddress& groupAddr) const
         {
-            groupAddr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OFFSET_GROUP), 4);
+            groupAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OFFSET_GROUP), 4);
             return groupAddr.IsMulticast();
         }
         // These 5 are for IGMPv3 QUERY messages only
@@ -159,6 +159,7 @@ class ProtoPktIGMP : public ProtoPkt
              
     private:
         // shared offsets for IGMP query, report, and leave messages
+        // (all UINT8 offsets used here)
         enum
         {
             OFFSET_TYPE     = 0,

@@ -83,14 +83,14 @@ class ProtoPkt
         // alignment check and different access methods to 
         // guarantee safety regardless of alignment.
         
-        const char* GetBuffer() const 
-            {return (char*)buffer_ptr;} 
-        const char* GetBuffer(unsigned int byteOffset) const
-            {return GetBuffer() + byteOffset;}
-        char* AccessBuffer() 
-            {return (char*)buffer_ptr;}  
-        char* AccessBuffer(unsigned int offset)
-            {return (((char*)buffer_ptr) + offset);}
+        const void* GetBuffer() const 
+            {return (void*)buffer_ptr;} 
+        const void* GetBuffer(unsigned int byteOffset) const
+            {return (char*)buffer_ptr + byteOffset;}
+        void* AccessBuffer() 
+            {return (void*)buffer_ptr;}  
+        void* AccessBuffer(unsigned int offset)
+            {return (char*)buffer_ptr + offset;}
         
         // These methods get/set fields by byte offsets
         UINT8 GetUINT8(unsigned int byteOffset) const
@@ -109,23 +109,21 @@ class ProtoPkt
         void SetUINT32(unsigned int byteOffset, UINT32 value)
             {SetUINT32(AccessBuffer(byteOffset), value);}
         
-        // These methods get/set fields by aligned word offsets
+        // These methods get/set fields by word offsets
         UINT16 GetWord16(unsigned int wordOffset) const
-            {return GetUINT16(GetBuffer16(wordOffset));}
-        UINT16& AccessWord16(unsigned int wordOffset)
-            {return AccessBuffer16(wordOffset)[0];}
+            {return GetUINT16((UINT16*)buffer_ptr + wordOffset);}
         void SetWord16(unsigned int wordOffset, UINT16 value) 
-            {SetUINT16(AccessBuffer16(wordOffset), value);}
+            {SetUINT16((UINT16*)buffer_ptr + wordOffset, value);}
         UINT32 GetWord32(unsigned int wordOffset) const
-            {return GetUINT32(GetBuffer32(wordOffset));}
+            {return GetUINT32((UINT32*)buffer_ptr + wordOffset);}
         void SetWord32(unsigned int wordOffset, UINT32 value) 
-            {SetUINT32(AccessBuffer32(wordOffset), value);}
+            {SetUINT32((UINT32*)buffer_ptr + wordOffset, value);}
         
         // Note the pointers returned by these are only properly
-        // aligned pointers if the ProtoPkt was initialized with
+        // aligned pointers iff the ProtoPkt was initialized with
         // a properly aligned pointer
         // TBD - make these return void* to be more explicit???
-        const UINT16* GetBuffer16() const 
+        /*const UINT16* GetBuffer16() const 
             {return (UINT16*)buffer_ptr;}
         const UINT16* GetBuffer16(unsigned int wordOffset) const
             {return GetBuffer16() + wordOffset;}
@@ -142,8 +140,20 @@ class ProtoPkt
             {return buffer_ptr;}
         UINT32* AccessBuffer32(unsigned int wordOffset)
             {return AccessBuffer32() + wordOffset;}
+        */
+       
+        const void* GetBuffer16(unsigned int wordOffset) const
+            {return (void*)((const UINT16*)buffer_ptr + wordOffset);}
+        void* AccessBuffer16(unsigned int wordOffset)
+            {return (void*)((const UINT16*)buffer_ptr + wordOffset);}         
             
-        // Pointer alignment checks to verify safe access
+        const void* GetBuffer32(unsigned int wordOffset) const
+            {return (void*)((const UINT32*)buffer_ptr + wordOffset);}
+        void* AccessBuffer32(unsigned int wordOffset)
+            {return (void*)((const UINT32*)buffer_ptr + wordOffset);}
+                
+                
+        // Pointer alignment checks to determine safe access strategy
         static inline bool IsAligned16(const void* pointer)
             {return (0 == ((uintptr_t)pointer & 1));}
         
@@ -151,6 +161,8 @@ class ProtoPkt
             {return (0 == ((uintptr_t)pointer & 3));}
         
         // These methods get/set fields by pointer directly
+        // TBD - benchmark this code that does its own
+        // alignment checking versus just calling memcpy() always.
         static inline UINT16 GetUINT16(const void* ptr) 
         {
             if (IsAligned16(ptr))

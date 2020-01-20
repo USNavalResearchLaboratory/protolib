@@ -50,10 +50,10 @@ class ProtoPktARP : public ProtoPkt
                             bool freeOnDestruct     = false);
         
         HardwareType GetHardwareType() const
-            {return (HardwareType)GetUINT16(GetBuffer16(OFFSET_HRD));}
+            {return (HardwareType)GetWord16(OFFSET_HRD);}
         
         ProtoPktETH::Type GetEtherType() const
-            {return (ProtoPktETH::Type)GetUINT16(GetBuffer16(OFFSET_PRO));} 
+            {return (ProtoPktETH::Type)GetWord16(OFFSET_PRO);} 
         
         UINT8 GetHardwareAddrLen() const
             {return GetUINT8(OFFSET_HLN);}
@@ -62,7 +62,7 @@ class ProtoPktARP : public ProtoPkt
             {return GetUINT8(OFFSET_PLN);}
         
         Opcode GetOpcode() const
-            {return (Opcode)GetUINT16(OFFSET_OP);}
+            {return (Opcode)GetWord16(OFFSET_OP);}
         
         bool GetSenderHardwareAddress(ProtoAddress& addr) const;
         
@@ -79,7 +79,7 @@ class ProtoPktARP : public ProtoPkt
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetOpcode(Opcode opcode)
-            {SetUINT16(AccessBuffer16(OFFSET_OP), (UINT16)opcode);}
+            {SetWord16(OFFSET_OP, (UINT16)opcode);}
         bool SetSenderHardwareAddress(const ProtoAddress& addr);
         bool SetSenderProtocolAddress(const ProtoAddress& addr);
         bool SetTargetHardwareAddress(const ProtoAddress& addr);
@@ -88,11 +88,9 @@ class ProtoPktARP : public ProtoPkt
         
     private:
         void SetHardwareType(HardwareType hwType)
-            {SetUINT16(AccessBuffer16(OFFSET_HRD), (UINT16)hwType);}
-    
-    
+            {SetWord16(OFFSET_HRD, (UINT16)hwType);}
         void SetEtherType(ProtoPktETH::Type etherType)  // protocol address type
-            {SetUINT16(AccessBuffer16(OFFSET_PRO), (UINT16)etherType);}
+            {SetWord16(OFFSET_PRO, (UINT16)etherType);}
         void SetHardwareAddrLen(UINT8 numBytes) 
             {SetUINT8(OFFSET_HLN, numBytes);}
         void SetProtocolAddrLen(UINT8 numBytes)

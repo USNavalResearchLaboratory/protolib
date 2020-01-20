@@ -334,18 +334,18 @@ class ProtoPktIPv4 : public ProtoPktIP
         const char* GetIDPtr() const
             {return ((char*)GetBuffer16(OFFSET_ID));}
         /// Helper methods for UDP checksum calculation, etc
-        const UINT32* GetSrcAddrPtr() const {return GetBuffer32(OFFSET_SRC_ADDR);}
-        const UINT32* GetDstAddrPtr() const {return GetBuffer32(OFFSET_DST_ADDR);}
+        const void* GetSrcAddrPtr() const 
+            {return GetBuffer32(OFFSET_SRC_ADDR);}
+        const void* GetDstAddrPtr() const
+            {return GetBuffer32(OFFSET_DST_ADDR);}
         
         // (TBD) provide methods to get any header extensions
         
         UINT16 GetPayloadLength() const {return (GetTotalLength() - GetHeaderLength());}
-        const UINT32* GetPayload32() const
-            {return GetBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
-        const char* GetPayload() const 
-            {return ((const char*)GetPayload32());}
-        UINT32* AccessPayload() 
-            {return AccessBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
+        const void* GetPayload() const 
+            {return ((void*)GetBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f));}
+        void* AccessPayload() 
+            {return ((void*)AccessBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f));}
         
         /// Use these to build a packet
         bool InitIntoBuffer(void*           bufferPtr = NULL, 
@@ -741,20 +741,20 @@ class ProtoPktIPv6 : public ProtoPktIP
             {return GetUINT8(OFFSET_HOP_LIMIT);}
         void GetSrcAddr(ProtoAddress& addr) const
             {addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)GetBuffer32(OFFSET_SRC_ADDR), 16);}
-        const UINT32* GetSrcAddrPtr() const
+        const void* GetSrcAddrPtr() const
             {return GetBuffer32(OFFSET_SRC_ADDR);}
         void GetDstAddr(ProtoAddress& addr) const
                 {addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)GetBuffer32(OFFSET_DST_ADDR), 16);}
-        const UINT32* GetDstAddrPtr() const
+        const void* GetDstAddrPtr() const
             {return GetBuffer32(OFFSET_DST_ADDR);}
                 
         bool HasExtendedHeader() const 
             {return IsExtension(GetNextHeader());}
         
-        const UINT32* GetPayload() const 
-            {return GetBuffer32(BASE_HDR_LENGTH/4);}
-        UINT32* AccessPayload() 
-            {return AccessBuffer32(BASE_HDR_LENGTH/4);}
+        const void* GetPayload() const 
+            {return (void*)GetBuffer32(BASE_HDR_LENGTH/4);}
+        void* AccessPayload() 
+            {return (void*)AccessBuffer32(BASE_HDR_LENGTH/4);}
         UINT16 GetPayloadLength() const
             {return GetWord16(OFFSET_LENGTH);}
         
@@ -878,14 +878,14 @@ class ProtoPktAUTH : public ProtoPktIPv6::Extension
         UINT32 GetSPI() const
             {return GetWord32(OFFSET_SPI);}
         
-        const UINT32* GetSPIPtr() const
-            {return GetBuffer32(OFFSET_SPI);}
+        const char* GetSPIPtr() const
+            {return (char*)GetBuffer32(OFFSET_SPI);}
         
         UINT32 GetSequence() const
             {return GetWord32(OFFSET_SEQUENCE);}
         
-        const UINT32* GetSequencePtr() const
-            {return GetBuffer32(OFFSET_SEQUENCE);}
+        const char* GetSequencePtr() const
+            {return (char*)GetBuffer32(OFFSET_SEQUENCE);}
         
     private:
         enum
@@ -931,14 +931,14 @@ class ProtoPktESP : public ProtoPkt
         UINT32 GetSPI() const
             {return GetWord32(OFFSET_SPI);}
         
-        const UINT32* GetSPIPtr() const
-            {return GetBuffer32(OFFSET_SPI);}
+        const char* GetSPIPtr() const
+            {return (char*)GetBuffer32(OFFSET_SPI);}
         
         UINT32 GetSequence() const
             {return GetWord32(OFFSET_SEQUENCE);}
         
-        const UINT32* GetSequencePtr() const
-            {return GetBuffer32(OFFSET_SEQUENCE);}
+        const char* GetSequencePtr() const
+            {return (char*)GetBuffer32(OFFSET_SEQUENCE);}
         
     private:
         enum
@@ -1004,10 +1004,10 @@ class ProtoPktMobile : public ProtoPkt
         
         UINT16 GetPayloadLength() const
             {return GetLength() - 4*OffsetPayload();}
-        const UINT32* GetPayload() const
-            {return GetBuffer32(OffsetPayload());}
-        UINT32* AccessPayload()
-            {return AccessBuffer32(OffsetPayload());}
+        const void* GetPayload() const
+            {return (void*)GetBuffer32(OffsetPayload());}
+        void* AccessPayload()
+            {return (void*)AccessBuffer32(OffsetPayload());}
         
     private:
         enum 
@@ -1153,10 +1153,10 @@ class ProtoPktUDP : public ProtoPkt
             {return GetWord16(OFFSET_CHECKSUM);}
         UINT16 GetPayloadLength() const
             {return (GetWord16(OFFSET_LENGTH) - 8);}
-        const UINT32* GetPayload() const
-            {return GetBuffer32(OFFSET_PAYLOAD);}
-        UINT32* AccessPayload()
-            {return AccessBuffer32(OFFSET_PAYLOAD);}
+        const void* GetPayload() const
+            {return (void*)GetBuffer32(OFFSET_PAYLOAD);}
+        void* AccessPayload()
+            {return (void*)AccessBuffer32(OFFSET_PAYLOAD);}
         UINT16 ComputeChecksum(ProtoPktIP& ipPkt) const;
         bool ChecksumIsValid(ProtoPktIP& ipPkt) const
             {return (GetChecksum() == ComputeChecksum(ipPkt));}

@@ -134,7 +134,7 @@ ProtoPktIPv4::ProtoPktIPv4(void*        bufferPtr,
 }
 
 ProtoPktIPv4::ProtoPktIPv4(ProtoPktIP & ipPkt)
- : ProtoPktIP(ipPkt.AccessBuffer32(), ipPkt.GetBufferLength())
+ : ProtoPktIP(ipPkt.AccessBuffer(), ipPkt.GetBufferLength())
 {
     InitFromBuffer();
 }
@@ -560,7 +560,7 @@ ProtoPktIPv6::ProtoPktIPv6(void*        bufferPtr,
 }
 
 ProtoPktIPv6::ProtoPktIPv6(ProtoPktIP & ipPkt)
- : ProtoPktIP(ipPkt.AccessBuffer32(), ipPkt.GetBufferLength()),
+ : ProtoPktIP(ipPkt.AccessBuffer(), ipPkt.GetBufferLength()),
    ext_pending(false)
 {
     InitFromBuffer();
@@ -720,10 +720,10 @@ bool ProtoPktIPv6::PrependExtension(Extension& ext)
     ext.SetNextHeader(GetNextHeader());
     // 3) Move the current payload to make room for the extension
     UINT16 payloadLength = GetPayloadLength();
-    char* ptr = AccessBuffer(40);
-    memmove(ptr+ext.GetLength(), ptr, payloadLength);
+    void* ptr = AccessBuffer(40);
+    memmove((char*)ptr+ext.GetLength(), ptr, payloadLength);
     // 4) Copy extension buffer_ptr into space made available
-    memcpy(ptr, (const char*)ext.GetBuffer(), ext.GetLength());
+    memcpy(ptr, (char*)ext.GetBuffer(), ext.GetLength());
     SetNextHeader(ext.GetType());
     SetPayloadLength(payloadLength + ext.GetLength());
     return true;
@@ -796,11 +796,11 @@ bool ProtoPktIPv6::AppendExtension(Extension& ext)
         ext.SetNextHeader(GetNextHeader());
         SetNextHeader(ext.GetType());
     }
-    char* ptr = AccessBuffer(hdrBytes);
+    void* ptr = AccessBuffer(hdrBytes);
     UINT16 payloadLength = GetPayloadLength();
     UINT16 moveLength = payloadLength + 40 - hdrBytes;
-    memmove(ptr + ext.GetLength(), ptr, moveLength);
-    memcpy(ptr, (const char*)ext.GetBuffer(), ext.GetLength());
+    memmove((char*)ptr + ext.GetLength(), ptr, moveLength);
+    memcpy(ptr, (char*)ext.GetBuffer(), ext.GetLength());
     SetPayloadLength(payloadLength + ext.GetLength());
     return true;
 }  // end ProtoPktIPv6::AppendExtension()
@@ -970,7 +970,7 @@ ProtoPktIPv6::Option* ProtoPktIPv6::Extension::AddOption(Option::Type optType)
             Option::Type otype = opt.GetType();
             if ((Option::PAD1 == otype) || (Option::PADN == otype))
             {
-                unsigned int extLen = (unsigned int)(opt.GetBuffer() - GetBuffer());
+                size_t extLen = (char*)opt.GetBuffer() - (char*)GetBuffer();
                 if (extLen != (ProtoPkt::GetLength() - opt.GetLength()))
                     PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() warning: extension used multiple PADS ?!\n");
                 ProtoPkt::SetLength(extLen);
@@ -991,7 +991,7 @@ ProtoPktIPv6::Option* ProtoPktIPv6::Extension::AddOption(Option::Type optType)
         PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() error: insufficient buffer space\n");
         return NULL;
     }        
-    opt_temp.InitIntoBuffer(optType, AccessBuffer(ProtoPkt::GetLength()), bufferSpace);
+    opt_temp.InitIntoBuffer(optType, (char*)AccessBuffer(ProtoPkt::GetLength()), bufferSpace);
     if (Option::PAD1 != optType) opt_temp.SetData(NULL, 0);
     opt_pending = true;
     return &opt_temp;
@@ -1012,7 +1012,7 @@ bool ProtoPktIPv6::Extension::ReplaceOption(Option& oldOpt, Option& newOpt)
             Option::Type otype = opt.GetType();
             if ((Option::PAD1 == otype) || (Option::PADN == otype))
             {
-                unsigned int extLen = (unsigned int)(opt.GetBuffer() - GetBuffer());
+                size_t extLen = (char*)opt.GetBuffer() - (char*)GetBuffer();
                 if (extLen != (ProtoPkt::GetLength() - opt.GetLength()))
                     PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() warning: extension used multiple PADS ?!\n");
                 ProtoPkt::SetLength(extLen);
@@ -1831,7 +1831,7 @@ bool ProtoPktUDP::InitFromPacket(ProtoPktIP& ipPkt)
                     extHeaderLength += ext.GetLength();
                     if (ProtoPktIP::UDP == ext.GetNextHeader())
                     {
-                        UINT32* udpBuffer = ip6Pkt.AccessPayload() + (extHeaderLength >> 2);
+                        void* udpBuffer = (char*)ip6Pkt.AccessPayload() + extHeaderLength;
                         unsigned int udpLength = ip6Pkt.GetPayloadLength() - extHeaderLength;
                         return InitFromBuffer(udpBuffer, udpLength, false);
                     }

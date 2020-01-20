@@ -55,7 +55,7 @@ bool ProtoPktARP::GetSenderHardwareAddress(ProtoAddress& addr) const
     {
         case ETHERNET:
         case IEEE802:
-            addr.SetRawHostAddress(ProtoAddress::ETH, GetBuffer(OffsetSenderHardwareAddr()), GetHardwareAddrLen());
+            addr.SetRawHostAddress(ProtoAddress::ETH, (char*)GetBuffer(OffsetSenderHardwareAddr()), GetHardwareAddrLen());
             break;
         default:
             PLOG(PL_ERROR, "ProtoPktARP::GetSenderHardwareAddress() error: unsupported hardware type\n");
@@ -72,11 +72,11 @@ bool ProtoPktARP::GetSenderProtocolAddress(ProtoAddress& addr) const
         case ProtoPktETH::IPv6:
             if (4 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OffsetSenderProtocolAddr()), 4);
+                addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OffsetSenderProtocolAddr()), 4);
             }
             else if (16 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv6, GetBuffer(OffsetSenderProtocolAddr()), 16);
+                addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)GetBuffer(OffsetSenderProtocolAddr()), 16);
             }
             else
             {
@@ -97,7 +97,7 @@ bool ProtoPktARP::GetTargetHardwareAddress(ProtoAddress& addr) const
     {
         case ETHERNET:
         case IEEE802:
-            addr.SetRawHostAddress(ProtoAddress::ETH, GetBuffer(OffsetTargetHardwareAddr()), GetHardwareAddrLen());
+            addr.SetRawHostAddress(ProtoAddress::ETH, (char*)GetBuffer(OffsetTargetHardwareAddr()), GetHardwareAddrLen());
             break;
         default:
             PLOG(PL_ERROR, "ProtoPktARP::GetTargetHardwareAddress() error: unsupported hardware type\n");
@@ -114,11 +114,11 @@ bool ProtoPktARP::GetTargetProtocolAddress(ProtoAddress& addr) const
         case ProtoPktETH::IPv6:
             if (4 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OffsetTargetProtocolAddr()), 4);
+                addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OffsetTargetProtocolAddr()), 4);
             }
             else if (16 == GetProtocolAddrLen())
             {
-                addr.SetRawHostAddress(ProtoAddress::IPv6, GetBuffer(OffsetTargetProtocolAddr()), 16);
+                addr.SetRawHostAddress(ProtoAddress::IPv6, (char*)GetBuffer(OffsetTargetProtocolAddr()), 16);
             }
             else
             {

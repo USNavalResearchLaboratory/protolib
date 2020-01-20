@@ -81,7 +81,7 @@ class ProtoPktRIP : public ProtoPkt
                 {
                     OFFSET_FAMILY = 0,                   // UINT16 offset
                     OFFSET_TAG    = OFFSET_FAMILY + 1,   // UINT16 offset
-                    OFFSET_ADDR   = (OFFSET_TAG+1)/2, // UINT32 offset
+                    OFFSET_ADDR   = (OFFSET_TAG+1)/2,    // UINT32 offset
                     OFFSET_MASK   = OFFSET_ADDR + 1,     // UINT32 offset
                     OFFSET_NHOP   = OFFSET_MASK + 1,     // UINT32 offset
                     OFFSET_METRIC = OFFSET_NHOP + 1      // UINT32 offset

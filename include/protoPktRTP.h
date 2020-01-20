@@ -76,7 +76,7 @@ class ProtoPktRTP : public ProtoPkt
                 void SetType(UINT16 type)
                     {SetWord16(OFFSET_TYPE, type);}
                 bool SetData(const char* dataPtr, unsigned int numBytes);
-                UINT32* AccessData() 
+                void* AccessData() 
                     {return AccessBuffer32(OFFSET_DATA);}
                 void SetDataLength(UINT16 numBytes)
                 {
@@ -97,7 +97,7 @@ class ProtoPktRTP : public ProtoPkt
                     {return GetWord16(OFFSET_TYPE);}
                 unsigned int GetDataLength() const
                     {return (GetWord16(OFFSET_LENGTH) << 2);}
-                const UINT32* GetData() const
+                const void* GetData() const
                     {return GetBuffer32(OFFSET_DATA);}
                 
                 
@@ -169,7 +169,7 @@ class ProtoPktRTP : public ProtoPkt
 		unsigned int GetPayloadLength() const  
             {return (ProtoPkt::GetLength() - GetPaddingLength() - BASE_HDR_LEN - 4*GetCsrcCount() - GetExtensionLength());}
 
-        const UINT32* GetPayload() const 
+        const void* GetPayload() const 
             {return GetBuffer32(GetCsrcCount() + (BASE_HDR_LEN >> 2) + (GetExtensionLength() >> 2));}
 
         
@@ -220,7 +220,7 @@ class ProtoPktRTP : public ProtoPkt
             memcpy((char*)AccessPayload(), dataPtr, numBytes);
             ProtoPkt::SetLength(GetHeaderLength() + numBytes);
 		}
-        UINT32* AccessPayload() 
+        void* AccessPayload() 
             {return AccessBuffer32((BASE_HDR_LEN >> 2) + GetCsrcCount() + (GetExtensionLength() >> 2));}
         void SetPayloadLength(unsigned int numBytes)
             {ProtoPkt::SetLength(GetHeaderLength() + numBytes);}
@@ -241,13 +241,24 @@ class ProtoPktRTP : public ProtoPkt
             return (0 != ((UINT16)flag & GetWord16(OFFSET_FLAGS)));
         }
         void SetFlag(Flag flag)
-            {AccessWord16(OFFSET_FLAGS) |= htons((UINT16)flag);}
+        {
+            UINT16 word = GetWord16(OFFSET_FLAGS);
+            word |= (UINT16)flag;
+            SetWord16(OFFSET_FLAGS, word);
+        }
+            
         void ClearFlag(Flag flag)
-            {AccessWord16(OFFSET_FLAGS) &= htons(~(UINT16)flag);}
+        {
+            UINT16 word = GetWord16(OFFSET_FLAGS);
+            word &= ~(UINT16)flag;
+            SetWord16(OFFSET_FLAGS, word);
+        }
         void ClearAllFlags()
         {
             UINT16 clear = EXTENSION | PADDING | MARKER;
-            AccessWord16(OFFSET_FLAGS) &= htons(~clear);
+            UINT16 word = GetWord16(OFFSET_FLAGS);
+            word &= ~clear;
+            SetWord16(OFFSET_FLAGS, word);
         }
         enum
         {

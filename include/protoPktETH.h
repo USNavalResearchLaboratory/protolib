@@ -85,17 +85,17 @@ class ProtoPktETH : public ProtoPkt
             {return ProtoPkt::InitFromBuffer(frameLength, bufferPtr, numBytes, freeOnDestruct);}
         
         void GetSrcAddr(ProtoAddress& addr) 
-            {addr.SetRawHostAddress(ProtoAddress::ETH, AccessBuffer(OFFSET_SRC), ADDR_LEN);}
+            {addr.SetRawHostAddress(ProtoAddress::ETH, (char*)AccessBuffer(OFFSET_SRC), ADDR_LEN);}
         void GetDstAddr(ProtoAddress& addr) const
-            {addr.SetRawHostAddress(ProtoAddress::ETH, GetBuffer(OFFSET_DST), ADDR_LEN);}
+            {addr.SetRawHostAddress(ProtoAddress::ETH, (char*)GetBuffer(OFFSET_DST), ADDR_LEN);}
         Type GetType() const
-            {return (Type)GetUINT16(GetBuffer16(OFFSET_TYPE));}
+            {return (Type)GetWord16(OFFSET_TYPE);}
                 
         unsigned int GetPayloadLength() 
             {return (GetLength() - HDR_LEN);}
-        const char* GetPayload() const
+        const void* GetPayload() const
             {return GetBuffer(OFFSET_PAYLOAD);}
-        char* AccessPayload() 
+        void* AccessPayload() 
             {return AccessBuffer(OFFSET_PAYLOAD);}
         
         bool InitIntoBuffer(void*           bufferPtr = NULL, 
@@ -108,7 +108,7 @@ class ProtoPktETH : public ProtoPkt
             {memcpy(AccessBuffer(OFFSET_DST), dstAddr.GetRawHostAddress(), ADDR_LEN);}  
         
         void SetType(Type type)
-            {SetUINT16(AccessBuffer16(OFFSET_TYPE), (UINT16)type);}
+            {SetWord16(OFFSET_TYPE, (UINT16)type);}
         void SetPayload(const char* payload, unsigned int numBytes)
         {
             memcpy(AccessBuffer(OFFSET_PAYLOAD), payload, numBytes);

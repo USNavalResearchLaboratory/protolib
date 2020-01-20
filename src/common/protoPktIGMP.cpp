@@ -111,7 +111,7 @@ bool ProtoPktIGMP::GetSourceAddress(UINT16 index, ProtoAddress& srcAddr) const
 {
     if (index <  GetNumSources())
     {
-        srcAddr.SetRawHostAddress(ProtoAddress::IPv4, GetBuffer(OFFSET_SRC_LIST + index*4), 4);
+        srcAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OFFSET_SRC_LIST + index*4), 4);
         return true;
     }
     else
@@ -124,19 +124,19 @@ bool ProtoPktIGMP::GetSourceAddress(UINT16 index, ProtoAddress& srcAddr) const
 bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bool first)
 {
     if (0 == GetNumRecords()) return false;
-    UINT32* recordPtr;
+    void* recordPtr;
     unsigned int bufferSpace;
     if (first || (NULL == groupRecord.GetBuffer()))
     {
         // Point to first record
-        recordPtr = AccessBuffer32(OFFSET_REC_LIST >> 2);
+        recordPtr = AccessBuffer(OFFSET_REC_LIST);
         bufferSpace = GetLength() - OFFSET_REC_LIST;
     }    
     else
     {   
-        recordPtr = groupRecord.AccessBuffer32(groupRecord.GetLength() >> 2);
+        recordPtr = groupRecord.AccessBuffer(groupRecord.GetLength());
         // Make sure it's in scope of this IGMP message size.
-        size_t offset = 4*(recordPtr - GetBuffer32());
+        size_t offset = (char*)recordPtr - (char*)GetBuffer();
         if (offset > GetLength())
             return false;  // out of bounds
         bufferSpace = GetLength() - (unsigned int)offset;
@@ -233,7 +233,7 @@ void ProtoPktIGMP::SetMaxResponseTime(double seconds, bool updateChecksum)
 
 void ProtoPktIGMP::SetGroupAddress(ProtoAddress* groupAddr, bool updateChecksum)
 {
-    char* ptr = AccessBuffer(OFFSET_GROUP);
+    void* ptr = AccessBuffer(OFFSET_GROUP);
     if ((NULL == groupAddr) || (ProtoAddress::IPv4 != groupAddr->GetType()) || (!groupAddr->IsMulticast()))
         memset(ptr, 0, 4);
     else 
@@ -340,7 +340,7 @@ bool ProtoPktIGMP::AttachGroupRecord(GroupRecord& groupRecord)
 {
     UINT32 currentLength = GetLength();
     ASSERT(0 == (currentLength & 0x00000003));  // should be multiple of 4
-    UINT32* bufferPtr = AccessBuffer32(currentLength >> 2);
+    void* bufferPtr = AccessBuffer(currentLength);
     unsigned int bufferSpace = GetBufferLength() - currentLength;
     if (!groupRecord.InitIntoBuffer(bufferPtr, bufferSpace))
     {
@@ -360,7 +360,7 @@ bool ProtoPktIGMP::AppendGroupRecord(const GroupRecord& groupRecord, bool update
         PLOG(PL_ERROR, "ProtoPktIGMP::AppendGroupRecord() error: insufficient buffer space\n");
         return false;
     }    
-    char* ptr = AccessBuffer(currentLength);
+    void* ptr = AccessBuffer(currentLength);
     // Check if we need to copy since this is _not_ an attached group record
     if (ptr != groupRecord.GetBuffer())
         memcpy(ptr, groupRecord.GetBuffer(), groupRecord.GetLength());
@@ -374,15 +374,11 @@ UINT16 ProtoPktIGMP::ComputeChecksum(bool set)
 {
     UINT32 sum = 0;
     if (set) SetUINT16(OFFSET_CHECKSUM, (UINT16)0);
-    const UINT16* ptr = (const UINT16*)GetBuffer32();
     // Compute before checksum
     unsigned int end = OFFSET_CHECKSUM/2;
-    //for (unsigned int i = 0; i < end; i++)
-    //    sum += (UINT16)ntohs(ptr[i]);
-    //unsigned int start = end + 1;
     end = GetLength() / 2;
     for (unsigned int i = 0; i < end; i++)
-        sum += (UINT16)ntohs(ptr[i]);
+        sum += GetWord16(i);
     
     // Carry as needed
     while (0 != (sum >> 16))
@@ -443,8 +439,8 @@ bool ProtoPktIGMP::GroupRecord::GetSourceAddress(UINT16 index, ProtoAddress& src
         srcAddr.Invalidate();        
         return false;
     }
-    const char* ptr = GetBuffer(OFFSET_SRC_LIST + (index << 2));
-    srcAddr.SetRawHostAddress(ProtoAddress::IPv4, ptr, 4);
+    const void* ptr = GetBuffer(OFFSET_SRC_LIST + (index << 2));
+    srcAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)ptr, 4);
     return true;
 }  // end ProtoPktIGMP::GroupRecord::GetSourceAddress()
 
@@ -468,17 +464,11 @@ bool ProtoPktIGMP::GroupRecord::InitIntoBuffer(void*        bufferPtr,
 
 void ProtoPktIGMP::GroupRecord::SetGroupAddress(const ProtoAddress* groupAddr)
 {
-    char* ptr = AccessBuffer(OFFSET_GROUP);
+    void* ptr = AccessBuffer(OFFSET_GROUP);
     if ((NULL == groupAddr) || (ProtoAddress::IPv4 != groupAddr->GetType()) || (!groupAddr->IsMulticast()))
         memset(ptr, 0, 4);
     else 
         memcpy(ptr, groupAddr->GetRawHostAddress(), 4);
-    TRACE("set group address: ");
-    for (int i = 0; i < 4; i++)
-    {
-        TRACE("%02x", ptr[i]);
-    }
-    TRACE("\n");
 }  // end ProtoPktIGMP::GroupRecord::SetGroupAddress()
 
 bool ProtoPktIGMP::GroupRecord::AppendSourceAddress(const ProtoAddress& srcAddr)
@@ -519,7 +509,7 @@ bool ProtoPktIGMP::GroupRecord::AppendAuxiliaryData(const char* data, UINT16 len
         PLOG(PL_ERROR, "ProtoPktIGMP::GroupRecord::AppendAuxiliaryData() error: insufficient buffer space\n");
         return false;
     }
-    char* ptr = AccessBuffer(currentLength);
+    void* ptr = AccessBuffer(currentLength);
     memcpy(ptr, data, len);
     SetUINT8(OFFSET_AUX_LEN,len >> 2);
     SetLength(currentLength + len);
