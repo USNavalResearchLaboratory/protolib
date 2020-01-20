@@ -81,16 +81,16 @@ bool ProtoPktTCP::InitFromBuffer(UINT32*        bufferPtr,
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
     UINT16 totalLen = GetPayloadLength() + (OffsetPayload() << 2);
-    if (totalLen > buffer_bytes)
+    if (totalLen > GetBufferLength())
     {
-        pkt_length = 0;
+        ProtoPkt::SetLength(0);
         if (NULL != bufferPtr) DetachBuffer();
         return false;
     }
     else
     {
         // (TBD) We could validate the checksum, too?
-        pkt_length = totalLen;
+        ProtoPkt::SetLength(totalLen);
         return true;
     }
 }  // end bool ProtoPktTCP::InitFromBuffer()

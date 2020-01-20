@@ -144,7 +144,7 @@ class ProtoPktIP : public ProtoPkt
                 OptionBase(char*        bufferPtr = NULL, 
                            unsigned int numBytes = 0, 
                            bool         freeOnDestruct = false);
-            //private:
+            private:
                 char*           buffer_ptr;
                 char*           buffer_allocated;
                 unsigned int    buffer_bytes;

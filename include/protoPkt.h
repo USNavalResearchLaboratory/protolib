@@ -115,6 +115,8 @@ class ProtoPkt
         // These methods get/set field by aligned word offsets
         UINT16 GetWord16(unsigned int wordOffset) const
             {return GetUINT16(GetBuffer16(wordOffset));}
+        UINT16& AccessWord16(unsigned int wordOffset)
+            {return AccessBuffer16(wordOffset)[0];}
         void SetWord16(unsigned int wordOffset, UINT16 value) 
             {SetUINT16(AccessBuffer16(wordOffset), value);}
         UINT32 GetWord32(unsigned int wordOffset) const
@@ -262,7 +264,10 @@ class ProtoPkt
 #endif // if/else CAST_AND_ASSIGN
 #endif // NEVER
         
-    //private:
+    bool FreeOnDestruct() const
+        {return (NULL != buffer_allocated);}
+        
+    private:
         UINT32*         buffer_ptr;
         UINT32*         buffer_allocated;
         unsigned int    buffer_bytes;
