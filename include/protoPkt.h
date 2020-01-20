@@ -29,6 +29,10 @@
  //       packet format specification ... although we can do that with UINT32* and implement
  //       some logic for downgraded (e.g., UINT16*, etc) pointer types???
  
+ // We can make this code safe regardless of alignment by:
+ // 1) Use void* arguments where "bufferPtr" values are passed in (and cast to UINT32* under the hood)
+ // 2) Add alignment check conditional behavior to all value set/get/access methods
+ 
 class ProtoPkt
 {
     public:
@@ -99,65 +103,65 @@ class ProtoPkt
         void SetUINT8(unsigned int byteOffset, UINT8 value)
             {((UINT8*)buffer_ptr)[byteOffset] = value;}  
         
-        static inline bool IsAligned(const void* pointer, size_t wordSize)
-            {return (0 == (uintptr_t)pointer % wordSize);}
+        // Pointer alignment checks to verify safe access
+        static inline bool IsAligned16(const void* pointer)
+            {return (0 == ((uintptr_t)pointer & 1));}
+        
+        static inline bool IsAligned32(const void* pointer)
+            {return (0 == ((uintptr_t)pointer & 3));}
         
         UINT16 GetUINT16(unsigned int byteOffset) const
         {
             const char* ptr = ((const char*)buffer_ptr) + byteOffset;
-            if (IsAligned(ptr, 2))
+            if (IsAligned16(ptr))
             {   
-                byteOffset >>= 1;
-                return ntohs(*(((UINT16*)buffer_ptr) + byteOffset));
+                return ntohs(*((UINT16*)((void*)ptr)));
             }
             else
             {
                 UINT16 value;
-                memcpy(&value, (char*)buffer_ptr + byteOffset, 2);
+                memcpy(&value, ptr, 2);
                 return ntohs(value);
             }
         }
         void SetUINT16(unsigned int byteOffset, UINT16 value)
         {
-            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
-            if (IsAligned(ptr, 2))
+            char* ptr = ((char*)buffer_ptr) + byteOffset;
+            if (IsAligned16(ptr))
             {   
-                byteOffset >>= 1;
-                *(((UINT16*)buffer_ptr) + byteOffset) = htons(value);
+                *((UINT16*)((void*)ptr)) = htons(value);
             }
             else
             {
                 value = htons(value);
-                memcpy((char*)buffer_ptr + byteOffset, &value, 2);
+                memcpy(ptr, &value, 2);
             }
         }
         UINT32 GetUINT32(unsigned int byteOffset) const
         {
             const char* ptr = ((const char*)buffer_ptr) + byteOffset;
-            if (IsAligned(ptr, 4))
+            if (IsAligned32(ptr))
             {   
-                byteOffset >>= 2;
-                return ntohs(*(((UINT32*)buffer_ptr) + byteOffset));
+                return ntohl(*((UINT32*)((void*)ptr)));
             }
             else
             {
                 UINT32 value;
-                memcpy(&value, (char*)buffer_ptr + byteOffset, 2);
+                memcpy(&value, ptr, 4);
                 return ntohl(value);
             }
         }
         void SetUINT32(unsigned int byteOffset, UINT32 value)
         {
-            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
-            if (IsAligned(ptr, 4))
+            char* ptr = ((char*)buffer_ptr) + byteOffset;
+            if (IsAligned32(ptr))
             {   
-                byteOffset >>= 2;
-                *(((UINT32*)buffer_ptr) + byteOffset) = htons(value);
+                *((UINT32*)((void*)ptr)) = htonl(value);
             }
             else
             {
                 value = htonl(value);
-                memcpy((char*)buffer_ptr + byteOffset, &value, 4);
+                memcpy(ptr, &value, 4);
             }
         }
         
