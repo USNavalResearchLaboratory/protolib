@@ -11,7 +11,7 @@
 class ProtoPktARP : public ProtoPkt
 {
     public:
-        ProtoPktARP(UINT32*        bufferPtr = NULL, 
+        ProtoPktARP(void*          bufferPtr = NULL, 
                     unsigned int   numBytes = 0, 
                     bool           initFromBuffer = false,
                     bool           freeOnDestruct = false); 
@@ -45,7 +45,7 @@ class ProtoPktARP : public ProtoPkt
         };
         
         // Use these to parse the ARP message
-        bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+        bool InitFromBuffer(void*   bufferPtr       = NULL, 
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         
@@ -75,7 +75,7 @@ class ProtoPktARP : public ProtoPkt
         
         // Use these to build the ARP message 
         // (MUST be called in order of appearance here)
-        bool InitIntoBuffer(UINT32*        bufferPtr = 0, 
+        bool InitIntoBuffer(void*          bufferPtr = 0, 
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetOpcode(Opcode opcode)

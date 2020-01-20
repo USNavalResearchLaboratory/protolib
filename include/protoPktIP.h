@@ -20,14 +20,14 @@
 class ProtoPktIP : public ProtoPkt
 {
     public:
-        ProtoPktIP(UINT32*        bufferPtr = NULL, 
+        ProtoPktIP(void*          bufferPtr = NULL, 
                    unsigned int   bufferBytes = 0, 
                    bool           freeOnDestruct = false);
         ~ProtoPktIP();
         
         
         bool InitFromBuffer(UINT16         pktLength,
-                            UINT32*        bufferPtr = NULL, 
+                            void*          bufferPtr = NULL, 
                             unsigned int   bufferBytes = 0,
                             bool           freeOnDestruct = false)
         {
@@ -165,7 +165,7 @@ class ProtoPktIP : public ProtoPkt
 class ProtoPktIPv4 : public ProtoPktIP
 {
     public:
-        ProtoPktIPv4(UINT32*        bufferPtr = NULL, 
+        ProtoPktIPv4(void*          bufferPtr = NULL, 
                      unsigned int   numBytes = 0, 
                      bool           initFromBuffer = false,
                      bool           freeOnDestruct = false); 
@@ -303,7 +303,7 @@ class ProtoPktIPv4 : public ProtoPktIP
             
                 
         /// Use these to parse a packet
-        bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+        bool InitFromBuffer(void*   bufferPtr       = NULL, 
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         
@@ -348,7 +348,7 @@ class ProtoPktIPv4 : public ProtoPktIP
             {return AccessBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
         
         /// Use these to build a packet
-        bool InitIntoBuffer(UINT32*         bufferPtr = NULL, 
+        bool InitIntoBuffer(void*           bufferPtr = NULL, 
                             unsigned int    bufferBytes = 0, 
                             bool            freeOnDestruct = false);
         /// (TBD) modify "Set" methods to optionally update checksum
@@ -457,7 +457,7 @@ class ProtoPktIPv4 : public ProtoPktIP
 class ProtoPktIPv6 : public ProtoPktIP
 {
     public:
-        ProtoPktIPv6(UINT32*        bufferPtr = 0, 
+        ProtoPktIPv6(void*          bufferPtr = 0, 
                      unsigned int   numBytes = 0, 
                      bool           initFromBuffer = false,
                      bool           freeOnDestruct = false);
@@ -585,7 +585,7 @@ class ProtoPktIPv6 : public ProtoPktIP
         {
             public:
                 Extension(Protocol      extType = ProtoPktIP::NONE,
-                          UINT32*       bufferPtr = NULL, 
+                          void*         bufferPtr = NULL, 
                           unsigned int  numBytes = 0, 
                           bool          initFromBuffer = true,
                           bool          freeOnDestruct = false);
@@ -596,7 +596,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 bool Copy(const Extension& ext);
                 
                 bool InitIntoBuffer(Protocol      extensionType,
-                                    UINT32*       bufferPtr = NULL, 
+                                    void*         bufferPtr = NULL, 
                                     unsigned int  numBytes = 0, 
                                     bool          freeOnDestruct = false);
                 void SetType(Protocol extensionType)
@@ -614,7 +614,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 
                 bool Pack();
                 
-                bool InitFromBuffer(Protocol extType, UINT32* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
+                bool InitFromBuffer(Protocol extType, void* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
                 Protocol GetType() const 
                     {return ext_type;}
                 Protocol GetNextHeader() const
@@ -645,7 +645,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 class Iterator
                 {
                     public:
-                        Iterator(const ProtoPktIPv6& pkt);
+                        Iterator(ProtoPktIPv6& pkt);
                         ~Iterator();
                         void Reset()
                         {
@@ -655,9 +655,9 @@ class ProtoPktIPv6 : public ProtoPktIP
                         bool GetNextExtension(Extension& extension);
                         
                     private:
-                        const ProtoPktIPv6&   ipv6_pkt;
-                        Protocol              next_hdr;
-                        UINT16                offset;   // current byte offset into IPv6 packet buffer
+                        ProtoPktIPv6&   ipv6_pkt;
+                        Protocol        next_hdr;
+                        UINT16          offset;   // current byte offset into IPv6 packet buffer
                 };  // end class ProtoPktIPv6::Extension::Iterator
                     
             protected:
@@ -678,7 +678,7 @@ class ProtoPktIPv6 : public ProtoPktIP
         
         
         // Use these to build a packet
-        bool InitIntoBuffer(UINT32*       bufferPtr = NULL, 
+        bool InitIntoBuffer(void*         bufferPtr = NULL, 
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         
@@ -722,7 +722,7 @@ class ProtoPktIPv6 : public ProtoPktIP
         bool SetPayload(Protocol payloadType, const char* dataPtr, UINT16 dataLen);
                 
         // Use these to parse a packet
-        bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+        bool InitFromBuffer(void*   bufferPtr       = NULL, 
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         UINT8 GetTrafficClass() const
@@ -736,7 +736,7 @@ class ProtoPktIPv6 : public ProtoPktIP
             {return (GetWord32(OFFSET_LABEL) & 0x03ff);}
         Protocol GetNextHeader() const
             {return (Protocol)GetUINT8(OFFSET_NEXT_HDR);}
-        Protocol GetLastHeader() const; // returns type of final extension/transport in packet
+        Protocol GetLastHeader(); // returns type of final extension/transport in packet
         UINT8 GetHopLimit() const
             {return GetUINT8(OFFSET_HOP_LIMIT);}
         void GetSrcAddr(ProtoAddress& addr) const
@@ -786,14 +786,14 @@ class ProtoPktIPv6 : public ProtoPktIP
 class ProtoPktFRAG : public ProtoPktIPv6::Extension
 {
     public:
-        ProtoPktFRAG(UINT32*       bufferPtr = NULL, 
+        ProtoPktFRAG(void*         bufferPtr = NULL, 
                      unsigned int  numBytes = 0, 
                      bool          initFromBuffer = true,
                      bool          freeOnDestruct = false);
         ~ProtoPktFRAG();
         
         // Use these to build a FRAG extension
-        bool InitIntoBuffer(UINT32*       bufferPtr = NULL, 
+        bool InitIntoBuffer(void*         bufferPtr = NULL, 
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         
@@ -814,7 +814,7 @@ class ProtoPktFRAG : public ProtoPktIPv6::Extension
             {SetWord32(OFFSET_ID, identifier);}
         
         /// Use these to parse a FRAG extension
-        bool InitFromBuffer(UINT32*         bufferPtr = NULL, 
+        bool InitFromBuffer(void*           bufferPtr = NULL, 
                             unsigned int    numBytes = 0, 
                             bool            freeOnDestruct = false)
         {
@@ -852,7 +852,7 @@ class ProtoPktFRAG : public ProtoPktIPv6::Extension
 class ProtoPktAUTH : public ProtoPktIPv6::Extension
 {
     public:
-        ProtoPktAUTH(UINT32*       bufferPtr = NULL, 
+        ProtoPktAUTH(void*         bufferPtr = NULL, 
                      unsigned int  numBytes = 0, 
                      bool          initFromBuffer = true,
                      bool          freeOnDestruct = false);
@@ -860,7 +860,7 @@ class ProtoPktAUTH : public ProtoPktIPv6::Extension
         
         // Use these to build an AUTH extension
         // (TBD) Should "InitIntoBuffer() make sure there is room for spi & sequence fields?
-        bool InitIntoBuffer(UINT32*       bufferPtr = NULL, 
+        bool InitIntoBuffer(void*         bufferPtr = NULL, 
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         void SetSPI(UINT32 spi)
@@ -871,7 +871,7 @@ class ProtoPktAUTH : public ProtoPktIPv6::Extension
         // (TBD) add a method to set the ICV field
         
         /// Use these to parse an AUTH extension
-        bool InitFromBuffer(UINT32*         bufferPtr = NULL, 
+        bool InitFromBuffer(void*           bufferPtr = NULL, 
                             unsigned int    numBytes = 0, 
                             bool            freeOnDestruct = false);
         
@@ -905,14 +905,14 @@ class ProtoPktAUTH : public ProtoPktIPv6::Extension
 class ProtoPktESP : public ProtoPkt
 {
     public:
-        ProtoPktESP(UINT32*       bufferPtr = NULL, 
+        ProtoPktESP(void*         bufferPtr = NULL, 
                     unsigned int  numBytes = 0, 
                     bool          freeOnDestruct = false);
         ~ProtoPktESP();
         
         // Use these to build an ESP header
         // (TBD) Should "InitIntoBuffer() make sure there is room for spi & sequence fields?
-        bool InitIntoBuffer(UINT32*       bufferPtr = NULL, 
+        bool InitIntoBuffer(void*         bufferPtr = NULL, 
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         void SetSPI(UINT32 spi)
@@ -924,7 +924,7 @@ class ProtoPktESP : public ProtoPkt
         
         // Use these to parse an ESP extension
         bool InitFromBuffer(UINT16          espLength,
-                            UINT32*         bufferPtr = NULL, 
+                            void*           bufferPtr = NULL, 
                             unsigned int    numBytes = 0, 
                             bool            freeOnDestruct = false);
         
@@ -955,7 +955,7 @@ class ProtoPktESP : public ProtoPkt
 class ProtoPktMobile : public ProtoPkt
 {
     public:
-        ProtoPktMobile(UINT32*       bufferPtr = NULL, 
+        ProtoPktMobile(void*         bufferPtr = NULL, 
                        unsigned int  numBytes = 0, 
                        bool          initFromBuffer = false,
                        bool          freeOnDestruct = false);
@@ -964,7 +964,7 @@ class ProtoPktMobile : public ProtoPkt
         enum Flag {FLAG_SRC = 0x80};
         
         // Use these to build an MOBILE Minimal Forwarding Header 
-        bool InitIntoBuffer(UINT32*       bufferPtr = NULL, 
+        bool InitIntoBuffer(void*         bufferPtr = NULL, 
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         
@@ -988,7 +988,7 @@ class ProtoPktMobile : public ProtoPkt
         }
         UINT16 CalculateChecksum(bool set = true);
         
-        bool InitFromBuffer(UINT32*         bufferPtr = NULL, 
+        bool InitFromBuffer(void*           bufferPtr = NULL, 
                             unsigned int    numBytes = 0, 
                             bool            freeOnDestruct = false);
         
@@ -1134,14 +1134,14 @@ class ProtoPktDPD : public ProtoPktIPv6::Option
 class ProtoPktUDP : public ProtoPkt
 {
     public:
-        ProtoPktUDP(UINT32*        bufferPtr = 0, 
+        ProtoPktUDP(void*          bufferPtr = 0, 
                     unsigned int   numBytes = 0, 
                     bool           initFromBuffer = true,
                     bool           freeOnDestruct = false);
         ~ProtoPktUDP();
         
         // Use these to parse the datagram
-        bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+        bool InitFromBuffer(void*   bufferPtr       = NULL, 
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         bool InitFromPacket(ProtoPktIP& pkt);
@@ -1162,7 +1162,7 @@ class ProtoPktUDP : public ProtoPkt
             {return (GetChecksum() == ComputeChecksum(ipPkt));}
         
         // Use these to build the datagram
-        bool InitIntoBuffer(UINT32*        bufferPtr = 0, 
+        bool InitIntoBuffer(void*          bufferPtr = 0, 
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetSrcPort(UINT16 port)

@@ -2,7 +2,7 @@
 #include "protoPktRIP.h"
 #include <string.h>  // for memset(), etc
 
-ProtoPktRIP::ProtoPktRIP(UINT32*        bufferPtr, 
+ProtoPktRIP::ProtoPktRIP(void*          bufferPtr, 
                          unsigned int   numBytes,  
                          unsigned int   pktLength,
                          bool           freeOnDestruct)
@@ -18,7 +18,7 @@ ProtoPktRIP::~ProtoPktRIP()
 {
 }
 
-bool ProtoPktRIP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktRIP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -82,7 +82,7 @@ bool ProtoPktRIP::AddRouteEntry(const ProtoAddress&  destAddr,
 }  // end ProtoPktRIP::AddRouteEntry()
 
 bool ProtoPktRIP::InitFromBuffer(unsigned int   pktLength,
-                                 UINT32*        bufferPtr, 
+                                 void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -125,11 +125,11 @@ bool ProtoPktRIP::AccessRouteEntry(unsigned int index, RouteEntry& entry)
         return false;
     }
     // Compute UINT32* pointer (20 byte entry is 5 UINT32's)
-    UINT32* entryBuffer = AccessBuffer32() + OFFSET_PAYLOAD + 5*index;
+    UINT32* entryBuffer = AccessBuffer32(OFFSET_PAYLOAD + 5*index);
     return entry.InitFromBuffer(20, entryBuffer, 20);
 }  // end ProtoPktRIP::AccessRouteEntry()
 
-ProtoPktRIP::RouteEntry::RouteEntry(UINT32*        bufferPtr, 
+ProtoPktRIP::RouteEntry::RouteEntry(void*          bufferPtr, 
                                     unsigned int   numBytes,  
                                     bool           initFromBuffer,
                                     bool           freeOnDestruct)
@@ -145,7 +145,7 @@ ProtoPktRIP::RouteEntry::~RouteEntry()
 {
 }
 
-bool ProtoPktRIP::RouteEntry::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktRIP::RouteEntry::InitIntoBuffer(void*          bufferPtr, 
                                              unsigned int   numBytes, 
                                              bool           freeOnDestruct)
 {
@@ -211,7 +211,7 @@ bool ProtoPktRIP::RouteEntry::SetNextHop(const ProtoAddress& nextHop)
 }  // end ProtoPktRIP::RouteEntry::SetNextHop()
 
 bool ProtoPktRIP::RouteEntry::InitFromBuffer(unsigned int   pktLength,
-                                             UINT32*        bufferPtr, 
+                                             void*          bufferPtr, 
                                              unsigned int   numBytes, 
                                              bool           freeOnDestruct)
 {

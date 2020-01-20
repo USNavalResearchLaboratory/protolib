@@ -7,7 +7,7 @@
 class ProtoPktRIP : public ProtoPkt
 {
     public:
-        ProtoPktRIP(UINT32*        bufferPtr = NULL, 
+        ProtoPktRIP(void*          bufferPtr = NULL, 
                     unsigned int   numBytes = 0,  
                     unsigned int   pktLength = 0,  // inits from buffer if non-zero
                     bool           freeOnDestruct = false); 
@@ -38,7 +38,7 @@ class ProtoPktRIP : public ProtoPkt
         class RouteEntry : public ProtoPkt
         {
             public:
-                RouteEntry(UINT32* bufferPtr = NULL, 
+                RouteEntry(void*          bufferPtr = NULL, 
                            unsigned int   numBytes = 0,  
                            bool           initFromBuffer = false,
                            bool           freeOnDestruct = false); 
@@ -46,7 +46,7 @@ class ProtoPktRIP : public ProtoPkt
                 
                 // Use these to build a route entry
                 // (call them in order)
-                bool InitIntoBuffer(UINT32*        bufferPtr = NULL, 
+                bool InitIntoBuffer(void*          bufferPtr = NULL, 
                                     unsigned int   numBytes = 0, 
                                     bool           freeOnDestruct = false);
                 void SetAddressFamily(AddressFamily family)
@@ -62,7 +62,7 @@ class ProtoPktRIP : public ProtoPkt
                 
                 // Use these to parse a route entry
                 bool InitFromBuffer(unsigned int   pktLength = 0,
-                                    UINT32*        bufferPtr = NULL, 
+                                    void*          bufferPtr = NULL, 
                                     unsigned int   numBytes  = 0, 
                                     bool           freeOnDestruct = false);
                 AddressFamily GetAddressFamily() const
@@ -88,7 +88,7 @@ class ProtoPktRIP : public ProtoPkt
                 };
         };  // end class ProtoPktRIP::RouteEntry
                     
-        bool InitIntoBuffer(UINT32*        bufferPtr = NULL, 
+        bool InitIntoBuffer(void*          bufferPtr = NULL, 
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);    
         void SetCommand(Command cmd)
@@ -103,7 +103,7 @@ class ProtoPktRIP : public ProtoPkt
                            UINT16               routeTag = 0);
         
         bool InitFromBuffer(unsigned int   pktLength = 0,
-                            UINT32*        bufferPtr = NULL, 
+                            void*          bufferPtr = NULL, 
                             unsigned int   numBytes  = 0, 
                             bool           freeOnDestruct = false);
         Command GetCommand() const

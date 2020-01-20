@@ -9,7 +9,7 @@ const UINT16 ProtoPktRTP::SEQUENCE_MAX = 0xffff;    // 16 bits, unsigned (may mo
 const unsigned int ProtoPktRTP::BASE_HDR_LEN = 12;  // base header size, as of RFC 3550
 const unsigned int ProtoPktRTP::CSRC_COUNT_MAX = 15;
 		
-ProtoPktRTP::ProtoPktRTP(UINT32*        bufferPtr,
+ProtoPktRTP::ProtoPktRTP(void*          bufferPtr,
                          unsigned int   numBytes, 
                          unsigned int   pktLength,          
                          bool           freeOnDestruct)
@@ -26,7 +26,7 @@ ProtoPktRTP::~ProtoPktRTP()
 }
 
 bool ProtoPktRTP::InitFromBuffer(unsigned int   pktLength,
-                                 UINT32*        bufferPtr, 
+                                 void*          bufferPtr, 
                                  unsigned int   bufferBytes, 
                                  bool           freeOnDestruct)
 {
@@ -73,7 +73,7 @@ bool ProtoPktRTP::GetExtension(Extension& extension)
     }
 }  // end ProtoPktRTP::GetExtension()
 
-bool ProtoPktRTP::Init(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktRTP::Init(void*   bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
    if (NULL != bufferPtr) AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
    if (GetBufferLength() >= BASE_HDR_LEN)
@@ -152,7 +152,7 @@ void ProtoPktRTP::SetPadding(UINT8 numBytes, char* paddingPtr)
 }  // end ProtoPktRTP::SetPadding()
 
 
-ProtoPktRTP::Extension::Extension(UINT32*       bufferPtr, 
+ProtoPktRTP::Extension::Extension(void*         bufferPtr, 
                                   unsigned int  numBytes, 
                                   bool          initFromBuffer,
                                   bool          freeOnDestruct)
@@ -166,7 +166,7 @@ ProtoPktRTP::Extension::~Extension()
 {
 }
 
-bool ProtoPktRTP::Extension::InitFromBuffer(UINT32*         bufferPtr, 
+bool ProtoPktRTP::Extension::InitFromBuffer(void*           bufferPtr, 
                                             unsigned int    bufferBytes, 
                                             bool            freeOnDestruct)
 {
@@ -185,7 +185,7 @@ bool ProtoPktRTP::Extension::InitFromBuffer(UINT32*         bufferPtr,
     return false;
 }  // end ProtoPktRTP::InitFromBuffer()
 
-bool ProtoPktRTP::Extension::Init(UINT32*       bufferPtr, 
+bool ProtoPktRTP::Extension::Init(void*         bufferPtr, 
                                   unsigned int  bufferBytes,
                                   bool          freeOnDestruct)
 {

@@ -4,7 +4,7 @@ const UINT8 ProtoPktIGMP::DEFAULT_QRV = 2;       // default query robustness val
 const double ProtoPktIGMP::DEFAULT_QQIC = 125.0; // default query interval (seconds)
 const double ProtoPktIGMP::DEFAULT_MAX_RESP = 10.0; // default query response time (seconds)
 
-ProtoPktIGMP::ProtoPktIGMP(UINT32*        bufferPtr, 
+ProtoPktIGMP::ProtoPktIGMP(void*          bufferPtr, 
                            unsigned int   numBytes, 
                            bool           initFromBuffer,
                            bool           freeOnDestruct)
@@ -18,7 +18,7 @@ ProtoPktIGMP::~ProtoPktIGMP()
 }
 
 bool ProtoPktIGMP::InitFromBuffer(UINT16        pktLength,
-                                  UINT32*       bufferPtr, 
+                                  void*         bufferPtr, 
                                   unsigned int  bufferBytes, 
                                   bool          freeOnDestruct)
 {
@@ -134,7 +134,7 @@ bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bo
     }    
     else
     {   
-        recordPtr = groupRecord.AccessBuffer32() + (groupRecord.GetLength() >> 2);
+        recordPtr = groupRecord.AccessBuffer32(groupRecord.GetLength() >> 2);
         // Make sure it's in scope of this IGMP message size.
         size_t offset = 4*(recordPtr - GetBuffer32());
         if (offset > GetLength())
@@ -149,7 +149,7 @@ bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bo
 
 bool ProtoPktIGMP::InitIntoBuffer(Type         type,
                                   unsigned int version,
-                                  UINT32*      bufferPtr, 
+                                  void*        bufferPtr, 
                                   unsigned int bufferBytes, 
                                   bool         freeOnDestruct)
 {
@@ -395,7 +395,7 @@ UINT16 ProtoPktIGMP::ComputeChecksum(bool set)
     return (UINT16)sum;
 }  // end ProtoPktIGMP::ComputeChecksum()
 
-ProtoPktIGMP::GroupRecord::GroupRecord(UINT32*        bufferPtr, 
+ProtoPktIGMP::GroupRecord::GroupRecord(void*          bufferPtr, 
                                        unsigned int   numBytes, 
                                        bool           initFromBuffer,
                                        bool           freeOnDestruct)
@@ -411,7 +411,7 @@ ProtoPktIGMP::GroupRecord::~GroupRecord()
 {
 }
 
-bool ProtoPktIGMP::GroupRecord::InitFromBuffer(UINT32*      bufferPtr, 
+bool ProtoPktIGMP::GroupRecord::InitFromBuffer(void*        bufferPtr, 
                                                unsigned int bufferBytes, 
                                                bool         freeOnDestruct)
 {
@@ -448,7 +448,7 @@ bool ProtoPktIGMP::GroupRecord::GetSourceAddress(UINT16 index, ProtoAddress& src
     return true;
 }  // end ProtoPktIGMP::GroupRecord::GetSourceAddress()
 
-bool ProtoPktIGMP::GroupRecord::InitIntoBuffer(UINT32*      bufferPtr, 
+bool ProtoPktIGMP::GroupRecord::InitIntoBuffer(void*        bufferPtr, 
                                                unsigned int bufferBytes, 
                                                bool         freeOnDestruct)
 {

@@ -8,7 +8,7 @@
 #include "protoDebug.h"
 
 // begin ProtoPktIP implementation
-ProtoPktIP::ProtoPktIP(UINT32*        bufferPtr, 
+ProtoPktIP::ProtoPktIP(void*          bufferPtr, 
                        unsigned int   numBytes,
                        bool           freeOnDestruct)
  : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
@@ -121,7 +121,7 @@ ProtoPktIP::OptionBase::~OptionBase()
 }
 
 // begin ProtoPktIPv4 implementation
-ProtoPktIPv4::ProtoPktIPv4(UINT32*      bufferPtr, 
+ProtoPktIPv4::ProtoPktIPv4(void*        bufferPtr, 
                            unsigned int numBytes, 
                            bool         initFromBuffer,
                            bool         freeOnDestruct)
@@ -143,7 +143,7 @@ ProtoPktIPv4::~ProtoPktIPv4()
 {
 }
 
-bool ProtoPktIPv4::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv4::InitFromBuffer(void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
@@ -173,7 +173,7 @@ bool ProtoPktIPv4::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
 }  // end ProtoPktIPv4::InitFromBuffer()
 
 
-bool ProtoPktIPv4::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktIPv4::InitIntoBuffer(void* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
     {
@@ -302,14 +302,13 @@ void ProtoPktIPv4::SetPayloadLength(UINT16 numBytes, bool calculateChecksum)
 UINT16 ProtoPktIPv4::CalculateChecksum(bool set)
 {
     UINT32 sum = 0;
-    const UINT16* ptr = AccessBuffer16();
     // Calculate checksum, skipping checksum field
     unsigned int i;
     for (i = 0; i < OFFSET_CHECKSUM; i++)
-        sum += ntohs(ptr[i]);
+        sum += GetWord16(i);
     unsigned int hdrEndex = (GetUINT8(OFFSET_HDR_LEN) & 0x0f) << 1;
     for (i = OFFSET_CHECKSUM+1; i < hdrEndex; i++)
-        sum += ntohs(ptr[i]);
+        sum += GetWord16(i);
     while (sum >> 16)
         sum = (sum & 0x0000ffff) + (sum >> 16);
     sum = ~sum;
@@ -548,7 +547,7 @@ bool ProtoPktIPv4::Option::Iterator::GetNextOption(Option& option)
 
 // begin ProtoPktIPv6 implementation
 
-ProtoPktIPv6::ProtoPktIPv6(UINT32*      bufferPtr, 
+ProtoPktIPv6::ProtoPktIPv6(void*        bufferPtr, 
                            unsigned int numBytes, 
                            bool         initFromBuffer,
                            bool         freeOnDestruct)
@@ -571,7 +570,7 @@ ProtoPktIPv6::~ProtoPktIPv6()
 {
 }
 
-bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv6::InitFromBuffer(void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     ext_pending = false;
     if (NULL != bufferPtr) 
@@ -610,7 +609,7 @@ bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
 }  // end ProtoPktIPv6::InitFromBuffer()
 
 
-bool ProtoPktIPv6::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktIPv6::InitIntoBuffer(void*         bufferPtr, 
                                   unsigned int  bufferBytes, 
                                   bool          freeOnDestruct)
 {
@@ -635,7 +634,7 @@ bool ProtoPktIPv6::InitIntoBuffer(UINT32*       bufferPtr,
     return true;
 }  // end ProtoPktIPv6::InitIntoBuffer()
 
-ProtoPktIP::Protocol ProtoPktIPv6::GetLastHeader() const
+ProtoPktIP::Protocol ProtoPktIPv6::GetLastHeader()
 {
     if (HasExtendedHeader())
     {
@@ -852,7 +851,7 @@ bool ProtoPktIPv6::SetPayload(Protocol payloadType, const char* dataPtr, UINT16 
                     
 
 ProtoPktIPv6::Extension::Extension(Protocol     extType, 
-                                   UINT32*      bufferPtr, 
+                                   void*        bufferPtr, 
                                    unsigned int numBytes, 
                                    bool         initFromBuffer, 
                                    bool         freeOnDestruct)
@@ -890,7 +889,7 @@ bool ProtoPktIPv6::Extension::Copy(const ProtoPktIPv6::Extension& ext)
 }  // end ProtoPktIPv6::Extension::Copy()
 
 bool ProtoPktIPv6::Extension::InitIntoBuffer(Protocol       extType,
-                                             UINT32*        bufferPtr, 
+                                             void*          bufferPtr, 
                                              unsigned int   numBytes, 
                                              bool           freeOnDestruct)
 {
@@ -1098,7 +1097,7 @@ bool ProtoPktIPv6::Extension::PadOptionHeader()
 }  // end ProtoPktIPv6::Extension::PadOptionHeader()
 
 
-bool ProtoPktIPv6::Extension::InitFromBuffer(Protocol extType, UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv6::Extension::InitFromBuffer(Protocol extType, void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
@@ -1142,7 +1141,7 @@ UINT16 ProtoPktIPv6::Extension::GetExtensionLength() const
 
 // class ProtoPktIPv6::Extension::Iterator implementation
 
-ProtoPktIPv6::Extension::Iterator::Iterator(const ProtoPktIPv6& pkt)
+ProtoPktIPv6::Extension::Iterator::Iterator(ProtoPktIPv6& pkt)
  : ipv6_pkt(pkt), next_hdr(pkt.GetNextHeader()), offset(40)
 {   
 }
@@ -1156,7 +1155,7 @@ bool ProtoPktIPv6::Extension::Iterator::GetNextExtension(Extension& extension)
     if ((6 != ipv6_pkt.GetVersion()) || (offset >= ipv6_pkt.GetLength())) return false;
     if (IsExtension(next_hdr))
     {
-        if (extension.InitFromBuffer(next_hdr, (UINT32*)ipv6_pkt.GetBuffer32()+(offset >> 2), ipv6_pkt.GetLength()-offset))
+        if (extension.InitFromBuffer(next_hdr, ipv6_pkt.AccessBuffer32(offset >> 2), ipv6_pkt.GetLength()-offset))
         {
             next_hdr = extension.GetNextHeader();
             offset += extension.GetLength();
@@ -1319,7 +1318,7 @@ bool ProtoPktIPv6::Option::Iterator::GetNextOption(Option& option)
 }  // end ProtoPktIPv6::Option::Iterator::GetNextOption()
 
 
-ProtoPktFRAG::ProtoPktFRAG(UINT32*       bufferPtr, 
+ProtoPktFRAG::ProtoPktFRAG(void*         bufferPtr, 
                            unsigned int  numBytes, 
                            bool          initFromBuffer,
                            bool          freeOnDestruct)
@@ -1331,7 +1330,7 @@ ProtoPktFRAG::~ProtoPktFRAG()
 {
 }
 
-bool ProtoPktFRAG::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktFRAG::InitIntoBuffer(void*         bufferPtr, 
                                   unsigned int  numBytes, 
                                   bool          freeOnDestruct)
 {
@@ -1358,7 +1357,7 @@ bool ProtoPktFRAG::InitIntoBuffer(UINT32*       bufferPtr,
 }  // end ProtoPktFRAG::InitIntoBuffer()
 
 
-ProtoPktAUTH::ProtoPktAUTH(UINT32*       bufferPtr, 
+ProtoPktAUTH::ProtoPktAUTH(void*         bufferPtr, 
                            unsigned int  numBytes, 
                            bool          initFromBuffer,
                            bool          freeOnDestruct)
@@ -1370,7 +1369,7 @@ ProtoPktAUTH::~ProtoPktAUTH()
 {
 }
 
-bool ProtoPktAUTH::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktAUTH::InitIntoBuffer(void*         bufferPtr, 
                                   unsigned int  numBytes, 
                                   bool          freeOnDestruct)
 {
@@ -1395,7 +1394,7 @@ bool ProtoPktAUTH::InitIntoBuffer(UINT32*       bufferPtr,
     }
 }  // end ProtoPktAUTH::InitIntoBuffer()
 
-bool ProtoPktAUTH::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktAUTH::InitFromBuffer(void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (Extension::InitFromBuffer(ProtoPktIP::AUTH, bufferPtr, numBytes, freeOnDestruct))
     {
@@ -1418,7 +1417,7 @@ bool ProtoPktAUTH::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
 }  // end ProtoPktAUTH::InitFromBuffer()
 
 
-ProtoPktESP::ProtoPktESP(UINT32*       bufferPtr, 
+ProtoPktESP::ProtoPktESP(void*         bufferPtr, 
                          unsigned int  numBytes, 
                          bool          freeOnDestruct)
 : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
@@ -1432,7 +1431,7 @@ ProtoPktESP::~ProtoPktESP()
  * This function makes sure the buffer is big enough for at least
  * spi and sequence fields.
  */
-bool ProtoPktESP::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktESP::InitIntoBuffer(void*         bufferPtr, 
                                  unsigned int  numBytes, 
                                  bool          freeOnDestruct)
 {
@@ -1458,7 +1457,7 @@ bool ProtoPktESP::InitIntoBuffer(UINT32*       bufferPtr,
  * spi and sequence fields.
  */
 
-bool ProtoPktESP::InitFromBuffer(UINT16 espLength, UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktESP::InitFromBuffer(UINT16 espLength, void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
@@ -1658,7 +1657,7 @@ bool ProtoPktDPD::SetTaggerId(const ProtoAddress& ipAddr)
 
 
 // begin ProtoPktMobile implementation
-ProtoPktMobile::ProtoPktMobile(UINT32*        bufferPtr, 
+ProtoPktMobile::ProtoPktMobile(void*          bufferPtr, 
                                unsigned int   numBytes,
                                bool           initFromBuffer,
                                bool           freeOnDestruct)
@@ -1677,7 +1676,7 @@ ProtoPktMobile::~ProtoPktMobile()
 {
 }
 
-bool ProtoPktMobile::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktMobile::InitIntoBuffer(void*   bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
     {
@@ -1720,11 +1719,10 @@ UINT16 ProtoPktMobile::CalculateChecksum(bool set)
     UINT32 sum = 0;
     UINT16 savedSum = GetChecksum();
     SetChecksum(0);
-    UINT16* ptr = (UINT16*)AccessBuffer16();
     // Calculate checksum, skipping checksum field
     unsigned int headerLen = FlagIsSet(FLAG_SRC) ? 12/2 : 8/2;
     for (unsigned int i = 0; i < headerLen; i++)
-        sum += ntohs(ptr[i]);
+        sum += GetWord16(i);
     while (sum >> 16)
         sum = (sum & 0x0000ffff) + (sum >> 16);
     sum = ~sum;
@@ -1735,7 +1733,7 @@ UINT16 ProtoPktMobile::CalculateChecksum(bool set)
     return sum;
 }  // ProtoPktMobile::CalculateChecksum()
 
-bool ProtoPktMobile::InitFromBuffer(UINT32*         bufferPtr, 
+bool ProtoPktMobile::InitFromBuffer(void*           bufferPtr, 
                                     unsigned int    numBytes, 
                                     bool            freeOnDestruct)
 {
@@ -1783,7 +1781,7 @@ bool ProtoPktDPD::SetPktId(const char* pktId, UINT8 pktIdLength)
     return true;   
 }
 
-ProtoPktUDP::ProtoPktUDP(UINT32*        bufferPtr, 
+ProtoPktUDP::ProtoPktUDP(void*          bufferPtr, 
                          unsigned int   numBytes, 
                          bool           initFromBuffer,
                          bool           freeOnDestruct)
@@ -1857,7 +1855,7 @@ bool ProtoPktUDP::InitFromPacket(ProtoPktIP& ipPkt)
     return true;
 }  // end ProtoPktUDP::InitFromPacket()
 
-bool ProtoPktUDP::InitFromBuffer(UINT32*        bufferPtr, 
+bool ProtoPktUDP::InitFromBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -1878,7 +1876,7 @@ bool ProtoPktUDP::InitFromBuffer(UINT32*        bufferPtr,
     }
 }  // end bool ProtoPktUDP::InitFromBuffer()
 
-bool ProtoPktUDP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktUDP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct) 
 {
@@ -1929,22 +1927,19 @@ UINT16 ProtoPktUDP::ComputeChecksum(ProtoPktIP& ipPkt) const
             return 0;   
     }
     // 2) UDP header part, sans "checksum" field
-    const UINT16* ptr = (const UINT16*)GetBuffer32();
     unsigned int i;
     for (i = 0; i < OFFSET_CHECKSUM; i++)
-        sum += (UINT16)ntohs(ptr[i]);
+        sum += GetWord16(i);
     // 3) UDP payload part (note adjustment for odd number of payload bytes)
     unsigned int dataEndex = GetLength();
     if (0 != (dataEndex & 0x01))
-        sum += (UINT16)(((UINT16)((UINT8*)ptr)[dataEndex-1]) << 8);
+        sum += (UINT16)((UINT16)GetUINT8(dataEndex-1) << 8);
     dataEndex >>= 1;  // convert from bytes to UINT16 index
-    for (i = (OFFSET_CHECKSUM+1); i < dataEndex; i++)
-        sum += (UINT16)ntohs(ptr[i]);
-    
+    for (i = (OFFSET_CHECKSUM+1); i < dataEndex; i++)  
+        sum += GetWord16(i);
     // 4) Carry as needed
     while (0 != (sum >> 16))
         sum = (sum & 0x0000ffff) + (sum >> 16);
-    
     sum = ~sum;
     
     // 5) ZERO check/correct as needed

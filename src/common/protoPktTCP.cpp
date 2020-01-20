@@ -1,6 +1,6 @@
 #include "protoPktTCP.h"
 
-ProtoPktTCP::ProtoPktTCP(UINT32*        bufferPtr, 
+ProtoPktTCP::ProtoPktTCP(void*          bufferPtr, 
                          unsigned int   numBytes, 
                          bool           initFromBuffer,
                          bool           freeOnDestruct)
@@ -74,7 +74,7 @@ bool ProtoPktTCP::InitFromPacket(ProtoPktIP& ipPkt)
     return true;
 }  // end ProtoPktTCP::InitFromPacket()
 
-bool ProtoPktTCP::InitFromBuffer(UINT32*        bufferPtr, 
+bool ProtoPktTCP::InitFromBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -95,7 +95,7 @@ bool ProtoPktTCP::InitFromBuffer(UINT32*        bufferPtr,
     }
 }  // end bool ProtoPktTCP::InitFromBuffer()
 
-bool ProtoPktTCP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktTCP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct) 
 {

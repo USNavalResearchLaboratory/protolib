@@ -7,7 +7,7 @@
 class ProtoPktIGMP : public ProtoPkt
 {
     public:
-        ProtoPktIGMP(UINT32*        bufferPtr = NULL, 
+        ProtoPktIGMP(void*          bufferPtr = NULL, 
                      unsigned int   numBytes = 0, 
                      bool           initFromBuffer = false,
                      bool           freeOnDestruct = false); 
@@ -30,7 +30,7 @@ class ProtoPktIGMP : public ProtoPkt
         class GroupRecord : public ProtoPkt
         {
             public:
-               GroupRecord(UINT32*        bufferPtr = NULL, 
+               GroupRecord(void*          bufferPtr = NULL, 
                            unsigned int   numBytes = 0, 
                            bool           initFromBuffer = false,
                            bool           freeOnDestruct = false); 
@@ -48,7 +48,7 @@ class ProtoPktIGMP : public ProtoPkt
                 };
                     
                 // Use these to parse Group Records
-                bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+                bool InitFromBuffer(void*   bufferPtr       = NULL, 
                                     unsigned int bufferBytes = 0, 
                                     bool freeOnDestruct     = false);    
                     
@@ -71,7 +71,7 @@ class ProtoPktIGMP : public ProtoPkt
                     {return GetBuffer(OffsetAuxData());}
                 
                 // Use these to create group records
-                bool InitIntoBuffer(UINT32*      bufferPtr = NULL, 
+                bool InitIntoBuffer(void*        bufferPtr = NULL, 
                                     unsigned int numBytes = 0, 
                                     bool         freeOnDestruct = false);
                 void SetType(Type type)
@@ -95,7 +95,7 @@ class ProtoPktIGMP : public ProtoPkt
         
         // Use these to parse the IGMP message
         bool InitFromBuffer(UINT16  pktLength,
-                            UINT32* bufferPtr       = NULL, 
+                            void*   bufferPtr       = NULL, 
                             unsigned int buferBytes = 0, 
                             bool freeOnDestruct     = false);
         
@@ -133,7 +133,7 @@ class ProtoPktIGMP : public ProtoPkt
         // Use these for building IGMP packets
         bool InitIntoBuffer(Type         type,
                             unsigned int version,
-                            UINT32*      bufferPtr = NULL, 
+                            void*        bufferPtr = NULL, 
                             unsigned int numBytes = 0, 
                             bool         freeOnDestruct = false);
         

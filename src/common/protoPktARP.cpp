@@ -6,7 +6,7 @@
 #include "protoPktARP.h"
 #include "protoDebug.h"
 
-ProtoPktARP::ProtoPktARP(UINT32*        bufferPtr, 
+ProtoPktARP::ProtoPktARP(void*          bufferPtr, 
                          unsigned int   numBytes, 
                          bool           initFromBuffer,
                          bool           freeOnDestruct)
@@ -22,7 +22,7 @@ ProtoPktARP::~ProtoPktARP()
 {
 }
 
-bool ProtoPktARP::InitFromBuffer(UINT32*        bufferPtr, 
+bool ProtoPktARP::InitFromBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -133,7 +133,7 @@ bool ProtoPktARP::GetTargetProtocolAddress(ProtoAddress& addr) const
     return true;
 }  // end ProtoPktARP::GetTargetProtocolAddress()
 
-bool ProtoPktARP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktARP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {

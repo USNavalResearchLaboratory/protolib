@@ -11,7 +11,7 @@
 class ProtoPktTCP : public ProtoPkt
 {
     public:
-        ProtoPktTCP(UINT32*        bufferPtr = 0, 
+        ProtoPktTCP(void*          bufferPtr = 0, 
                     unsigned int   numBytes = 0, 
                     bool           initFromBuffer = true,
                     bool           freeOnDestruct = false);
@@ -31,7 +31,7 @@ class ProtoPktTCP : public ProtoPkt
         };
         
         // Use these to parse the datagram
-        bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+        bool InitFromBuffer(void*   bufferPtr       = NULL, 
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         bool InitFromPacket(ProtoPktIP& pkt);
@@ -68,7 +68,7 @@ class ProtoPktTCP : public ProtoPkt
             {return (GetChecksum() == ComputeChecksum(ipPkt));}
         
         // Use these to build the datagram
-        bool InitIntoBuffer(UINT32*        bufferPtr = 0, 
+        bool InitIntoBuffer(void*          bufferPtr = 0, 
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetSrcPort(UINT16 port)

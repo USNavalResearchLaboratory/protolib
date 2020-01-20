@@ -12,7 +12,7 @@
 class ProtoPktRTP : public ProtoPkt
 {
     public:
-        ProtoPktRTP(UINT32*        bufferPtr = NULL, 
+        ProtoPktRTP(void*          bufferPtr = NULL, 
                     unsigned int   numBytes = 0,  
                     unsigned int   pktLength = 0,  // inits from buffer if non-zero
                     bool           freeOnDestruct = false); 
@@ -63,14 +63,14 @@ class ProtoPktRTP : public ProtoPkt
             friend class ProtoPktRTP;
             
             public:
-                Extension(UINT32*       bufferPtr = NULL, 
+                Extension(void*         bufferPtr = NULL, 
                           unsigned int  numBytes = 0, 
                           bool          initFromBuffer = true,
                           bool          freeOnDestruct = false);
                 virtual ~Extension();
                 
                 // Use these to build an extension
-                bool Init(UINT32*       bufferPtr      = NULL, 
+                bool Init(void*         bufferPtr      = NULL, 
                           unsigned int  bufferBytes    = 0,
                           bool          freeOnDestruct = false);
                 void SetType(UINT16 type)
@@ -90,7 +90,7 @@ class ProtoPktRTP : public ProtoPkt
                     {return ((NULL != rtp_pkt) ? rtp_pkt->PackExtension(*this) : true);}
                 
                 // Use these to parse an extension
-                bool InitFromBuffer(UINT32* bufferPtr           = NULL, 
+                bool InitFromBuffer(void*   bufferPtr           = NULL, 
                                     unsigned int bufferBytes    = 0, 
                                     bool freeOnDestruct         = false);
                 UINT16 GetType() const
@@ -117,7 +117,7 @@ class ProtoPktRTP : public ProtoPkt
         
         // RTP packet parsing
         bool InitFromBuffer(unsigned int    pktLength,
-                            UINT32*         bufferPtr       = NULL,
+                            void*           bufferPtr       = NULL,
                             unsigned int    bufferBytes     = 0,
                             bool            freeOnDestruct  = false);
 
@@ -175,7 +175,7 @@ class ProtoPktRTP : public ProtoPkt
         
         // Message building 
         // if "bufferPtr == NULL", current "buffer_ptr" is used
-        bool Init(UINT32* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
+        bool Init(void*   bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
 
 		void SetVersion(UINT8 version = VERSION) 
         {

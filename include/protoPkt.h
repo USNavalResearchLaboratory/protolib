@@ -18,25 +18,21 @@
  * (or message) building and parsing.  
  *
  * Generally, classes will be derived
- * from this base class to create classed for 
+ * from this base class to create classes for 
  * protocol-specific packet/message
  * building and parsing (For examples, see 
  * ProtoPktIP, ProtoPktRTP, etc)
  */
  
- // TBD - we should make this a template class so we can use different "buffer_ptr" types
- //       such as char*, UINT16*, etc depending upon the alignment requirements of the
- //       packet format specification ... although we can do that with UINT32* and implement
- //       some logic for downgraded (e.g., UINT16*, etc) pointer types???
- 
- // We can make this code safe regardless of alignment by:
- // 1) Use void* arguments where "bufferPtr" values are passed in (and cast to UINT32* under the hood)
- // 2) Add alignment check conditional behavior to all value set/get/access methods
- 
+// TBD - remove all final vestiges of any specific pointer types,
+//       using void* instead.  Make member variables private and
+//       force use of methods. Note this will ripple down to 
+//       existing ProtoPkt subclasses ...
+
 class ProtoPkt
 {
     public:
-        ProtoPkt(UINT32* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
+        ProtoPkt(void* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
         virtual ~ProtoPkt();
         
         bool AllocateBuffer(unsigned int numBytes)
@@ -48,13 +44,13 @@ class ProtoPkt
             pkt_length = 0;
             return (NULL != buffer_ptr);
         }
-        void AttachBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false)
+        void AttachBuffer(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false)
         {
-            buffer_ptr = (0 != numBytes) ? bufferPtr : NULL;
+            buffer_ptr = (0 != numBytes) ? (UINT32*)bufferPtr : NULL;
             buffer_bytes = (NULL != bufferPtr) ? numBytes : 0;
             pkt_length = 0;
             if (NULL != buffer_allocated) delete[] buffer_allocated;
-            if (freeOnDestruct) buffer_allocated = bufferPtr;
+            if (freeOnDestruct) buffer_allocated = (UINT32*)bufferPtr;
         }
         UINT32* DetachBuffer()
         {
@@ -64,7 +60,7 @@ class ProtoPkt
             return theBuffer;  
         }
         bool InitFromBuffer(unsigned int    packetLength,
-                            UINT32*         bufferPtr = NULL,
+                            void*           bufferPtr = NULL,
                             unsigned int    numBytes = 0,
                             bool            freeOnDestruct = false)
         {
@@ -83,9 +79,9 @@ class ProtoPkt
         unsigned int GetLength() const 
             {return pkt_length;} 
         
-        // These methods get/set fields by byte offsets and 
-        // do alignment checks to guarantee safety regardless
-        // of alignment.
+        // These methods get/set fields by byte offsets, using 
+        // alignment check and different access methods to 
+        // guarantee safety regardless of alignment.
         
         const char* GetBuffer() const 
             {return (char*)buffer_ptr;} 
@@ -96,6 +92,7 @@ class ProtoPkt
         char* AccessBuffer(unsigned int offset)
             {return (((char*)buffer_ptr) + offset);}
         
+        // These methods get/set fields by byte offsets
         UINT8 GetUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
         UINT8& AccessUINT8(unsigned int byteOffset) const
@@ -103,70 +100,31 @@ class ProtoPkt
         void SetUINT8(unsigned int byteOffset, UINT8 value)
             {((UINT8*)buffer_ptr)[byteOffset] = value;}  
         
-        // Pointer alignment checks to verify safe access
-        static inline bool IsAligned16(const void* pointer)
-            {return (0 == ((uintptr_t)pointer & 1));}
-        
-        static inline bool IsAligned32(const void* pointer)
-            {return (0 == ((uintptr_t)pointer & 3));}
-        
         UINT16 GetUINT16(unsigned int byteOffset) const
-        {
-            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
-            if (IsAligned16(ptr))
-            {   
-                return ntohs(*((UINT16*)((void*)ptr)));
-            }
-            else
-            {
-                UINT16 value;
-                memcpy(&value, ptr, 2);
-                return ntohs(value);
-            }
-        }
+            {return GetUINT16(GetBuffer(byteOffset));}
         void SetUINT16(unsigned int byteOffset, UINT16 value)
-        {
-            char* ptr = ((char*)buffer_ptr) + byteOffset;
-            if (IsAligned16(ptr))
-            {   
-                *((UINT16*)((void*)ptr)) = htons(value);
-            }
-            else
-            {
-                value = htons(value);
-                memcpy(ptr, &value, 2);
-            }
-        }
+            {SetUINT16(AccessBuffer(byteOffset), value);}
         UINT32 GetUINT32(unsigned int byteOffset) const
-        {
-            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
-            if (IsAligned32(ptr))
-            {   
-                return ntohl(*((UINT32*)((void*)ptr)));
-            }
-            else
-            {
-                UINT32 value;
-                memcpy(&value, ptr, 4);
-                return ntohl(value);
-            }
-        }
+            {return GetUINT32(GetBuffer(byteOffset));}
         void SetUINT32(unsigned int byteOffset, UINT32 value)
-        {
-            char* ptr = ((char*)buffer_ptr) + byteOffset;
-            if (IsAligned32(ptr))
-            {   
-                *((UINT32*)((void*)ptr)) = htonl(value);
-            }
-            else
-            {
-                value = htonl(value);
-                memcpy(ptr, &value, 4);
-            }
-        }
+            {SetUINT32(AccessBuffer(byteOffset), value);}
         
-        // These MUST only be called by subclasses that are absolutely
-        // sure that UINT32 alignment is guaranteed for the 'buffer_ptr'
+        // These methods get/set fields by aligned word offsets
+        UINT16 GetWord16(unsigned int wordOffset) const
+            {return GetUINT16(GetBuffer16(wordOffset));}
+        UINT16& AccessWord16(unsigned int wordOffset)
+            {return AccessBuffer16(wordOffset)[0];}
+        void SetWord16(unsigned int wordOffset, UINT16 value) 
+            {SetUINT16(AccessBuffer16(wordOffset), value);}
+        UINT32 GetWord32(unsigned int wordOffset) const
+            {return GetUINT32(GetBuffer32(wordOffset));}
+        void SetWord32(unsigned int wordOffset, UINT32 value) 
+            {SetUINT32(AccessBuffer32(wordOffset), value);}
+        
+        // Note the pointers returned by these are only properly
+        // aligned pointers if the ProtoPkt was initialized with
+        // a properly aligned pointer
+        // TBD - make these return void* to be more explicit???
         const UINT16* GetBuffer16() const 
             {return (UINT16*)buffer_ptr;}
         const UINT16* GetBuffer16(unsigned int wordOffset) const
@@ -185,32 +143,70 @@ class ProtoPkt
         UINT32* AccessBuffer32(unsigned int wordOffset)
             {return AccessBuffer32() + wordOffset;}
             
-        // These methods get/set fields by pointer directly
-        static UINT16 GetUINT16(const UINT16* ptr) 
-            {return ntohs(*ptr);}
-        static UINT32 GetUINT32(const UINT32* ptr) 
-            {return ntohl(*ptr);}
-        static void SetUINT16(UINT16* ptr, UINT16 value) 
-            {*ptr = htons(value);}
-        static void SetUINT32(UINT32* ptr, UINT32 value)
-            {*ptr = htonl(value);}    
+        // Pointer alignment checks to verify safe access
+        static inline bool IsAligned16(const void* pointer)
+            {return (0 == ((uintptr_t)pointer & 1));}
         
-        // These methods get/set field by aligned word offsets
-        UINT16 GetWord16(unsigned int wordOffset) const
-            {return GetUINT16(GetBuffer16(wordOffset));}
-        UINT16& AccessWord16(unsigned int wordOffset)
-            {return AccessBuffer16(wordOffset)[0];}
-        void SetWord16(unsigned int wordOffset, UINT16 value) 
-            {SetUINT16(AccessBuffer16(wordOffset), value);}
-        UINT32 GetWord32(unsigned int wordOffset) const
-            {return GetUINT32(GetBuffer32(wordOffset));}
-        void SetWord32(unsigned int wordOffset, UINT32 value) 
-            {SetUINT32(AccessBuffer32(wordOffset), value);}
+        static inline bool IsAligned32(const void* pointer)
+            {return (0 == ((uintptr_t)pointer & 3));}
+        
+        // These methods get/set fields by pointer directly
+        static inline UINT16 GetUINT16(const void* ptr) 
+        {
+            if (IsAligned16(ptr))
+            {   
+                return ntohs(*((const UINT16*)ptr));
+            }
+            else
+            {
+                UINT16 value;
+                memcpy(&value, ptr, 2);
+                return ntohs(value);
+            }
+        }
+        static inline void SetUINT16(void* ptr, UINT16 value) 
+        {
+            if (IsAligned16(ptr))
+            {   
+                *((UINT16*)ptr) = htons(value);
+            }
+            else
+            {
+                value = htons(value);
+                memcpy(ptr, &value, 2);
+            }
+        }
+        static inline UINT32 GetUINT32(const void* ptr)
+        {
+            if (IsAligned32(ptr))
+            {   
+                return ntohl(*((const UINT32*)ptr));
+            }
+            else
+            {
+                UINT16 value;
+                memcpy(&value, ptr, 4);
+                return ntohl(value);
+            }
+        }
+        static inline void SetUINT32(void* ptr, UINT32 value)
+        {
+            if (IsAligned32(ptr))
+            {   
+                *((UINT32*)ptr) = htonl(value);
+            }
+            else
+            {
+                value = htonl(value);
+                memcpy(ptr, &value, 4);
+            }
+        }
         
         bool FreeOnDestruct() const
             {return (NULL != buffer_allocated);}
         
     protected:
+        // TBD - make these "void*" instead of UINT32*
         UINT32*         buffer_ptr;
         UINT32*         buffer_allocated;
         unsigned int    buffer_bytes;

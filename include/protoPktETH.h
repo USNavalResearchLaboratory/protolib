@@ -60,7 +60,7 @@
 class ProtoPktETH : public ProtoPkt
 {
     public:
-        ProtoPktETH(UINT32*         bufferPtr = NULL, 
+        ProtoPktETH(void*           bufferPtr = NULL, 
                     unsigned int    numBytes = 0,
                     bool            freeOnDestruct = false); 
         ~ProtoPktETH();
@@ -79,7 +79,7 @@ class ProtoPktETH : public ProtoPkt
         };  
         
         bool InitFromBuffer(unsigned int    frameLength,
-                            UINT32*         bufferPtr = NULL,
+                            void*           bufferPtr = NULL,
                             unsigned int    numBytes = 0,
                             bool            freeOnDestruct = false)
             {return ProtoPkt::InitFromBuffer(frameLength, bufferPtr, numBytes, freeOnDestruct);}
@@ -98,7 +98,7 @@ class ProtoPktETH : public ProtoPkt
         char* AccessPayload() 
             {return AccessBuffer(OFFSET_PAYLOAD);}
         
-        bool InitIntoBuffer(UINT32*         bufferPtr = NULL, 
+        bool InitIntoBuffer(void*           bufferPtr = NULL, 
                             unsigned int    bufferBytes = 0, 
                             bool            freeOnDestruct = false);
         void SetSrcAddr(ProtoAddress srcAddr)

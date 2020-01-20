@@ -5,7 +5,7 @@
 */
 #include "protoPktETH.h"
 
-ProtoPktETH::ProtoPktETH(UINT32*        bufferPtr, 
+ProtoPktETH::ProtoPktETH(void*          bufferPtr, 
                          unsigned int   numBytes, 
                          bool           freeOnDestruct)
  : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
@@ -16,7 +16,7 @@ ProtoPktETH::~ProtoPktETH()
 {
 }
 
-bool ProtoPktETH::InitIntoBuffer(UINT32*         bufferPtr, 
+bool ProtoPktETH::InitIntoBuffer(void*           bufferPtr, 
                                  unsigned int    bufferBytes, 
                                  bool            freeOnDestruct)
 {
