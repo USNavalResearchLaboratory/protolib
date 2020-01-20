@@ -134,7 +134,7 @@ bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bo
     }    
     else
     {   
-        recordPtr = groupRecord.AccessBuffer() + (groupRecord.GetLength() >> 2);
+        recordPtr = groupRecord.AccessBuffer32() + (groupRecord.GetLength() >> 2);
         // Make sure it's in scope of this IGMP message size.
         size_t offset = 4*(recordPtr - GetBuffer32());
         if (offset > GetLength())

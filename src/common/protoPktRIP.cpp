@@ -70,7 +70,7 @@ bool ProtoPktRIP::AddRouteEntry(const ProtoAddress&  destAddr,
         return false;
     }
     unsigned int offset = GetLength() / 4;
-    ProtoPktRIP::RouteEntry entry(AccessBuffer() + offset, 20);
+    ProtoPktRIP::RouteEntry entry(AccessBuffer32() + offset, 20);
     entry.SetAddressFamily(IPv4);
     entry.SetRouteTag(routeTag);
     entry.SetAddress(destAddr);
@@ -125,7 +125,7 @@ bool ProtoPktRIP::AccessRouteEntry(unsigned int index, RouteEntry& entry)
         return false;
     }
     // Compute UINT32* pointer (20 byte entry is 5 UINT32's)
-    UINT32* entryBuffer = AccessBuffer() + OFFSET_PAYLOAD + 5*index;
+    UINT32* entryBuffer = AccessBuffer32() + OFFSET_PAYLOAD + 5*index;
     return entry.InitFromBuffer(20, entryBuffer, 20);
 }  // end ProtoPktRIP::AccessRouteEntry()
 

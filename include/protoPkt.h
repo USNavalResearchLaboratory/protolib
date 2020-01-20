@@ -70,77 +70,37 @@ class ProtoPkt
             return result;
         }
         
+        void SetLength(unsigned int bytes) 
+            {pkt_length = bytes;}   
+        
+        unsigned int GetBufferLength() const 
+            {return buffer_bytes;}
+        
+        unsigned int GetLength() const 
+            {return pkt_length;} 
+        
+        // These methods get/set fields by byte offsets and 
+        // do alignment checks to guarantee safety regardless
+        // of alignment.
+        
         const char* GetBuffer() const 
             {return (char*)buffer_ptr;} 
         const char* GetBuffer(unsigned int byteOffset) const
             {return GetBuffer() + byteOffset;}
-        const UINT16* GetBuffer16() const 
-            {return (UINT16*)buffer_ptr;}
-        const UINT16* GetBuffer16(unsigned int wordOffset) const
-            {return GetBuffer16() + wordOffset;}
-        const UINT32* GetBuffer32() const 
-            {return buffer_ptr;}
-        const UINT32* GetBuffer32(unsigned int wordOffset) const
-            {return GetBuffer32() + wordOffset;}
-        unsigned int GetBufferLength() const 
-            {return buffer_bytes;}
-        unsigned int GetLength() const 
-            {return pkt_length;} 
-        
-        UINT32* AccessBuffer() 
-            {return buffer_ptr;}  // TBD - morph this AccessBuffer32()
+        char* AccessBuffer() 
+            {return (char*)buffer_ptr;}  
         char* AccessBuffer(unsigned int offset)
             {return (((char*)buffer_ptr) + offset);}
-        UINT16* AccessBuffer16()
-            {return (UINT16*)buffer_ptr;}
-        UINT16* AccessBuffer16(unsigned int wordOffset)
-            {return AccessBuffer16() + wordOffset;}
-        UINT32* AccessBuffer32()
-            {return buffer_ptr;}
-        UINT32* AccessBuffer32(unsigned int wordOffset)
-            {return AccessBuffer32() + wordOffset;}
-        void SetLength(unsigned int bytes) {pkt_length = bytes;}
-            
-    protected:
-        // These methods get/set fields by pointer directly
-        static UINT16 GetUINT16(const UINT16* ptr) 
-            {return ntohs(*ptr);}
-        static UINT32 GetUINT32(const UINT32* ptr) 
-            {return ntohl(*ptr);}
-        static void SetUINT16(UINT16* ptr, UINT16 value) 
-            {*ptr = htons(value);}
-        static void SetUINT32(UINT32* ptr, UINT32 value)
-            {*ptr = htonl(value);}    
         
-        // These methods get/set field by aligned word offsets
-        UINT16 GetWord16(unsigned int wordOffset) const
-            {return GetUINT16(GetBuffer16(wordOffset));}
-        UINT16& AccessWord16(unsigned int wordOffset)
-            {return AccessBuffer16(wordOffset)[0];}
-        void SetWord16(unsigned int wordOffset, UINT16 value) 
-            {SetUINT16(AccessBuffer16(wordOffset), value);}
-        UINT32 GetWord32(unsigned int wordOffset) const
-            {return GetUINT32(GetBuffer32(wordOffset));}
-        void SetWord32(unsigned int wordOffset, UINT32 value) 
-            {SetUINT32(AccessBuffer32(wordOffset), value);}
-            
-        // These methods get/set fields by byte offsets
         UINT8 GetUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
         UINT8& AccessUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
         void SetUINT8(unsigned int byteOffset, UINT8 value)
-            {((UINT8*)buffer_ptr)[byteOffset] = value;}     
+            {((UINT8*)buffer_ptr)[byteOffset] = value;}  
         
-        /*
-        static bool IsAligned32(unsigned int byteOffset)
-            {return (0 == (byteOffset & 3));}
-        static bool IsAligned16(unsigned int byteOffset)
-            {return (0 == (byteOffset & 1));}
-        */
-        
-        static inline bool IsAligned(const void* pointer, size_t byte_count)
-            {return (uintptr_t)pointer % byte_count == 0;}
+        static inline bool IsAligned(const void* pointer, size_t wordSize)
+            {return (0 == (uintptr_t)pointer % wordSize);}
         
         UINT16 GetUINT16(unsigned int byteOffset) const
         {
@@ -201,82 +161,52 @@ class ProtoPkt
             }
         }
         
+        // These MUST only be called by subclasses that are absolutely
+        // sure that UINT32 alignment is guaranteed for the 'buffer_ptr'
+        const UINT16* GetBuffer16() const 
+            {return (UINT16*)buffer_ptr;}
+        const UINT16* GetBuffer16(unsigned int wordOffset) const
+            {return GetBuffer16() + wordOffset;}
+        const UINT32* GetBuffer32() const 
+            {return buffer_ptr;}
+        const UINT32* GetBuffer32(unsigned int wordOffset) const
+            {return GetBuffer32() + wordOffset;}
         
-#ifdef NEVER        
-        // These helper methods are defined for setting multi-byte protocol
-        // fields in one of two ways:  1) "cast and assign", or 2) memcpy()
-        // **IMPORTANT** Note the offsets are _byte_ offsets!!!
-#ifdef CAST_AND_ASSIGN
-        static UINT16 GetUINT16(UINT16* ptr) const
+        UINT16* AccessBuffer16()
+            {return (UINT16*)buffer_ptr;}
+        UINT16* AccessBuffer16(unsigned int wordOffset)
+            {return AccessBuffer16() + wordOffset;}
+        UINT32* AccessBuffer32()
+            {return buffer_ptr;}
+        UINT32* AccessBuffer32(unsigned int wordOffset)
+            {return AccessBuffer32() + wordOffset;}
+            
+        // These methods get/set fields by pointer directly
+        static UINT16 GetUINT16(const UINT16* ptr) 
             {return ntohs(*ptr);}
-        static UINT32 GetUINT32(UINT32* ptr) const
+        static UINT32 GetUINT32(const UINT32* ptr) 
             {return ntohl(*ptr);}
         static void SetUINT16(UINT16* ptr, UINT16 value) 
             {*ptr = htons(value);}
         static void SetUINT32(UINT32* ptr, UINT32 value)
-            {*ptr = htonl(value);}
+            {*ptr = htonl(value);}    
         
-        UINT16 GetUINT16(unsigned int byteOffset) const
-            {return ntohs(*((UINT16*)(((char*)buffer_ptr) + byteOffset)));}     
-        UINT32 GetUINT32(unsigned int byteOffset) const
-            {return ntohl(*((UINT32*)(((char*)buffer_ptr) + byteOffset)));}    
-        void SetUINT16(unsigned int byteOffset, UINT16 value)
-            {*((UINT16*)(((char*)buffer_ptr) + byteOffset)) = htons(value);}        
-        void SetUINT32(unsigned int byteOffset, UINT32 value)
-            {*((UINT32*)(((char*)buffer_ptr) + byteOffset)) = htonl(value);}
-#else
-        static UINT16 GetUINT16(UINT16* ptr)
-        {
-            UINT16 value;
-            memcpy(&value, ptr, sizeof(UINT16));
-            return ntohs(value);
-        } 
-        static UINT32 GetUINT32(UINT32* ptr)
-        {
-            UINT32 value;
-            memcpy(&value, ptr, sizeof(UINT32));
-            return ntohl(value);
-        }
-        static void SetUINT16(UINT16* ptr, UINT16 value)
-        {
-            value = htons(value);
-            memcpy(ptr, &value, sizeof(UINT16));
-        }
-        static void SetUINT32(UINT32* ptr, UINT32 value)
-        {
-            value = htonl(value);
-            memcpy(ptr, &value, sizeof(UINT32));
-        }
+        // These methods get/set field by aligned word offsets
+        UINT16 GetWord16(unsigned int wordOffset) const
+            {return GetUINT16(GetBuffer16(wordOffset));}
+        UINT16& AccessWord16(unsigned int wordOffset)
+            {return AccessBuffer16(wordOffset)[0];}
+        void SetWord16(unsigned int wordOffset, UINT16 value) 
+            {SetUINT16(AccessBuffer16(wordOffset), value);}
+        UINT32 GetWord32(unsigned int wordOffset) const
+            {return GetUINT32(GetBuffer32(wordOffset));}
+        void SetWord32(unsigned int wordOffset, UINT32 value) 
+            {SetUINT32(AccessBuffer32(wordOffset), value);}
         
-        UINT16 GetUINT16(unsigned int byteOffset) const
-        {
-            UINT16 value;
-            memcpy(&value, (char*)buffer_ptr + byteOffset, 2);
-            return ntohs(value);
-        }
-        UINT32 GetUINT32(unsigned int byteOffset) const
-        {
-            UINT32 value;
-            memcpy(&value, (char*)buffer_ptr + byteOffset, 4);
-            return ntohl(value);
-        }
-        void SetUINT16(unsigned int byteOffset, UINT16 value)
-        {
-            value = htons(value);
-            memcpy((char*)buffer_ptr + byteOffset, &value, 2);
-        }
-        void SetUINT32(unsigned int byteOffset, UINT32 value)
-        {
-            value = htonl(value);
-            memcpy((char*)buffer_ptr + byteOffset, &value, 4);
-        }
-#endif // if/else CAST_AND_ASSIGN
-#endif // NEVER
+        bool FreeOnDestruct() const
+            {return (NULL != buffer_allocated);}
         
-    bool FreeOnDestruct() const
-        {return (NULL != buffer_allocated);}
-        
-    //private:
+    protected:
         UINT32*         buffer_ptr;
         UINT32*         buffer_allocated;
         unsigned int    buffer_bytes;

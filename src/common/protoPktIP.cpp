@@ -134,7 +134,7 @@ ProtoPktIPv4::ProtoPktIPv4(UINT32*      bufferPtr,
 }
 
 ProtoPktIPv4::ProtoPktIPv4(ProtoPktIP & ipPkt)
- : ProtoPktIP(ipPkt.AccessBuffer(), ipPkt.GetBufferLength())
+ : ProtoPktIP(ipPkt.AccessBuffer32(), ipPkt.GetBufferLength())
 {
     InitFromBuffer();
 }
@@ -561,7 +561,7 @@ ProtoPktIPv6::ProtoPktIPv6(UINT32*      bufferPtr,
 }
 
 ProtoPktIPv6::ProtoPktIPv6(ProtoPktIP & ipPkt)
- : ProtoPktIP(ipPkt.AccessBuffer(), ipPkt.GetBufferLength()),
+ : ProtoPktIP(ipPkt.AccessBuffer32(), ipPkt.GetBufferLength()),
    ext_pending(false)
 {
     InitFromBuffer();
