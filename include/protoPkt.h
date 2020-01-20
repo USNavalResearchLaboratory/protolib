@@ -132,14 +132,20 @@ class ProtoPkt
         void SetUINT8(unsigned int byteOffset, UINT8 value)
             {((UINT8*)buffer_ptr)[byteOffset] = value;}     
         
+        /*
         static bool IsAligned32(unsigned int byteOffset)
             {return (0 == (byteOffset & 3));}
         static bool IsAligned16(unsigned int byteOffset)
             {return (0 == (byteOffset & 1));}
+        */
+        
+        static inline bool IsAligned(const void* pointer, size_t byte_count)
+            {return (uintptr_t)pointer % byte_count == 0;}
         
         UINT16 GetUINT16(unsigned int byteOffset) const
         {
-            if (IsAligned16(byteOffset))
+            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
+            if (IsAligned(ptr, 2))
             {   
                 byteOffset >>= 1;
                 return ntohs(*(((UINT16*)buffer_ptr) + byteOffset));
@@ -153,7 +159,8 @@ class ProtoPkt
         }
         void SetUINT16(unsigned int byteOffset, UINT16 value)
         {
-            if (IsAligned16(byteOffset))
+            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
+            if (IsAligned(ptr, 2))
             {   
                 byteOffset >>= 1;
                 *(((UINT16*)buffer_ptr) + byteOffset) = htons(value);
@@ -166,7 +173,8 @@ class ProtoPkt
         }
         UINT32 GetUINT32(unsigned int byteOffset) const
         {
-            if (IsAligned32(byteOffset))
+            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
+            if (IsAligned(ptr, 4))
             {   
                 byteOffset >>= 2;
                 return ntohs(*(((UINT32*)buffer_ptr) + byteOffset));
@@ -180,7 +188,8 @@ class ProtoPkt
         }
         void SetUINT32(unsigned int byteOffset, UINT32 value)
         {
-            if (IsAligned32(byteOffset))
+            const char* ptr = ((const char*)buffer_ptr) + byteOffset;
+            if (IsAligned(ptr, 4))
             {   
                 byteOffset >>= 2;
                 *(((UINT32*)buffer_ptr) + byteOffset) = htons(value);
@@ -267,7 +276,7 @@ class ProtoPkt
     bool FreeOnDestruct() const
         {return (NULL != buffer_allocated);}
         
-    private:
+    //private:
         UINT32*         buffer_ptr;
         UINT32*         buffer_allocated;
         unsigned int    buffer_bytes;

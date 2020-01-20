@@ -342,7 +342,7 @@ class ProtoPktIPv4 : public ProtoPktIP
         UINT16 GetPayloadLength() const {return (GetTotalLength() - GetHeaderLength());}
         const UINT32* GetPayload32() const
             {return GetBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
-        const char* GetPayloadX() const 
+        const char* GetPayload() const 
             {return ((const char*)GetPayload32());}
         UINT32* AccessPayload() 
             {return AccessBuffer32(GetUINT8(OFFSET_HDR_LEN) & 0x0f);}
