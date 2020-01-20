@@ -184,7 +184,7 @@ class ProtoPkt
             }
             else
             {
-                UINT16 value;
+                UINT32 value;
                 memcpy(&value, ptr, 4);
                 return ntohl(value);
             }
