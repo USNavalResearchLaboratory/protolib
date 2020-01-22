@@ -2,21 +2,17 @@
 
 OVERVIEW
  
-Protolib is not so much a library as it is a toolkit.  The goal
-of the Protolib is to provide a set of simple, cross-platform
-C++ classes that allow development of network protocols and
-applications that can run on different platforms and in network
-simulation environments.  Although Protolib is principally for
-research purposes, the code has been constructed to provide
-robust, efficient performance and adaptability to real
-applications.
+Protolib is not so much a library as it is a toolkit.  The goal of the Protolib
+is to provide a set of simple, cross-platform C++ classes that allow development
+of network protocols and applications that can run on different platforms and in
+network simulation environments.  Although Protolib is principally for research
+purposes, the code has been constructed to provide robust, efficient performance
+and adaptability to real applications.
 
-Currently Protolib supports most Unix platforms (including
-MacOS X) and WIN32 platforms.  The most recent version also
-supports building Protolib-based code for the ns-2 simulation
-environment. The OPNET simulation tool has also been supported
-in the past and could be once again with a small amount of
-effort.
+Currently Protolib supports most Unix platforms (including MacOS X) and WIN32
+platforms.  The most recent version also supports building Protolib-based code
+for the ns-2 simulation environment. The OPNET simulation tool has also been
+supported in the past and could be once again with a small amount of effort.
 
 CLASSES:
 
