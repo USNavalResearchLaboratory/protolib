@@ -82,7 +82,7 @@ ProtoRouteTable: Class based on the ProtoTree Patricia tree to
                  table at the moment, but may be enhanced in
                  the future.  Example use of the ProtoTree.
 
-ProtoRouteMgr:   Base class for providing  a conistent
+ProtoRouteMgr:   Base class for providing  a consistent
                  interface to manage operating system (or
                  other) routing engines.
                  

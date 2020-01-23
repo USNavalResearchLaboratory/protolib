@@ -30,10 +30,10 @@ class ProtoPktIGMP : public ProtoPkt
         class GroupRecord : public ProtoPkt
         {
             public:
-               GroupRecord(void*          bufferPtr = NULL, 
-                           unsigned int   numBytes = 0, 
-                           bool           initFromBuffer = false,
-                           bool           freeOnDestruct = false); 
+                GroupRecord(void*          bufferPtr = NULL, 
+                            unsigned int   numBytes = 0, 
+                            bool           initFromBuffer = false,
+                            bool           freeOnDestruct = false); 
                 ~GroupRecord(); 
                 
                 enum Type
