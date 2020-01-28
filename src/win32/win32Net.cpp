@@ -1,7 +1,7 @@
-#include "protoNet.h"
 #include "protoList.h"
 #include "protoDebug.h"
 #include "protoDispatcher.h"
+#include "protoNet.h"
 
 #include <winsock2.h>
 #include <WS2tcpip.h>  // for extra socket options
@@ -671,7 +671,7 @@ unsigned int ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsign
             // We use the "bDescr" field because the "wszName" field doesn't seem to work
 #ifdef _UNICODE
             buflen = buflen < MAX_INTERFACE_NAME_LEN ? buflen : MAX_INTERFACE_NAME_LEN;
-            wcstombs(buffer, ifRow.wszName, buflen);
+            unsigned int nameLen = wcstombs(buffer, ifRow.wszName, buflen);
 #else
 			size_t nameLen = strnlen_s((char*)ifRow.bDescr, ifRow.dwDescrLen);
             strncpy_s(buffer, buflen, (char*)ifRow.bDescr, ifRow.dwDescrLen);

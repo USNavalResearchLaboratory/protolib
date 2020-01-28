@@ -1,8 +1,3 @@
-/**
-* @file protoAddress.cpp
-*
-* @brief Network address container class with support for IPv4, IPv6, and "SIM" address types. Also includes functions for name/address resolution.
-*/
 
 #include "protoAddress.h"
 #include "protoSocket.h"  // for ProtoSocket::GetInterfaceAddress() routines
@@ -1182,10 +1177,16 @@ bool ProtoAddress::ConvertFromString(const char* text)
 	sa.sin_family = AF_INET;
 	int addrSize = sizeof(struct sockaddr_storage);
 
-	if (0 == WSAStringToAddress((LPSTR)text,AF_INET, NULL,(LPSOCKADDR)&sa,&addrSize))
+#ifdef _UNICODE
+	WCHAR theString[256];
+	mbstowcs(theString, text, 255);
+#else
+	const char* theString = text;
+#endif // if/else _UNICODE
+
+	if (0 == WSAStringToAddress((LPTSTR)theString, AF_INET, NULL,(LPSOCKADDR)&sa,&addrSize))
 	{
 		addr = (struct sockaddr_storage&)sa;
-		type = IPv4;
 		length = 4;
 		Win32Cleanup();
 		return true;
@@ -1196,7 +1197,7 @@ bool ProtoAddress::ConvertFromString(const char* text)
     sa6.sin6_family = AF_INET6;
 	addrSize = sizeof(struct sockaddr_storage);
 
-	if (0 == WSAStringToAddress((LPTSTR)text,AF_INET6, NULL,(LPSOCKADDR)&sa6,&addrSize))
+	if (0 == WSAStringToAddress((LPTSTR)theString, AF_INET6, NULL,(LPSOCKADDR)&sa6,&addrSize))
 	{
 		addr = (struct sockaddr_storage&)sa6;
 		type = IPv6;
