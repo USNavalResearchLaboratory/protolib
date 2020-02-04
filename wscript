@@ -152,7 +152,7 @@ def configure(ctx):
             ctx.env.CFLAGS += ['/Od', '/RTC1', '/ZI']
         else:
             ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG']
-        	#ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG', '/DWINVER=0x0501']
+            #ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG', '/DWINVER=0x0501']
         ctx.env.CFLAGS
 
 def build(ctx):
@@ -171,7 +171,7 @@ def build(ctx):
             'protoDebug',
             'protoDispatcher',
             'protoEvent',
-			'protoFile',
+            'protoFile',
             'protoGraph',
             'protoJson',
             'protoLFSR',
@@ -273,7 +273,7 @@ def build(ctx):
             'base64Example',
             'detourExample',
             'eventExample',
-			'fileTest',
+            'fileTest',
             'graphExample',
             #'graphRider', (this depends on manetGraphML.cpp so doesn't work as a "simple example"
             'lfsrExample',
