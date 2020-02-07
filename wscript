@@ -83,7 +83,7 @@ def configure(ctx):
 
     if system == 'darwin':
         ctx.env.DEFINES_BUILD_PROTOLIB += ['MACOSX',
-                'HAVE_FLOCK', '_FILE_OFFSET_BITS=64', 'HAVE_PSELECT', 'USE_SELECT']
+                'HAVE_FLOCK', '_FILE_OFFSET_BITS=64', 'HAVE_PSELECT', 'USE_SELECT'] ;#, "UNICODE"]
         ctx.check_cxx(lib='resolv')
         ctx.env.USE_BUILD_PROTOLIB += ['RESOLV']
 
