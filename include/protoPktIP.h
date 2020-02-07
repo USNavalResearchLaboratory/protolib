@@ -360,7 +360,7 @@ class ProtoPktIPv4 : public ProtoPktIP
         void SetTTL(UINT8 ttl, bool updateChecksum = false) ;
         void SetProtocol(Protocol protocol, bool updateChecksum = false);
         void SetChecksum(UINT16 checksum)
-            {SetWord32(OFFSET_CHECKSUM, checksum);}
+            {SetWord16(OFFSET_CHECKSUM, checksum);}
         void SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum = false);
         void SetDstAddr(const ProtoAddress& addr, bool calculateChecksum = false);
         /// (TBD) support header extensions for IPv4
