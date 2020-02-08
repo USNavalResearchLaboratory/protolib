@@ -5,6 +5,8 @@
 #include "protoAddress.h"
 #include "protoDebug.h"
 
+#include <string.h>  // for memcpy()
+
 /**
  * @class ProtoPktIP
  *
@@ -94,63 +96,6 @@ class ProtoPktIP : public ProtoPkt
             }
         }
         
-        /**
-         * @class OptionBase
-         *
-         * @brief Base class for IPv4 and IPv6 Option subclasses
-         */
-        class OptionBase
-        {
-            public:
-                ~OptionBase();
-                
-                void AttachBuffer(char*        bufferPtr = NULL, 
-                                  unsigned int numBytes = 0, 
-                                  bool         freeOnDestruct = false)
-                {
-                    if (NULL != buffer_allocated) delete[] buffer_allocated;
-                    buffer_ptr = bufferPtr;
-                    buffer_allocated = freeOnDestruct ? bufferPtr : NULL;
-                    buffer_bytes = numBytes;
-                }
-                char* DetachBuffer()
-                {
-                    char* theBuffer = buffer_ptr;
-                    buffer_ptr = buffer_allocated = NULL;
-                    buffer_bytes = 0;
-                    return theBuffer;   
-                }                
-                
-                const char* GetBuffer() const 
-                    {return buffer_ptr;}
-                const char* GetBuffer(unsigned byteOffset) const
-                    {return buffer_ptr + byteOffset;}
-                char* AccessBuffer()  
-                    {return buffer_ptr;}
-                char* AccessBuffer(unsigned byteOffset) const
-                    {return buffer_ptr + byteOffset;}
-                unsigned int GetBufferLength() const 
-                    {return buffer_bytes;}
-                
-                UINT8 GetUINT8(unsigned int byteOffset) const
-                    {return buffer_ptr[byteOffset];}
-                UINT8& AccessUINT8(unsigned int byteOffset) const
-                    {return (UINT8&)buffer_ptr[byteOffset];}
-                
-                void SetUINT8(unsigned int byteOffset, UINT8 value)
-                    {buffer_ptr[byteOffset] = value;}
-                
-            protected:
-                OptionBase(char*        bufferPtr = NULL, 
-                           unsigned int numBytes = 0, 
-                           bool         freeOnDestruct = false);
-            private:
-                char*           buffer_ptr;
-                char*           buffer_allocated;
-                unsigned int    buffer_bytes;
-                    
-        };  // end class ProtoPkt::OptionBase
-        
     protected:
         enum {OFFSET_VERSION = 0};   // 1/2 byte, most sig nybble
     
@@ -186,7 +131,7 @@ class ProtoPktIPv4 : public ProtoPktIP
          * @class Option
 		 * @brief ProtoPktIPv4 Option Base class
          */
-        class Option : public ProtoPktIP::OptionBase
+        class Option : public ProtoPkt
         {
             public:
                 enum Type
@@ -223,7 +168,7 @@ class ProtoPktIPv4 : public ProtoPktIP
                     EXP4   =    222  // RFC3692//style Experiment (**) [RFC4727]                       
                 };    
                     
-                Option(char*        bufferPtr = NULL, 
+                Option(void*        bufferPtr = NULL, 
                        unsigned int numBytes = 0, 
                        bool         initFromBuffer = true, 
                        bool         freeOnDestruct = false);
@@ -231,7 +176,7 @@ class ProtoPktIPv4 : public ProtoPktIP
                 
                 // Use these to build an option
                 bool InitIntoBuffer(Type         type,
-                                    char*        bufferPtr = NULL, 
+                                    void*        bufferPtr = NULL, 
                                     unsigned int numBytes = 0, 
                                     bool         freeOnDestruct = false);
                 
@@ -239,21 +184,18 @@ class ProtoPktIPv4 : public ProtoPktIP
                 
                 
                 // Use these to parse
-                bool InitFromBuffer(char*        bufferPtr = NULL, 
+                bool InitFromBuffer(void*        bufferPtr = NULL, 
                                     unsigned int numBytes = 0, 
                                     bool         freeOnDestruct = false);
                 
                 Type GetType() const
                     {return (Type)GetUINT8(OFFSET_TYPE);}
                 
-                unsigned int GetLength() const
-                    {return opt_length;}
-                
                 const char* GetData() const
-                    {return GetBuffer(OffsetData());}
+                    {return (const char*)GetBuffer(OffsetData());}
                 
                 unsigned int GetDataLength() const
-                    {return (opt_length - ((OffsetData() != OFFSET_LENGTH) ? 2 : 1));}
+                    {return (GetLength() - ((OffsetData() != OFFSET_LENGTH) ? 2 : 1));}
                 
                 // Per RFC4302 spec that cites related specs
                 bool IsMutable() const
@@ -275,12 +217,12 @@ class ProtoPktIPv4 : public ProtoPktIP
                         bool GetNextOption(Option& option);
 
                     private:
-                        const char*  pkt_buffer;
+                        const void*  pkt_buffer;
                         unsigned int offset;
                         unsigned int offset_end;   
                 };  // end class ProtoPktIPv4::Option::Iterator
                 
-            private:
+            protected:
                 static int GetLengthByType(Type type);    
                     
                 enum
@@ -290,12 +232,10 @@ class ProtoPktIPv4 : public ProtoPktIP
                 };
                 enum
                 {
-                    OFFSET_TYPE    = 0,                // (UINT8 offset
-                    OFFSET_LENGTH  = (OFFSET_TYPE + 1) // UINT8 offset      
+                    OFFSET_TYPE    = 0,              // UINT8 offset
+                    OFFSET_LENGTH  = OFFSET_TYPE + 1 // UINT8 offset      
                 };
                      
-                unsigned int opt_length; 
-                
                 unsigned int OffsetData() const
                     {return ((LENGTH_VARIABLE == GetLengthByType(GetType())) ? 2 : 1);}
         
@@ -448,6 +388,71 @@ class ProtoPktIPv4 : public ProtoPktIP
         };  
 };  // end class ProtoPktIPv4
 
+
+// Modified version of the IPv4 "Upstream Multicast Packet" option (type 152)
+// The modification here is use of the 16-bit RESERVED field as a sequence
+// number for downstream packet loss detection.  This is used by the
+// NRL experimental Elastic Multicast protocol
+class ProtoPktUMP : public ProtoPktIPv4::Option
+{
+    public:
+        ProtoPktUMP(void*        bufferPtr = NULL, 
+                    unsigned int numBytes = 0, 
+                    bool         initFromBuffer = true, 
+                    bool         freeOnDestruct = false)
+        {
+            if (initFromBuffer)
+                InitFromBuffer(bufferPtr, numBytes, freeOnDestruct);
+            else
+                InitIntoBuffer(bufferPtr, numBytes, freeOnDestruct);
+        }
+        ~ProtoPktUMP() {}
+        
+        // Use these to build an option
+        bool InitIntoBuffer(void*        bufferPtr = NULL, 
+                            unsigned int numBytes = 0, 
+                            bool         freeOnDestruct = false)
+        {
+            if (ProtoPktIPv4::Option::InitIntoBuffer(ProtoPktIPv4::Option::UMP, bufferPtr, numBytes, freeOnDestruct))
+            {
+                SetSequence(0);
+                SetSrcAddr(PROTO_ADDR_NONE);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        void SetSequence(UINT16 seq)
+            {SetWord16(OFFSET_SEQ, seq);}
+        void SetSrcAddr(const ProtoAddress& addr)
+        {
+            if (addr.IsValid())
+                memcpy(AccessBuffer32(OFFSET_SRC), addr.GetRawHostAddress(), 4);
+            else
+                memset(AccessBuffer32(OFFSET_SRC), 0, 4);
+        }
+
+        // Use these to parse
+        bool InitFromBuffer(void*        bufferPtr = NULL, 
+                            unsigned int numBytes = 0, 
+                            bool         freeOnDestruct = false)
+            {return ProtoPktIPv4::Option::InitFromBuffer(bufferPtr, numBytes, freeOnDestruct);}
+        UINT16 GetSequence() const
+            {return GetWord16(OFFSET_SEQ);}
+        void GetSrcAddr(ProtoAddress& addr)
+            {addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_SRC), 4);}
+        
+    private:
+        enum 
+        {
+            OFFSET_SEQ = (OFFSET_LENGTH+1)/2, // UINT16 offset, 2-byte sequence number
+            OFFSET_SRC = (OFFSET_SEQ+1)/2     // UINT32 offset, upstream src addr
+        };
+            
+};  // end class ProtoPktUMP
+
 /**
  * @class ProtoPktIPv6
  *
@@ -473,16 +478,16 @@ class ProtoPktIPv6 : public ProtoPktIP
 		 * @brief IPv6 Option Base class
          */
 
-        class Option : public ProtoPktIP::OptionBase
+        class Option : public ProtoPkt
         {
             public:
-                Option(char*        bufferPtr = NULL, 
+                Option(void*        bufferPtr = NULL, 
                        unsigned int numBytes = 0, 
                        bool         initFromBuffer = true,
                        bool         freeOnDestruct = false);
                 ~Option();
                 
-                bool InitFromBuffer(char* bufferPtr         = NULL, 
+                bool InitFromBuffer(void* bufferPtr         = NULL, 
                                     unsigned int numBytes   = 0, 
                                     bool freeOnDestruct     = false);
                 
@@ -511,7 +516,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                     {return ((PAD1 == GetType()) ? 0 : GetUINT8(OFFSET_DATA_LENGTH));}
                 bool HasData() {return (GetDataLength() > 0);}
                 const char* GetData() const
-                    {return GetBuffer(OFFSET_DATA);}
+                    {return (char*)GetBuffer(OFFSET_DATA);}
                 unsigned int GetLength() const
                 {
                     return ((0 == GetBufferLength()) ? 
@@ -520,7 +525,7 @@ class ProtoPktIPv6 : public ProtoPktIP
                 }
                 
                 bool InitIntoBuffer(Type         type,
-                                    char*        bufferPtr = NULL, 
+                                    void*        bufferPtr = NULL, 
                                     unsigned int numBytes = 0, 
                                     bool         freeOnDestruct = false);
                 void SetUnknownPolicy(UnknownPolicy policy)
@@ -1034,7 +1039,7 @@ class ProtoPktMobile : public ProtoPkt
 class ProtoPktDPD : public ProtoPktIPv6::Option
 {
     public:
-        ProtoPktDPD(char*        bufferPtr = NULL, 
+        ProtoPktDPD(void*        bufferPtr = NULL, 
                     unsigned int numBytes = 0, 
                     bool         initFromBuffer = true,
                     bool         freeOnDestruct = false);
@@ -1050,7 +1055,7 @@ class ProtoPktDPD : public ProtoPktIPv6::Option
         };
         
         // Use these to build a DPD extension (call them in order)
-        bool InitIntoBuffer(char*         bufferPtr = NULL, 
+        bool InitIntoBuffer(void*         bufferPtr = NULL, 
                             unsigned int  numBytes = 0, 
                             bool          freeOnDestruct = false);
         
@@ -1078,7 +1083,7 @@ class ProtoPktDPD : public ProtoPktIPv6::Option
         
         
         // Use these to parse a DPD extension
-        bool InitFromBuffer(char*           bufferPtr = NULL, 
+        bool InitFromBuffer(void*           bufferPtr = NULL, 
                             unsigned int    numBytes = 0, 
                             bool            freeOnDestruct = false);
         
@@ -1089,7 +1094,7 @@ class ProtoPktDPD : public ProtoPktIPv6::Option
             {return GetDataLength();}
         
         const char* GetHAV() const
-            {return (HasHAV() ? GetBuffer(OFFSET_HAV) : NULL);}
+            {return (HasHAV() ? (char*)GetBuffer(OFFSET_HAV) : NULL);}
             
         
         TaggerIdType GetTaggerIdType() const
@@ -1102,14 +1107,14 @@ class ProtoPktDPD : public ProtoPktIPv6::Option
         }
             
         const char* GetTaggerId() const
-            {return GetBuffer(OFFSET_TID_VALUE);}
+            {return (char*)GetBuffer(OFFSET_TID_VALUE);}
         bool GetTaggerId(ProtoAddress& addr) const;
         
         UINT8 GetPktIdLength() const
             {return (GetDataLength() - GetTaggerIdLength() - (HasHAV() ? 0 : 1));}
         
         const char* GetPktId() const
-            {return GetBuffer(OffsetPktId());}
+            {return (char*)GetBuffer(OffsetPktId());}
         bool GetPktId(UINT8& value) const;
         bool GetPktId(UINT16& value) const;
         bool GetPktId(UINT32& value) const;
