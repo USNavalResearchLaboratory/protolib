@@ -257,6 +257,8 @@ class ProtoPktIPv4 : public ProtoPktIP
             {return GetWord16(OFFSET_ID);}
         bool FlagIsSet(Flag flag) const
             {return (0 != (flag & GetUINT8(OFFSET_FLAGS)));}
+        bool HasOptions() const
+            {return (GetHeaderLength() > 20);}
         UINT16 GetFragmentOffset() const
             {return (0x1fff & GetWord16(OFFSET_FRAGMENT));}
         UINT8 GetTTL() const
@@ -292,6 +294,18 @@ class ProtoPktIPv4 : public ProtoPktIP
                             unsigned int    bufferBytes = 0, 
                             bool            freeOnDestruct = false);
         /// (TBD) modify "Set" methods to optionally update checksum
+        void SetHeaderLength(UINT8 hdrBytes) 
+        {  
+            UINT8& byte = AccessUINT8(OFFSET_HDR_LEN);
+            byte &= 0xf0;
+            byte |= (hdrBytes >> 2);
+            SetTotalLength(hdrBytes);
+        }
+        void SetTotalLength(UINT16 numBytes) 
+        {
+            SetWord16(OFFSET_LEN, numBytes);
+            ProtoPkt::SetLength(numBytes);
+        }
         void SetTOS(UINT8 tos, bool updateChecksum = false);
         void SetID(UINT16 id, bool updateChecksum = false) ;
         void SetFlag(Flag flag, bool updateChecksum = false);
@@ -358,19 +372,6 @@ class ProtoPktIPv4 : public ProtoPktIP
             {return CalculateChecksum(true);}
            
     private:
-        void SetHeaderLength(UINT8 hdrBytes) 
-        {  
-            UINT8& byte = AccessUINT8(OFFSET_HDR_LEN);
-            byte &= 0xf0;
-            byte |= (hdrBytes >> 2);
-            SetTotalLength(hdrBytes);
-        }
-        void SetTotalLength(UINT16 numBytes) 
-        {
-            SetWord16(OFFSET_LEN, numBytes);
-            ProtoPkt::SetLength(numBytes);
-        }
-        
         enum
         {
             OFFSET_HDR_LEN  = OFFSET_VERSION,            // 0.5 bytes (masked)            
@@ -384,7 +385,7 @@ class ProtoPktIPv4 : public ProtoPktIP
             OFFSET_CHECKSUM = (OFFSET_PROTOCOL+1)/2,     // 5 UINT16 (10 bytes)
             OFFSET_SRC_ADDR = ((OFFSET_CHECKSUM+1)*2)/4, // 3 UINT32 (12 bytes)
             OFFSET_DST_ADDR = OFFSET_SRC_ADDR+1,         // 4 UINT32 (16 bytes)
-            OFFSET_OPTIONS  = (OFFSET_DST_ADDR+1)*4      // 20 bytes
+            OFFSET_OPTIONS  = (OFFSET_DST_ADDR+1)*4      // 20 bytes (UINT8 offset)
         };  
 };  // end class ProtoPktIPv4
 
@@ -401,10 +402,13 @@ class ProtoPktUMP : public ProtoPktIPv4::Option
                     bool         initFromBuffer = true, 
                     bool         freeOnDestruct = false)
         {
-            if (initFromBuffer)
-                InitFromBuffer(bufferPtr, numBytes, freeOnDestruct);
-            else
-                InitIntoBuffer(bufferPtr, numBytes, freeOnDestruct);
+            if (NULL != bufferPtr)
+            {
+                if (initFromBuffer)
+                    InitFromBuffer(bufferPtr, numBytes, freeOnDestruct);
+                else
+                    InitIntoBuffer(bufferPtr, numBytes, freeOnDestruct);
+            }
         }
         ~ProtoPktUMP() {}
         

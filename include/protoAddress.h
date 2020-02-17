@@ -182,9 +182,13 @@ class ProtoAddress
                               ProtoAddress& subnetAddr) const;
         void GetBroadcastAddress(UINT8          prefixLen, 
                                  ProtoAddress&  broadcastAddr) const;
+        // if you start at the subnet address, you can use
+        // this Increment() method to iterate over the range
+        // of subnet addresses, up to the broadcast address
+        bool Increment();
         
         // Generates Ethernet mcast addr from IP mcast addr
-        void GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr);
+        ProtoAddress& GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr);
         
         // Name/address resolution
         bool ResolveFromString(const char* text);
@@ -239,6 +243,8 @@ class ProtoAddress
 #endif  // WIN32
 
     private:
+        char* AccessRawHostAddress() const;
+            
         Type                    type; 
         UINT8                   length;        
 #ifdef SIMULATE
