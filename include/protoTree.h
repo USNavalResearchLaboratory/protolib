@@ -164,9 +164,11 @@ class ProtoTree : public ProtoIterable
                 // i.e., just like UseSignBit() and UseComplementTwo()
 #ifdef WIN32
                 // Some windows compilers don't like the other format
-                virtual Endian GetEndian() const;
+                virtual Endian GetEndian() const
+                    {return ENDIAN_BIG;}  // default endian for ProtoTree
 #else
-                virtual ProtoTree::Endian GetEndian() const;
+                virtual ProtoTree::Endian GetEndian() const
+                    {return ENDIAN_BIG;}  // default endian for ProtoTree
 #endif
                 // Returns how deep in its tree this Item lies
                 unsigned int GetDepth() const;

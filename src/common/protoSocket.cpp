@@ -936,6 +936,7 @@ void ProtoSocket::Close()
 
 bool ProtoSocket::Connect(const ProtoAddress& theAddress)
 {
+    TRACE("enter ProtoSocket::Connect() ...\n");
     if (IsConnected()) Disconnect();
     if (!IsOpen() && !Open(0, theAddress.GetType()))
     {
@@ -2388,6 +2389,8 @@ bool ProtoSocket::SetUnicastTTL(unsigned char ttl)
 
 bool ProtoSocket::SetTOS(UINT8 theTOS)
 { 
+    TRACE("enter ProtoSocket::SetTOS() ...\n");
+    
     if (!IsOpen())
     {
         tos = theTOS;
