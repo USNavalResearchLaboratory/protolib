@@ -406,7 +406,7 @@ bool ProtoPktIPv4::Option::InitFromBuffer(void* bufferPtr, unsigned int numBytes
     }
     else
     {
-        PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: null buffer\n");
+        PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: insufficient buffer\n");
         return false;
     }
 }  // end ProtoPktIPv4::Option::InitFromBuffer()
@@ -458,8 +458,8 @@ bool ProtoPktIPv4::Option::SetData(const char* data, unsigned int length)
         return false;
     }
     // 1) Make sure data will fit into buffer _and_ appropo for type
-    int optLength = GetLengthByType(GetType());
-    int maxLength = 0;
+    unsigned int optLength = GetLengthByType(GetType());
+    unsigned int maxLength = 0;
     switch (maxLength)
     {
         case LENGTH_UNKNOWN:

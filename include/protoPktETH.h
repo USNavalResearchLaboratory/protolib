@@ -91,12 +91,14 @@ class ProtoPktETH : public ProtoPkt
         Type GetType() const
             {return (Type)GetWord16(OFFSET_TYPE);}
                 
-        unsigned int GetPayloadLength() 
+        unsigned int GetPayloadLength()  const
             {return (GetLength() - HDR_LEN);}
         const void* GetPayload() const
             {return GetBuffer(OFFSET_PAYLOAD);}
         void* AccessPayload() 
             {return AccessBuffer(OFFSET_PAYLOAD);}
+        unsigned int GetPayloadMax() const
+            {return (GetBufferLength() - OFFSET_PAYLOAD);}
         
         bool InitIntoBuffer(void*           bufferPtr = NULL, 
                             unsigned int    bufferBytes = 0, 

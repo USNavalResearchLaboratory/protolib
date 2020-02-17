@@ -367,6 +367,9 @@ class ProtoTreeTemplate : public ProtoTree
         ITEM_TYPE* FindPrefix(const char* key, unsigned int keysize) const
             {return (static_cast<ITEM_TYPE*>(ProtoTree::FindPrefix(key, keysize)));}
         
+        void Destroy()
+            {ProtoTree::Destroy();}
+        
         
         class Iterator : public ProtoTree::Iterator
         {

@@ -63,9 +63,9 @@ inline void CloseDebugWindow() {}
 // printf()-like debug logging routines (Note DMSG() is  deprecated)
 // Call the PLOG() macro for better performance
 inline void ProtoNoop() {}
-#define PLOG(X, ...) (((X <= ::GetDebugLevel()) || (X == PL_ALWAYS)) ? \
+#define PLOG(X, ...) ((((unsigned int)X <= ::GetDebugLevel()) || (X == PL_ALWAYS)) ? \
                             ProtoLog(X, ##__VA_ARGS__) : ProtoNoop())
-#define DMSG(X, ...) (X <= ::GetDebugLevel() ? ProtoDMSG(X, ##__VA_ARGS__) : ProtoNoop())
+#define DMSG(X, ...) ((unsigned int)X <= ::GetDebugLevel() ? ProtoDMSG(X, ##__VA_ARGS__) : ProtoNoop())
 
 #if defined(PROTO_DEBUG) || defined(PROTO_MSG)
 
