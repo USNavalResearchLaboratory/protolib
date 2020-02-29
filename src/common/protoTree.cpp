@@ -51,14 +51,6 @@ ProtoTree::Item::~Item()
 {  
 }
 
-/**
- * We assume Big Endian key byte order by default
- */
-ProtoTree::Endian ProtoTree::Item::GetEndian() const
-{
-    return ENDIAN_BIG;
-}  // end ProtoTree::Item::GetEndian()
-
 unsigned int ProtoTree::Item::GetDepth() const 
 {
     unsigned int depth = 0;

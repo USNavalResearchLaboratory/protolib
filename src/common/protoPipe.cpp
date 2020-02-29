@@ -467,7 +467,8 @@ bool ProtoPipe::Connect(const char* theName)
         strcpy(serverAddr.sun_path, "/tmp/");
 #endif // if/else __ANDROID__
     }
-    strncat(serverAddr.sun_path, theName, PATH_MAX - strlen(serverAddr.sun_path));
+    size_t pathMax = sizeof(serverAddr.sun_path);
+    strncat(serverAddr.sun_path, theName, pathMax - strlen(serverAddr.sun_path));
 #ifdef SCM_RIGHTS  // 4.3BSD Reno and later 
     size_t addrLen = sizeof(serverAddr.sun_len) + sizeof(serverAddr.sun_family) +
 	              strlen(serverAddr.sun_path) + 1;

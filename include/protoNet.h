@@ -157,7 +157,7 @@ namespace ProtoNet
 	bool AddInterfaceAddress(const char* ifaceName, const  ProtoAddress& addr, unsigned int maskLen);
 
 #endif //WIN32
-	unsigned int GetInterfaceAddressMask(const char* ifName, const ProtoAddress& ifAddr);
+	unsigned int GetInterfaceAddressMask(const char* ifName, const ProtoAddress& ifAddr);  // returns masklen?
 	bool RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress& addr, unsigned int maskLen = 0);
 
 #ifndef WIN32  // TBD - implement these for WIN32

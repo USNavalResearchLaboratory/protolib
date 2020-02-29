@@ -1156,6 +1156,7 @@ bool ProtoNet::RemoveInterfaceAddress(unsigned int ifaceIndex, const ProtoAddres
 	PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() no matching interface found for ifaceIndex %s", ifaceIndex);
 	return false;
 };
+
 bool ProtoNet::RemoveInterfaceAddress(const char* ifaceAddress, const ProtoAddress& ifaceAddr, unsigned int maskLen)
 {
 	// Get the adapter name from the iface address

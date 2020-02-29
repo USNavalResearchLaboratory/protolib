@@ -164,9 +164,11 @@ class ProtoTree : public ProtoIterable
                 // i.e., just like UseSignBit() and UseComplementTwo()
 #ifdef WIN32
                 // Some windows compilers don't like the other format
-                virtual Endian GetEndian() const;
+                virtual Endian GetEndian() const
+                    {return ENDIAN_BIG;}  // default endian for ProtoTree
 #else
-                virtual ProtoTree::Endian GetEndian() const;
+                virtual ProtoTree::Endian GetEndian() const
+                    {return ENDIAN_BIG;}  // default endian for ProtoTree
 #endif
                 // Returns how deep in its tree this Item lies
                 unsigned int GetDepth() const;
@@ -364,6 +366,9 @@ class ProtoTreeTemplate : public ProtoTree
         // Find item which is largest prefix of the "key" (keysize is in bits)
         ITEM_TYPE* FindPrefix(const char* key, unsigned int keysize) const
             {return (static_cast<ITEM_TYPE*>(ProtoTree::FindPrefix(key, keysize)));}
+        
+        void Destroy()
+            {ProtoTree::Destroy();}
         
         
         class Iterator : public ProtoTree::Iterator
