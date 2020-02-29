@@ -106,20 +106,23 @@ def configure(ctx):
     # This looks for the libxml2 include path using the "xml2-config" command that should be 
     # available if libxml2-dev is installed.
     try:
-        libxml2Include = subprocess.check_output(['xml2-config', '--cflags']).strip().split('I', 1)[1]
+        libxml2Include = subprocess.check_output(['xml2-config', '--cflags'], universal_newlines=True).strip().split('I', 1)[1]
         ctx.env.append_value('INCLUDES', [libxml2Include])
         print ("Added '%s' to INCLUDES" % libxml2Include)
     except:
-        print ("\nWARNING: libxml2 not found! Some Protolib code may not build.  Install 'libxml2-dev' package.\n")
+        print ("WARNING: libxml2 not found! Some Protolib code may not build. Install 'libxml2-dev' package.")
     
 
     if ctx.options.build_python:
         ctx.load('python')
+        if 'darwin' == system:
+            print ("(Note MacOSX requires 'gettext' installation)")
+            ctx.env.LINKFLAGS += ['-L/opt/local/lib']
         ctx.check_python_version((2,4))
         ctx.check_python_headers()
         if ctx.env.PYTHON_VERSION.split('.')[0] != '2':
             waflib.Logs.warn('Python bindings currently only support Python 2')
-            ctx.env.BUILD_PYTHON = False
+            #ctx.env.BUILD_PYTHON = False
         else:
             ctx.env.BUILD_PYTHON = True
 
@@ -157,7 +160,7 @@ def configure(ctx):
 
 def build(ctx):
     protolib = ctx.stlib(
-        target = 'protolib',
+        target = 'protokit',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
         use = ctx.env.USE_BUILD_PROTOLIB,
