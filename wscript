@@ -15,10 +15,21 @@ build), use the -o (--out) flag when configuring.  For example:
 '''
 
 import subprocess
-
 import platform
-
 import waflib
+
+# Fetch VERSION from include/protoVersion.h file
+VERSION = None
+vfile = open('include/protoVersion.h', 'r')
+for line in vfile.readlines():
+    line = line.split()
+    if len(line) != 3:
+        continue
+    if "#define" == line[0] and "PROTOLIB_VERSION" == line[1]:
+        VERSION = line[2].strip('"')
+if VERSION is None:
+    print ("Warning: Protolib version not found!?")
+    
 
 # So you don't need to do ./waf configure if you are just using the defaults
 waflib.Configure.autoconfig = True
@@ -111,10 +122,12 @@ def configure(ctx):
         print ("Added '%s' to INCLUDES" % libxml2Include)
     except:
         print ("\nWARNING: libxml2 not found! Some Protolib code may not build.  Install 'libxml2-dev' package.\n")
-    
 
     if ctx.options.build_python:
         ctx.load('python')
+        if 'darwin' == system:
+            print ("(Note MacOSX requires 'gettext' installation)")
+            ctx.env.LINKFLAGS += ['-L/opt/local/lib']  ;# MacPorts library install location
         ctx.check_python_version((2,4))
         ctx.check_python_headers()
         if ctx.env.PYTHON_VERSION.split('.')[0] != '2':
@@ -156,12 +169,11 @@ def configure(ctx):
         ctx.env.CFLAGS
 
 def build(ctx):
-    protolib = ctx.stlib(
-        target = 'protolib',
+    obj = ctx.objects(
+        target = 'objs',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
-        use = ctx.env.USE_BUILD_PROTOLIB,
-        source = ['src/common/{0}.cpp'.format(x) for x in [
+        use = ctx.env.USE_BUILD_PROTOLIB,source = ['src/common/{0}.cpp'.format(x) for x in [
             'protoAddress',
             'protoApp',
             'protoBase64',
@@ -195,54 +207,65 @@ def build(ctx):
             'protoTree',
             'protoVif',
         ]],
-        install_path = '${LIBDIR}' if ctx.options.enable_static_library else '',
     )
-
     if system in ('linux', 'darwin', 'freebsd', 'gnu', 'gnu/kfreebsd'):
-        protolib.source.extend(['src/unix/{0}.cpp'.format(x) for x in [
+        obj.source.extend(['src/unix/{0}.cpp'.format(x) for x in [
             'unixNet',
             'unixSerial',
             'unixVif',
         ]])
-        protolib.source.extend(['src/manet/{0}.cpp'.format(x) for x in [
+        obj.source.extend(['src/manet/{0}.cpp'.format(x) for x in [
             'manetGraph',
             'manetMsg',
         ]])
-        protolib.source.append('src/common/protoFile.cpp')
-
     if system == 'linux':
-        protolib.source.extend(['src/linux/{0}.cpp'.format(x) for x in [
+        obj.source.extend(['src/linux/{0}.cpp'.format(x) for x in [
             'linuxCap',
             'linuxNet',
             'linuxRouteMgr',
         ]])
-        protolib.source.append('src/unix/zebraRouteMgr.cpp')
+        obj.source.append('src/unix/zebraRouteMgr.cpp')
         if ctx.env.HAVE_NETFILTER_QUEUE:
-            protolib.source.append('src/linux/linuxDetour.cpp')
-            protolib.use.append('NETFILTER_QUEUE')
+            obj.source.append('src/linux/linuxDetour.cpp')
+            obj.use.append('NETFILTER_QUEUE')
 
     if system in ('darwin', 'freebsd', 'gnu/kfreebsd'):
-        protolib.source.extend(['src/bsd/{0}.cpp'.format(x) for x in [
+        obj.source.extend(['src/bsd/{0}.cpp'.format(x) for x in [
             'bsdDetour',
             'bsdRouteMgr',
         ]])
         if system != 'gnu/kfreebsd':
-            protolib.source.append('src/bsd/bsdNet.cpp')
-        protolib.source.append('src/unix/bpfCap.cpp')
+            obj.source.append('src/bsd/bsdNet.cpp')
+        obj.source.append('src/unix/bpfCap.cpp')
 
     if system == 'windows':
-        protolib.source.extend(['src/win32/{0}.cpp'.format(x) for x in [
+        obj.source.extend(['src/win32/{0}.cpp'.format(x) for x in [
             'win32Net',
             'win32RouteMgr',
         ]])
         
     if system == 'gnu':
-        protolib.source.append('src/common/pcapCap.cpp')
-
+        obj.source.append('src/common/pcapCap.cpp')
+    
+    # Static library build
+    protolib_st = ctx.stlib(
+        target = 'protokit',
+        name = 'protolib_st',
+        #includes = ['include'],
+        #export_includes = ['include'],
+        vnum = VERSION,
+        #stlib = ["protokit"],
+        use = ['objs'],
+        #use = ['objs'] + ctx.env.USE_BUILD_PROTOLIB,
+        source = [],
+        features = 'cxx cxxstlib',
+        install_path = '${LIBDIR}',
+    )
+    
     # Only add wxWidgets support if we have the libraries installed
     if ctx.env.HAVE_WX:
-        protolib.source.append('src/wx/wxProtoApp.cpp')
-        protolib.use.append('WX')
+        protolib_st.source.append('src/wx/wxProtoApp.cpp')
+        protolib_st.use.append('WX')
 
     # Language bindings
     if ctx.env.BUILD_PYTHON:
@@ -250,14 +273,14 @@ def build(ctx):
             features = 'pyext',
             target = 'protokit',
             name = 'pyprotokit',
-            use = ['protolib'],
+            use = ['protolib_st'],
             source = ['src/python/protokit.cpp'],
         )
 
     if ctx.env.BUILD_JAVA:
         ctx.shlib(
             target = 'ProtolibJni',
-            use = ['protolib', 'JAVA'],
+            use = ['protolib_st', 'JAVA'],
             source = ['src/java/protoPipeJni.cpp'],
         )
         ctx(
@@ -267,7 +290,21 @@ def build(ctx):
             basedir = 'src/java/src',
             destfile = 'protolib-jni.jar',
         )
-
+        
+    # Shared library build
+    protolib_sh = ctx.shlib(
+        target = 'protokit',
+        name = 'protolib_sh',
+        includes = ['include'],
+        export_includes = ['include'],
+        vnum = VERSION,
+        #shlib = ["protokit"],
+        use = ['objs'],
+        source = [],
+        features = 'cxx cxxshlib',
+        install_path = '${LIBDIR}',
+    )
+    
     # Example programs to build (not built by default, see below).
     for example in (
             'base64Example',
@@ -308,8 +345,8 @@ def _make_simple_example(ctx, name):
     '''
     ctx.program(
         target = name,
-        use = ['protolib'],
-        stlib = ['protolib'],
+        use = ['protolib_st'],
+        stlib = ['protokit'],
         source = ['examples/{0}.cpp'.format(name)],
         # Don't build examples by default
         posted = True,
