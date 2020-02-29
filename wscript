@@ -20,7 +20,10 @@ import waflib
 
 # Fetch VERSION from include/protoVersion.h file
 VERSION = None
-vfile = open('include/protoVersion.h', 'r')
+try:
+    vfile = open('include/protoVersion.h', 'r')
+except:
+    vfile = open('protolib/include/protoVersion.h', 'r')
 for line in vfile.readlines():
     line = line.split()
     if len(line) != 3:
@@ -173,7 +176,8 @@ def build(ctx):
         target = 'objs',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
-        use = ctx.env.USE_BUILD_PROTOLIB,source = ['src/common/{0}.cpp'.format(x) for x in [
+        use = ctx.env.USE_BUILD_PROTOLIB, 
+        source = ['src/common/{0}.cpp'.format(x) for x in [
             'protoAddress',
             'protoApp',
             'protoBase64',
@@ -255,8 +259,7 @@ def build(ctx):
         #export_includes = ['include'],
         vnum = VERSION,
         #stlib = ["protokit"],
-        use = ['objs'],
-        #use = ['objs'] + ctx.env.USE_BUILD_PROTOLIB,
+        use = ['objs'] + ctx.env.USE_BUILD_PROTOLIB,
         source = [],
         features = 'cxx cxxstlib',
         install_path = '${LIBDIR}',
@@ -290,7 +293,7 @@ def build(ctx):
             basedir = 'src/java/src',
             destfile = 'protolib-jni.jar',
         )
-        
+    '''
     # Shared library build
     protolib_sh = ctx.shlib(
         target = 'protokit',
@@ -304,7 +307,7 @@ def build(ctx):
         features = 'cxx cxxshlib',
         install_path = '${LIBDIR}',
     )
-    
+    '''
     # Example programs to build (not built by default, see below).
     for example in (
             'base64Example',
