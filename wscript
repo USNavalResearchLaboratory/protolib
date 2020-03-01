@@ -15,11 +15,13 @@ build), use the -o (--out) flag when configuring.  For example:
 '''
 
 import subprocess
+import os
 import platform
 import waflib
 
 # Fetch VERSION from include/protoVersion.h file
 VERSION = None
+# TBD - do thi differently (using ctx.path.bldpath() in config?)
 try:
     vfile = open('include/protoVersion.h', 'r')
 except:
@@ -124,7 +126,7 @@ def configure(ctx):
         ctx.env.append_value('INCLUDES', [libxml2Include])
         print ("Added '%s' to INCLUDES" % libxml2Include)
     except:
-        print ("\nWARNING: libxml2 not found! Some Protolib code may not build.  Install 'libxml2-dev' package.\n")
+        print ("WARNING: libxml2 not found! Some Protolib code may not build. Install 'libxml2-dev' package.")
 
     if ctx.options.build_python:
         ctx.load('python')
@@ -173,7 +175,7 @@ def configure(ctx):
 
 def build(ctx):
     obj = ctx.objects(
-        target = 'objs',
+        target = 'protoObjs',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
         use = ctx.env.USE_BUILD_PROTOLIB, 
@@ -255,11 +257,8 @@ def build(ctx):
     protolib_st = ctx.stlib(
         target = 'protokit',
         name = 'protolib_st',
-        #includes = ['include'],
-        #export_includes = ['include'],
         vnum = VERSION,
-        #stlib = ["protokit"],
-        use = ['objs'] + ctx.env.USE_BUILD_PROTOLIB,
+        use = ['protoObjs'],
         source = [],
         features = 'cxx cxxstlib',
         install_path = '${LIBDIR}',
@@ -272,18 +271,30 @@ def build(ctx):
 
     # Language bindings
     if ctx.env.BUILD_PYTHON:
+        # Hack to force clang to link to static library
+        if ctx.env.COMPILER_CXX == 'clang++':
+            use = ['protoObjs']
+        else:
+            use = ['protolib_st']
         ctx.shlib(
             features = 'pyext',
             target = 'protokit',
             name = 'pyprotokit',
-            use = ['protolib_st'],
+            use = use,
             source = ['src/python/protokit.cpp'],
         )
 
     if ctx.env.BUILD_JAVA:
+        print ctx.path.bldpath(),ctx.path.bld_dir()
+        # Hack to force clang to link to static library
+        if ctx.env.COMPILER_CXX == 'clang++':
+            use = ['protoObjs', 'JAVA']
+        else:
+            use = ['protolib_st', 'JAVA']
         ctx.shlib(
             target = 'ProtolibJni',
-            use = ['protolib_st', 'JAVA'],
+            includes = ['include'],
+            use = use,
             source = ['src/java/protoPipeJni.cpp'],
         )
         ctx(
@@ -298,11 +309,8 @@ def build(ctx):
     protolib_sh = ctx.shlib(
         target = 'protokit',
         name = 'protolib_sh',
-        includes = ['include'],
-        export_includes = ['include'],
         vnum = VERSION,
-        #shlib = ["protokit"],
-        use = ['objs'],
+        use = ['protoObjs'],
         source = [],
         features = 'cxx cxxshlib',
         install_path = '${LIBDIR}',
@@ -343,13 +351,19 @@ def build(ctx):
 
 def _make_simple_example(ctx, name):
     '''Makes a task from a single source file in the examples directory.
-
-    These tasks are not built by default.  Use the --targets flag.
+       These tasks are not built by default.  
+       Use the waf build --targets flag.
     '''
+    # Hack to force clang to link to static library
+    if ctx.env.COMPILER_CXX == 'clang++':
+        use = ['protoObjs']
+    else:
+        use = ['protolib_st']
+
     ctx.program(
         target = name,
-        use = ['protolib_st'],
-        stlib = ['protokit'],
+        use = use,
+        includes = ['include', 'include/unix'],
         source = ['examples/{0}.cpp'.format(name)],
         # Don't build examples by default
         posted = True,
