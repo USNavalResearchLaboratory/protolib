@@ -135,7 +135,7 @@ def configure(ctx):
         ctx.check_python_headers()
         if ctx.env.PYTHON_VERSION.split('.')[0] != '2':
             waflib.Logs.warn('Python bindings currently only support Python 2')
-            ctx.env.BUILD_PYTHON = False
+            #ctx.env.BUILD_PYTHON = False
         else:
             ctx.env.BUILD_PYTHON = True
 
@@ -293,7 +293,7 @@ def build(ctx):
             basedir = 'src/java/src',
             destfile = 'protolib-jni.jar',
         )
-    '''
+    
     # Shared library build
     protolib_sh = ctx.shlib(
         target = 'protokit',
@@ -307,7 +307,7 @@ def build(ctx):
         features = 'cxx cxxshlib',
         install_path = '${LIBDIR}',
     )
-    '''
+    
     # Example programs to build (not built by default, see below).
     for example in (
             'base64Example',
