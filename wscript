@@ -293,7 +293,7 @@ def build(ctx):
             basedir = 'src/java/src',
             destfile = 'protolib-jni.jar',
         )
-    
+    '''
     # Shared library build
     protolib_sh = ctx.shlib(
         target = 'protokit',
@@ -307,7 +307,7 @@ def build(ctx):
         features = 'cxx cxxshlib',
         install_path = '${LIBDIR}',
     )
-    
+    '''
     # Example programs to build (not built by default, see below).
     for example in (
             'base64Example',
