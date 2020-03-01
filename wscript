@@ -285,7 +285,6 @@ def build(ctx):
         )
 
     if ctx.env.BUILD_JAVA:
-        print ctx.path.bldpath(),ctx.path.bld_dir()
         # Hack to force clang to link to static library
         if ctx.env.COMPILER_CXX == 'clang++':
             use = ['protoObjs', 'JAVA']
