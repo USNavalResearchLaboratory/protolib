@@ -13,9 +13,8 @@
 /**
  * @class ProtoPkt
  * 
- * @brief This is a base class that maintains a 32-bit 
- * aligned buffer for "packet"
- * (or message) building and parsing.  
+ * @brief This is a base class that maintains a uffer for "packet"
+ * (or message) building and parsing.
  *
  * Generally, classes will be derived
  * from this base class to create classes for 
@@ -23,11 +22,6 @@
  * building and parsing (For examples, see 
  * ProtoPktIP, ProtoPktRTP, etc)
  */
- 
-// TBD - remove all final vestiges of any specific pointer types,
-//       using void* instead.  Make member variables private and
-//       force use of methods. Note this will ripple down to 
-//       existing ProtoPkt subclasses ...
 
 class ProtoPkt
 {
@@ -50,7 +44,10 @@ class ProtoPkt
             buffer_bytes = (NULL != bufferPtr) ? numBytes : 0;
             pkt_length = 0;
             if (NULL != buffer_allocated) delete[] buffer_allocated;
-            if (freeOnDestruct) buffer_allocated = (UINT32*)bufferPtr;
+            if (freeOnDestruct) 
+                buffer_allocated = (UINT32*)bufferPtr;
+            else
+                buffer_allocated = NULL;
         }
         UINT32* DetachBuffer()
         {
@@ -218,7 +215,9 @@ class ProtoPkt
             {return (NULL != buffer_allocated);}
         
     protected:
-        // TBD - make these "void*" instead of UINT32*
+        // Note if externally allocated, these pointers may
+        // _not_ be 32-bit aligned, but access routines above
+        // safely allow for this.
         UINT32*         buffer_ptr;
         UINT32*         buffer_allocated;
         unsigned int    buffer_bytes;

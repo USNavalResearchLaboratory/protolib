@@ -49,6 +49,9 @@ class ProtoTokenator
                                                            // Otherwise, returned pointer is only valid until next
                                                            // call to GetNextItem() or ProtoTokenator destruction
         
+        const char* GetNextPtr() const  // pointer to unparsed remainder
+            {return next_ptr;}
+        
         void Reset(const char* text=NULL, char delimiter='\0');  // default args retain current text/delimiter values
         
         void SetNullDelimiter() // with "stripWhitespace" enabled, this enables
