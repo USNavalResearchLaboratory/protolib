@@ -177,7 +177,7 @@ def build(ctx):
         target = 'protoObjs',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
-        use = ['protokit'] , #ctx.env.USE_BUILD_PROTOLIB,
+        use = ctx.env.USE_BUILD_PROTOLIB,
         source = ['src/common/{0}.cpp'.format(x) for x in [
             'protoAddress',
             'protoApp',
