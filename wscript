@@ -20,7 +20,10 @@ import waflib
 
 # Fetch VERSION from include/protoVersion.h file
 VERSION = None
-vfile = open('include/protoVersion.h', 'r')
+try:
+    vfile = open('include/protoVersion.h', 'r')
+except:
+    vfile = open('protolib/include/protoVersion.h', 'r')
 for line in vfile.readlines():
     line = line.split()
     if len(line) != 3:
@@ -173,7 +176,8 @@ def build(ctx):
         target = 'objs',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
-        use = ctx.env.USE_BUILD_PROTOLIB,source = ['src/common/{0}.cpp'.format(x) for x in [
+        use = ['protokit'] , #ctx.env.USE_BUILD_PROTOLIB,
+        source = ['src/common/{0}.cpp'.format(x) for x in [
             'protoAddress',
             'protoApp',
             'protoBase64',
