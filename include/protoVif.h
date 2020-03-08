@@ -40,7 +40,7 @@ class ProtoVif : public ProtoChannel
         virtual bool Write(const char* buffer, unsigned int buflen) = 0;
         
         virtual bool Read(char* buffer, unsigned int& numBytes) = 0;
-       const char* GetName() const
+        const char* GetName() const
             {return vif_name;}
     
         void SetUserData(const void* userData) 

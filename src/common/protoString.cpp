@@ -305,7 +305,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         }
         strncpy(prev_item, next_ptr, itemLen);
         prev_item[itemLen] = '\0';
-        if (isspace(token))
+        if (strip_whitespace || isspace(token))
         {
             // advance to end of white space
             while (NULL != ptr)
