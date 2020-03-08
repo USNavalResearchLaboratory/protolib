@@ -331,6 +331,9 @@ class ProtoAddressList
                 void SetAddress(const ProtoAddress& theAddress)
                     {addr = theAddress;}
                 
+                void SetUserData(const void* userData)
+                    {user_data = userData;}
+                
                 // Required ProtoTree::Item overrides
                 const char* GetKey() const {return addr.GetRawHostAddress();}
                 unsigned int GetKeysize() const {return (addr.GetLength() << 3);}

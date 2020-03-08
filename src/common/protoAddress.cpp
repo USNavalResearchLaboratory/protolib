@@ -1634,7 +1634,13 @@ bool ProtoAddressList::Insert(const ProtoAddress& theAddress, const void* userDa
         PLOG(PL_ERROR, "ProtoAddressList::Insert() error: invalid address\n");
         return false;
     }
-    if (!Contains(theAddress))
+    Item* entry = static_cast<Item*>(addr_tree.Find(theAddress.GetRawHostAddress(), theAddress.GetLength() << 3));
+    if (NULL != entry)
+    {
+        // Just update user data
+        entry->SetUserData(userData);
+    }
+    else
     {
         Item* entry = new Item(theAddress, userData);
         if (NULL == entry)

@@ -44,10 +44,7 @@ class ProtoPkt
             buffer_bytes = (NULL != bufferPtr) ? numBytes : 0;
             pkt_length = 0;
             if (NULL != buffer_allocated) delete[] buffer_allocated;
-            if (freeOnDestruct) 
-                buffer_allocated = (UINT32*)bufferPtr;
-            else
-                buffer_allocated = NULL;
+            buffer_allocated =  freeOnDestruct ? (UINT32*)bufferPtr : NULL;
         }
         UINT32* DetachBuffer()
         {
@@ -67,12 +64,11 @@ class ProtoPkt
             return result;
         }
         
-        void SetLength(unsigned int bytes) 
-            {pkt_length = bytes;}   
-        
         unsigned int GetBufferLength() const 
             {return buffer_bytes;}
         
+        void SetLength(unsigned int bytes) 
+            {pkt_length = bytes;}   
         unsigned int GetLength() const 
             {return pkt_length;} 
         
@@ -115,29 +111,6 @@ class ProtoPkt
             {return GetUINT32((UINT32*)buffer_ptr + wordOffset);}
         void SetWord32(unsigned int wordOffset, UINT32 value) 
             {SetUINT32((UINT32*)buffer_ptr + wordOffset, value);}
-        
-        // Note the pointers returned by these are only properly
-        // aligned pointers iff the ProtoPkt was initialized with
-        // a properly aligned pointer
-        // TBD - make these return void* to be more explicit???
-        /*const UINT16* GetBuffer16() const 
-            {return (UINT16*)buffer_ptr;}
-        const UINT16* GetBuffer16(unsigned int wordOffset) const
-            {return GetBuffer16() + wordOffset;}
-        const UINT32* GetBuffer32() const 
-            {return buffer_ptr;}
-        const UINT32* GetBuffer32(unsigned int wordOffset) const
-            {return GetBuffer32() + wordOffset;}
-        
-        UINT16* AccessBuffer16()
-            {return (UINT16*)buffer_ptr;}
-        UINT16* AccessBuffer16(unsigned int wordOffset)
-            {return AccessBuffer16() + wordOffset;}
-        UINT32* AccessBuffer32()
-            {return buffer_ptr;}
-        UINT32* AccessBuffer32(unsigned int wordOffset)
-            {return AccessBuffer32() + wordOffset;}
-        */
        
         const void* GetBuffer16(unsigned int wordOffset) const
             {return (void*)((const UINT16*)buffer_ptr + wordOffset);}
@@ -148,7 +121,6 @@ class ProtoPkt
             {return (void*)((const UINT32*)buffer_ptr + wordOffset);}
         void* AccessBuffer32(unsigned int wordOffset)
             {return (void*)((const UINT32*)buffer_ptr + wordOffset);}
-                
                 
         // Pointer alignment checks to determine safe access strategy
         static inline bool IsAligned16(const void* pointer)

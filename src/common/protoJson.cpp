@@ -415,7 +415,7 @@ bool ProtoJson::Object::Iterator::Reset(bool reverse, const char* key)
 ProtoJson::Entry* ProtoJson::Object::Iterator::GetNextEntry()
 {
     ProtoJson::Entry* nextEntry = ProtoSortedTreeTemplate<Entry>::Iterator::GetNextItem();
-    if (NULL != match_key)
+    if ((NULL != nextEntry) && (NULL != match_key))
     {
         if (0 != strncmp(match_key, nextEntry->GetKey(), strlen(match_key)))
             return NULL;
