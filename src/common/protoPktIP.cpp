@@ -472,7 +472,7 @@ bool ProtoPktIPv4::Option::SetData(const char* data, unsigned int length)
             break;
             
         default:
-            maxLength = (GetBufferLength() < optLength) ? 0 : optLength - 2;
+            maxLength = (GetBufferLength() < (unsigned int)optLength) ? 0 : optLength - 2;
             break;
     } 
     if (length > (unsigned int)maxLength)
