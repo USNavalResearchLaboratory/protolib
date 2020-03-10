@@ -458,9 +458,9 @@ bool ProtoPktIPv4::Option::SetData(const char* data, unsigned int length)
         return false;
     }
     // 1) Make sure data will fit into buffer _and_ appropo for type
-    unsigned int optLength = GetLengthByType(GetType());
-    unsigned int maxLength = 0;
-    switch (maxLength)
+    int optLength = GetLengthByType(GetType());
+    int maxLength = 0;
+    switch (optLength)
     {
         case LENGTH_UNKNOWN:
             PLOG(PL_ERROR, "ProtoPktIPv4::Option::SetData() error: unsupported type: %d\n", GetType());
