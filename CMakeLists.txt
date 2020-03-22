@@ -246,7 +246,7 @@ if(BUILD_EXAMPLES)
 	base64Example
 	# detourExample This depends on netfilterqueue so doesn't work as a "simple example"
 	eventExample
-	# fileTest, (not present)
+	fileTest
 	graphExample
 	#'graphRider', (this depends on manetGraphML.cpp so doesn't work as a "simple example"
 	lfsrExample
