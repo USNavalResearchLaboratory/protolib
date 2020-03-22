@@ -43,3 +43,6 @@ makefiles/vifLan
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Build dir
+build
