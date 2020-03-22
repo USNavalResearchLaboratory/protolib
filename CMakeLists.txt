@@ -226,7 +226,7 @@ target_link_libraries(protolib PRIVATE ${PLATFORM_LIBS})
 target_compile_definitions(protolib PUBLIC ${PLATFORM_DEFINITIONS})
 target_compile_options(protolib PUBLIC ${PLATFORM_FLAGS})
 target_include_directories(protolib PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(protolib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_include_directories(protolib PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 
 # Install target
 install( TARGETS protolib EXPORT protolibTargets
@@ -239,6 +239,8 @@ install( EXPORT protolibTargets
 	NAMESPACE protolib::
 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protolib
 )
+
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protolib)
 
 if(BUILD_EXAMPLES)
 	# Setup examples
