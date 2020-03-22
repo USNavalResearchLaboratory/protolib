@@ -277,6 +277,9 @@ class ProtoListTemplate : public ProtoList
             public:
                 ItemPool() {}
                 ~ItemPool() {}
+                
+                void Put(ITEM_TYPE& item)
+                    {ProtoList::ItemPool::Put(item);}
 
                 ITEM_TYPE* Get()
                     {return static_cast<ITEM_TYPE*>(ProtoList::ItemPool::Get());}

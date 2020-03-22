@@ -87,10 +87,10 @@ class ManetTlv : public ProtoPkt
         };
 
         // TLV building routines (these MUST be called in order given here)
-        bool InitIntoBuffer(UINT8 type, char* bufferPtr = NULL, unsigned numBytes = 0);
+        bool InitIntoBuffer(UINT8 type, void* bufferPtr = NULL, unsigned numBytes = 0);
 
         // Defined to use with any built-in enumerated TLV types (FRAGMENTATION, etc)
-        bool InitIntoBuffer(Type type, char* bufferPtr = NULL, unsigned int numBytes = 0)
+        bool InitIntoBuffer(Type type, void* bufferPtr = NULL, unsigned int numBytes = 0)
             {return InitIntoBuffer((UINT8)type, bufferPtr, numBytes);}
         
         void SetType(UINT8 type)
@@ -130,7 +130,7 @@ class ManetTlv : public ProtoPkt
         // TLV parsing methods
         // Note:  This one is called by the ManetMsg and ManetAddrBlock "TlvIterator"
         //        classes so you shouldn't call this yourself, typically.
-        bool InitFromBuffer(char* bufferPtr = NULL, unsigned int numBytes = 0);
+        bool InitFromBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0);
 
         UINT8 GetType() const
             {return GetUINT8(OFFSET_TYPE);}
@@ -275,7 +275,7 @@ class ManetTlvBlock: public ProtoPkt
         // Note: This one is called for you by the ManetMsg and ManetAddrBlock
         //       "AppendTlv()", etc routines, so you shouldn't normally
         //       need to make calls related to ManetTlvBlock yourself.
-        bool InitIntoBuffer(char* bufferPtr = NULL, unsigned int numBytes = 0);
+        bool InitIntoBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0);
 
         // This returns a ManetTlv pointer initialized into the
         // tlv block's buffer_ptr space
@@ -288,7 +288,7 @@ class ManetTlvBlock: public ProtoPkt
         void Pack();
 
         // TLV Block parsing methods
-        bool InitFromBuffer(char* bufferPtr = NULL, unsigned int numBytes = 0);
+        bool InitFromBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0);
 
         UINT16 GetTlvBlockLength()
             {return (GetUINT16(OFFSET_LENGTH));}
@@ -335,13 +335,13 @@ class ManetAddrBlock : public ProtoPkt
 {
     public:
         ManetAddrBlock();
-        ManetAddrBlock(char* bufferPtr, unsigned int numBytes, bool freeOnDestroy = false);
+        ManetAddrBlock(void* bufferPtr, unsigned int numBytes, bool freeOnDestroy = false);
         ~ManetAddrBlock();
 
         // Addr block building methods (These MUST be called in order given)
         // Note:  This is called for you by ManetMsg::AppendAddressBlock() so
         //        typically you shouldn't call this one yourself.
-        bool InitIntoBuffer(char* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
+        bool InitIntoBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
 
         // if <head-length> == addr-length, this sets the entire addr-block content
         // Note: "hlen" is the prefix length in bytes
@@ -372,7 +372,7 @@ class ManetAddrBlock : public ProtoPkt
         // Addr block parsing methods
         // Note:  This is called for you by ManetMsg::AddrBlockIterator() so typically
         //        you shouldn't have to call this yourself.
-        bool InitFromBuffer(UINT8 addrLength, char* bufferPtr, unsigned int numBytes = 0);
+        bool InitFromBuffer(UINT8 addrLength, void* bufferPtr, unsigned int numBytes = 0);
         UINT8 GetAddressLength() const
             {return (addr_length);}
         UINT8 GetAddressCount() const
@@ -498,7 +498,7 @@ class ManetMsg : public ProtoPkt
 {
     public:
         ManetMsg();
-        ManetMsg(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestroy = false);
+        ManetMsg(void* bufferPtr, unsigned int numBytes, bool freeOnDestroy = false);
         virtual ~ManetMsg();
 
         // (TBD) Will there be standard "namespace:ietf:manet:message:types"
@@ -510,7 +510,7 @@ class ManetMsg : public ProtoPkt
         // Init into given "bufferPtr" space
         // Note:: ManetPkt::AppendMessage() will call this one for you so
         //        typically you shouldn't need to call this
-        bool InitIntoBuffer(UINT32* bufferPtr = NULL, unsigned int numBytes = 0);
+        bool InitIntoBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0);
 
         // This MUST be called if "SetOriginator()" is not called.
         void SetAddressLength(UINT8 addrLength)
@@ -564,7 +564,7 @@ class ManetMsg : public ProtoPkt
         //        so you shouldn't need to call this (perhaps this should be private
         //        assuming the message is encapsulated in an ManetPkt?)
 
-        bool InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes = 0);
+        bool InitFromBuffer(void* bufferPtr, unsigned int numBytes = 0);
 
         UINT8 GetType() const
             {return GetUINT8(OFFSET_TYPE);}
@@ -703,11 +703,11 @@ class ManetPkt : public ProtoPkt
 {
     public:
         ManetPkt();
-        ManetPkt(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false);
+        ManetPkt(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false);
         ~ManetPkt();
 
         // Packet building methods (IMPORTANT: Call these in the order given)
-        bool InitIntoBuffer(UINT32* bufferPtr = NULL, unsigned int numBytes = 0);
+        bool InitIntoBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0);
 
         void SetVersion(UINT8 version);
 
@@ -733,7 +733,7 @@ class ManetPkt : public ProtoPkt
         void Pack();
 
         // Packet parsing methods
-        bool InitFromBuffer(unsigned int pktLength, UINT32* bufferPtr = NULL, unsigned int numBytes = 0);
+        bool InitFromBuffer(unsigned int pktLength, void* bufferPtr = NULL, unsigned int numBytes = 0);
 
         UINT8 GetVersion() const
             {return GetUINT8(OFFSET_SEMANTICS) & 0xF0;}

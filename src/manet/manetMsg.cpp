@@ -9,7 +9,7 @@ ManetTlv::~ManetTlv()
 {
 }
 
-bool ManetTlv::InitIntoBuffer(UINT8 type, char* bufferPtr, unsigned int numBytes)
+bool ManetTlv::InitIntoBuffer(UINT8 type, void* bufferPtr, unsigned int numBytes)
 {
     unsigned int minLength = OFFSET_SEMANTICS + 1; // "type" and "semantics" fields only
     if (NULL != bufferPtr)
@@ -17,7 +17,7 @@ bool ManetTlv::InitIntoBuffer(UINT8 type, char* bufferPtr, unsigned int numBytes
         if (numBytes < minLength)
             return false;
         else
-            AttachBuffer((UINT32*)bufferPtr, numBytes);
+            AttachBuffer(bufferPtr, numBytes);
     }
     else if (buffer_bytes < minLength)
     {
@@ -261,9 +261,9 @@ void ManetTlv::SetTlvLength(UINT16 tlvLength)
         PLOG(PL_ERROR, "ManetTlv::SetTlvLength() error: tlvLength exceeds non-extended maximum\n");
 }  // end ManetTlv::SetTlvLength()
 
-bool ManetTlv::InitFromBuffer(char* bufferPtr, unsigned numBytes)
+bool ManetTlv::InitFromBuffer(void* bufferPtr, unsigned numBytes)
 {
-    if (NULL != bufferPtr) AttachBuffer((UINT32*)bufferPtr, numBytes);
+    if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes);
     UINT8 semantics = (buffer_bytes >= OFFSET_SEMANTICS) ? ((char*)buffer_ptr)[OFFSET_SEMANTICS] : 0;
     unsigned int minLength = GetMinLength(semantics);
     if (buffer_bytes < minLength)
@@ -403,11 +403,11 @@ ManetTlvBlock::~ManetTlvBlock()
 {
 }
 
-bool ManetTlvBlock::InitIntoBuffer(char* bufferPtr, unsigned int numBytes)
+bool ManetTlvBlock::InitIntoBuffer(void* bufferPtr, unsigned int numBytes)
 {
     tlv_pending = false;
     if (NULL != bufferPtr)
-        AttachBuffer((UINT32*)bufferPtr, numBytes);
+        AttachBuffer(bufferPtr, numBytes);
     if (buffer_bytes >= 2)
     {
         SetTlvBlockLength(0);
@@ -457,9 +457,9 @@ void ManetTlvBlock::Pack()
     SetTlvBlockLength(pkt_length - 2);
 }  // end ManetTlvBlock::Pack()
 
-bool ManetTlvBlock::InitFromBuffer(char* bufferPtr, unsigned numBytes)
+bool ManetTlvBlock::InitFromBuffer(void* bufferPtr, unsigned numBytes)
 {
-    if (NULL != bufferPtr) AttachBuffer((UINT32*)bufferPtr, numBytes);
+    if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes);
     if (buffer_bytes >= 2)
     {
         pkt_length = GetTlvBlockLength() + OFFSET_CONTENT;
@@ -502,10 +502,10 @@ ManetAddrBlock::ManetAddrBlock()
 {
 }
 
-ManetAddrBlock::ManetAddrBlock(char*        bufferPtr,
+ManetAddrBlock::ManetAddrBlock(void*        bufferPtr,
                                unsigned int numBytes,
                                bool         freeOnDestruct)
-  : ProtoPkt((UINT32*)bufferPtr, numBytes, freeOnDestruct),
+  : ProtoPkt(bufferPtr, numBytes, freeOnDestruct),
     addr_length(0), tlv_block_pending(false)
 {
 }
@@ -516,12 +516,12 @@ ManetAddrBlock::~ManetAddrBlock()
 
 
 
-bool ManetAddrBlock::InitIntoBuffer(char* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ManetAddrBlock::InitIntoBuffer(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     // minLength = num-addr field (1) + addr-semantics (1)
     unsigned int minLength = 2;
     if (NULL != bufferPtr)
-        AttachBuffer((UINT32*)bufferPtr, numBytes, freeOnDestruct);
+        AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
     if (buffer_bytes < minLength) return false;
     addr_length = 0;
     // Init "num-addr" and "addr-semantics" fields
@@ -719,9 +719,9 @@ void ManetAddrBlock::Pack()
     tlv_block_pending = false;
 }  // end ManetAddrBlock::Pack()
 
-bool ManetAddrBlock::InitFromBuffer(UINT8 addrLength, char* bufferPtr, unsigned numBytes)
+bool ManetAddrBlock::InitFromBuffer(UINT8 addrLength, void* bufferPtr, unsigned numBytes)
 {
-    if (NULL != bufferPtr) AttachBuffer((UINT32*)bufferPtr, numBytes);
+    if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes);
     addr_length = addrLength;
     pkt_length = 0;
     unsigned int minLength = 2;
@@ -803,7 +803,7 @@ ManetMsg::ManetMsg()
 {
 }
 
-ManetMsg::ManetMsg(UINT32*      bufferPtr,
+ManetMsg::ManetMsg(void*        bufferPtr,
                    unsigned int numBytes,
                    bool         freeOnDestruct)
   : ProtoPkt(bufferPtr, numBytes, freeOnDestruct),
@@ -815,7 +815,7 @@ ManetMsg::~ManetMsg()
 {
 }
 
-bool ManetMsg::InitIntoBuffer(UINT32* bufferPtr, unsigned int numBytes)
+bool ManetMsg::InitIntoBuffer(void* bufferPtr, unsigned int numBytes)
 {
     addr_block_pending = false;
     if (NULL != bufferPtr)
@@ -971,7 +971,7 @@ void ManetMsg::Pack()
     SetMsgSize((UINT16)pkt_length);  // includes message header _and_ body
 }  // end ManetMsg::Pack()
 
-bool ManetMsg::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes)
+bool ManetMsg::InitFromBuffer(void* bufferPtr, unsigned int numBytes)
 {
     if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes);
     if (buffer_bytes < 1) return false;  // not even enough for type/semantic fields
@@ -1067,7 +1067,7 @@ ManetPkt::ManetPkt()
 {
 }
 
-ManetPkt::ManetPkt(UINT32*      bufferPtr,
+ManetPkt::ManetPkt(void*        bufferPtr,
                    unsigned int numBytes,
                    bool         freeOnDestruct)
   : ProtoPkt(bufferPtr, numBytes, freeOnDestruct),
@@ -1079,7 +1079,7 @@ ManetPkt::~ManetPkt()
 {
 }
 
-bool ManetPkt::InitIntoBuffer(UINT32* bufferPtr, unsigned int numBytes)
+bool ManetPkt::InitIntoBuffer(void* bufferPtr, unsigned int numBytes)
 {
     if (NULL != bufferPtr)
         AttachBuffer(bufferPtr, numBytes);
@@ -1152,7 +1152,7 @@ ManetMsg* ManetPkt::AppendMessage()
         pkt_length += msg_temp.GetLength();
     }
     unsigned int bufferMax = (buffer_bytes > pkt_length) ? buffer_bytes - pkt_length : 0;
-    UINT32* bufferPtr = (UINT32*)((char*)buffer_ptr + pkt_length);
+    char* bufferPtr = (char*)buffer_ptr + pkt_length;
     msg_pending = msg_temp.InitIntoBuffer(bufferPtr, bufferMax);
     return msg_pending ? &msg_temp : NULL;
 }  // end ManetPkt::AppendMessage()
@@ -1198,7 +1198,7 @@ void ManetPkt::Pack()
     //if (HasSize()) SetPktSize(pkt_length);
 }  // end ManetPkt::Pack()
 
-bool ManetPkt::InitFromBuffer(unsigned int pktLength, UINT32* bufferPtr, unsigned int numBytes)
+bool ManetPkt::InitFromBuffer(unsigned int pktLength, void* bufferPtr, unsigned int numBytes)
 {
     if (NULL != bufferPtr)
         AttachBuffer(bufferPtr, numBytes);
@@ -1232,7 +1232,7 @@ bool ManetPkt::GetNextMessage(ManetMsg& msg)
     unsigned int nextOffset = nextBuffer - (char*)buffer_ptr;
     if (nextOffset < pkt_length)
     {
-        return msg.InitFromBuffer((UINT32*)nextBuffer, pkt_length - nextOffset);
+        return msg.InitFromBuffer(nextBuffer, pkt_length - nextOffset);
     }
     else
         return false;  // no more messages in packet

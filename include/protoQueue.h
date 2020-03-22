@@ -329,7 +329,7 @@ class ProtoSimpleQueue : public ProtoQueue
                     Container* nextContainer = static_cast<Container*>(ProtoList::Iterator::GetNextItem());
                     return ((NULL != nextContainer) ? nextContainer->GetItem() : NULL);
                 }
-                ProtoQueue::Item* PeekNextItem()
+                ProtoQueue::Item* PeekNextItem() const
                 {
                     Container* nextContainer = static_cast<Container*>(ProtoList::Iterator::PeekNextItem());
                     return ((NULL != nextContainer) ? nextContainer->GetItem() : NULL);
@@ -339,7 +339,7 @@ class ProtoSimpleQueue : public ProtoQueue
                     Container* nextContainer = static_cast<Container*>(ProtoList::Iterator::GetPrevItem());
                     return ((NULL != nextContainer) ? nextContainer->GetItem() : NULL);
                 }
-                ProtoQueue::Item* PeekPrevItem()
+                ProtoQueue::Item* PeekPrevItem() const
                 {
                     Container* nextContainer = static_cast<Container*>(ProtoList::Iterator::PeekPrevItem());
                     return ((NULL != nextContainer) ? nextContainer->GetItem() : NULL);
@@ -407,11 +407,11 @@ class ProtoSimpleQueueTemplate : public ProtoSimpleQueue
                 
                 ITEM_TYPE* GetNextItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::Iterator::GetNextItem());}
-                ITEM_TYPE* PeekNextItem()
+                ITEM_TYPE* PeekNextItem() const
                     {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::Iterator::PeekNextItem());}
                 ITEM_TYPE* GetPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::Iterator::GetPrevItem());}
-                ITEM_TYPE* PeekPrevItem()
+                ITEM_TYPE* PeekPrevItem() const
                     {return static_cast<ITEM_TYPE*>(ProtoSimpleQueue::Iterator::PeekPrevItem());}
                 
         };  // end class ProtoSimpleQueueTemplate::Iterator    

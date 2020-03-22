@@ -49,6 +49,12 @@ class ProtoTime
 	        {return ((0 == tval.tv_sec) && (0 == tval.tv_usec));}
         void Zeroize()
             {tval.tv_sec = tval.tv_usec = 0;}
+
+		// for debugging
+		bool IsValid() const
+		{
+			return ((tval.tv_sec >= 0) && (tval.tv_usec >= 0));
+		}
                 
         
         const struct timeval& GetTimeVal() const

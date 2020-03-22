@@ -331,7 +331,7 @@ bool RiposerApp::OnRipTimeout(ProtoTimer& theTimer)
     response.SetVersion(ProtoPktRIP::VERSION);
     response.AddRouteEntry(route_addr, route_mask_len, route_next_hop);
     unsigned int numBytes = response.GetLength();
-    if (!rip_socket.SendTo(response.GetBuffer(), numBytes, rip_addr))
+    if (!rip_socket.SendTo((char*)response.GetBuffer(), numBytes, rip_addr))
     {
         PLOG(PL_ERROR, "RiposerApp::OnRipTimer() error: sendto() error: %s\n", GetErrorString());
     }

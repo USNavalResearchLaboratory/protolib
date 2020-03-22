@@ -9,7 +9,7 @@ const UINT16 ProtoPktRTP::SEQUENCE_MAX = 0xffff;    // 16 bits, unsigned (may mo
 const unsigned int ProtoPktRTP::BASE_HDR_LEN = 12;  // base header size, as of RFC 3550
 const unsigned int ProtoPktRTP::CSRC_COUNT_MAX = 15;
 		
-ProtoPktRTP::ProtoPktRTP(UINT32*        bufferPtr,
+ProtoPktRTP::ProtoPktRTP(void*          bufferPtr,
                          unsigned int   numBytes, 
                          unsigned int   pktLength,          
                          bool           freeOnDestruct)
@@ -26,7 +26,7 @@ ProtoPktRTP::~ProtoPktRTP()
 }
 
 bool ProtoPktRTP::InitFromBuffer(unsigned int   pktLength,
-                                 UINT32*        bufferPtr, 
+                                 void*          bufferPtr, 
                                  unsigned int   bufferBytes, 
                                  bool           freeOnDestruct)
 {
@@ -34,12 +34,13 @@ bool ProtoPktRTP::InitFromBuffer(unsigned int   pktLength,
     {
         if (pktLength < BASE_HDR_LEN)
         {
-            if (NULL != buffer_ptr)
-                PLOG(PL_ERROR, "ProtoPktRTP::InitFromBuffer() error: insufficient buffer_ptr space (1)\n");
+            if (NULL != bufferPtr) DetachBuffer();
+            PLOG(PL_ERROR, "ProtoPktRTP::InitFromBuffer() error: insufficient pktLength\n");
             return false;
         }
         if (VERSION != GetVersion())
         {
+            if (NULL != bufferPtr) DetachBuffer();
             PLOG(PL_ERROR, "ProtoPktRTP::InitFromBuffer() error: incompatible version number: %d\n", GetVersion());
             return false;
         }
@@ -53,18 +54,18 @@ bool ProtoPktRTP::InitFromBuffer(unsigned int   pktLength,
     }
     else
     {
-        PLOG(PL_ERROR, "ProtoPktRTP::InitFromBuffer() error: insufficient buffer_ptr space (2)\n");
+        PLOG(PL_ERROR, "ProtoPktRTP::InitFromBuffer() error: insufficient buffer space\n");
 	    return false;
     }
 }  // end ProtoPktRTP::InitFromBuffer()
 
-bool ProtoPktRTP::GetExtension(Extension& extension) const
+bool ProtoPktRTP::GetExtension(Extension& extension)
 {
     if (HasExtension())
     {
         unsigned int extOffset = OFFSET_CSRC_LIST + GetCsrcCount();
-        ASSERT(pkt_length > (extOffset << 2));
-        return extension.InitFromBuffer(buffer_ptr + extOffset, pkt_length - (extOffset << 2));
+        ASSERT(ProtoPkt::GetLength() > (extOffset << 2));
+        return extension.InitFromBuffer(AccessBuffer32(extOffset), ProtoPkt::GetLength() - (extOffset << 2));
     }
     else
     {
@@ -72,22 +73,22 @@ bool ProtoPktRTP::GetExtension(Extension& extension) const
     }
 }  // end ProtoPktRTP::GetExtension()
 
-bool ProtoPktRTP::Init(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktRTP::Init(void*   bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
    if (NULL != bufferPtr) AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
-   if (buffer_bytes >= BASE_HDR_LEN)
+   if (GetBufferLength() >= BASE_HDR_LEN)
    {
        /// zero everything ...
-       memset((char*)buffer_ptr, 0, BASE_HDR_LEN);
+       memset((char*)AccessBuffer(), 0, BASE_HDR_LEN);
        SetVersion(VERSION);
-       pkt_length = BASE_HDR_LEN;
+       ProtoPkt::SetLength(BASE_HDR_LEN);
        return true;
    }
    else
    {
-       if (NULL != bufferPtr)
-           PLOG(PL_ERROR, "ProtoPktRTP::Init() error: insufficient buffer_ptr space\n");
-       pkt_length = 0;
+       if (NULL != bufferPtr) DetachBuffer();
+       PLOG(PL_ERROR, "ProtoPktRTP::Init() error: insufficient buffer_ptr space\n");
+       ProtoPkt::SetLength(0);
        return false;
    }
 }  // end ProtoPktRTP::Init()
@@ -95,12 +96,13 @@ bool ProtoPktRTP::Init(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnD
 bool ProtoPktRTP::AppendCsrc(UINT32 csrcId)
 {
     UINT8 index = GetCsrcCount();  // count before adding next contributing source (CSRC) (next index to use)
-    if ((index < CSRC_COUNT_MAX) && ((BASE_HDR_LEN + (index << 2)) <= buffer_bytes))
+    if ((index < CSRC_COUNT_MAX) && ((BASE_HDR_LEN + (index << 2)) <= GetBufferLength()))
     {            
-		buffer_ptr[OFFSET_CSRC_LIST+index] = htonl(csrcId);  
-        reinterpret_cast<UINT8*>(buffer_ptr)[OFFSET_CSRC_COUNT] &= 0xf0;  // zero out any previous value
-		reinterpret_cast<UINT8*>(buffer_ptr)[OFFSET_CSRC_COUNT] |= ++index;  //  update
-		pkt_length += 4;
+		SetWord32(OFFSET_CSRC_LIST+index, csrcId);
+        UINT8& byte = AccessUINT8(OFFSET_CSRC_COUNT);
+        byte &= 0xf0;  // zero out any previous value
+		byte |= ++index;  //  update
+		ProtoPkt::SetLength(4 + ProtoPkt::GetLength());
 		return true;
 	}
 	else
@@ -113,7 +115,7 @@ bool ProtoPktRTP::AppendCsrc(UINT32 csrcId)
 bool ProtoPktRTP::AttachExtension(Extension& extension)
 {
     unsigned int extOffset = OFFSET_CSRC_LIST + GetCsrcCount();
-    bool result = extension.Init(buffer_ptr + extOffset, buffer_bytes - (extOffset << 2));
+    bool result = extension.Init(AccessBuffer32(extOffset), GetBufferLength() - (extOffset << 2));
     if (result) extension.AttachRtpPacket(this);
     return result;
 }  // end ProtoPktRTP::AttachExtension()
@@ -121,11 +123,11 @@ bool ProtoPktRTP::AttachExtension(Extension& extension)
 bool ProtoPktRTP::PackExtension(Extension& extension)
 {
     unsigned int newLength = (OFFSET_CSRC_LIST + GetCsrcCount()) << 2;  // in bytes
-    ASSERT(pkt_length == newLength); 
+    ASSERT(ProtoPkt::GetLength() == newLength);  // ???
     newLength += extension.GetLength();
-    if (newLength <= buffer_bytes)
+    if (newLength <= GetBufferLength())
     {
-        pkt_length = newLength;
+        ProtoPkt::SetLength(newLength);
         SetFlag(EXTENSION);
         return true;
     }
@@ -142,16 +144,15 @@ void ProtoPktRTP::SetPadding(UINT8 numBytes, char* paddingPtr)
 {
 	if (numBytes > 0)
 	{
-		memcpy(reinterpret_cast<UINT8*>(buffer_ptr)+pkt_length, paddingPtr, 
-		       (NULL != paddingPtr) ? numBytes : 0);
-		pkt_length += numBytes - GetPaddingLength();
-		reinterpret_cast<UINT8*>(buffer_ptr)[pkt_length-1] = numBytes;  // fill in padding count
+		memcpy(AccessBuffer(ProtoPkt::GetLength()), paddingPtr, (NULL != paddingPtr) ? numBytes : 0);
+		ProtoPkt::SetLength(ProtoPkt::GetLength() + numBytes - GetPaddingLength());
+		SetUINT8(ProtoPkt::GetLength() - 1, numBytes);
 		SetFlag(PADDING);
 	}
 }  // end ProtoPktRTP::SetPadding()
 
 
-ProtoPktRTP::Extension::Extension(UINT32*       bufferPtr, 
+ProtoPktRTP::Extension::Extension(void*         bufferPtr, 
                                   unsigned int  numBytes, 
                                   bool          initFromBuffer,
                                   bool          freeOnDestruct)
@@ -165,26 +166,26 @@ ProtoPktRTP::Extension::~Extension()
 {
 }
 
-bool ProtoPktRTP::Extension::InitFromBuffer(UINT32*         bufferPtr, 
+bool ProtoPktRTP::Extension::InitFromBuffer(void*           bufferPtr, 
                                             unsigned int    bufferBytes, 
                                             bool            freeOnDestruct)
 {
     if (NULL != bufferPtr) AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
-    if (buffer_bytes > (OFFSET_LENGTH << 1))
+    if (GetBufferLength() > (OFFSET_LENGTH << 1))
     {
         unsigned int extLength = GetDataLength() + 4;
-        if (extLength <= buffer_bytes)
+        if (extLength <= GetBufferLength())
         {
-            pkt_length = extLength;
+            ProtoPkt::SetLength(extLength);
             return true;
         }
     }
-    if (NULL != buffer_ptr)
-        PLOG(PL_ERROR, "ProtoPktRTP::Extension::InitFromBuffer() error: insufficient buffer space\n");
+    if (NULL != bufferPtr) DetachBuffer();
+    PLOG(PL_ERROR, "ProtoPktRTP::Extension::InitFromBuffer() error: insufficient buffer space\n");
     return false;
 }  // end ProtoPktRTP::InitFromBuffer()
 
-bool ProtoPktRTP::Extension::Init(UINT32*       bufferPtr, 
+bool ProtoPktRTP::Extension::Init(void*         bufferPtr, 
                                   unsigned int  bufferBytes,
                                   bool          freeOnDestruct)
 {
@@ -203,7 +204,7 @@ bool ProtoPktRTP::Extension::Init(UINT32*       bufferPtr,
 
 bool ProtoPktRTP::Extension::SetData(const char* dataPtr, unsigned int numBytes)
 {
-    if ((4 + numBytes) <= buffer_bytes)
+    if ((4 + numBytes) <= GetBufferLength())
     {
         memcpy((char*)AccessData(), dataPtr, numBytes);
         SetDataLength(numBytes);

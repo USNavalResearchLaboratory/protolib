@@ -60,7 +60,7 @@
 class ProtoPktETH : public ProtoPkt
 {
     public:
-        ProtoPktETH(UINT32*         bufferPtr = NULL, 
+        ProtoPktETH(void*           bufferPtr = NULL, 
                     unsigned int    numBytes = 0,
                     bool            freeOnDestruct = false); 
         ~ProtoPktETH();
@@ -79,33 +79,41 @@ class ProtoPktETH : public ProtoPkt
         };  
         
         bool InitFromBuffer(unsigned int    frameLength,
-                            UINT32*         bufferPtr = NULL,
+                            void*           bufferPtr = NULL,
                             unsigned int    numBytes = 0,
                             bool            freeOnDestruct = false)
             {return ProtoPkt::InitFromBuffer(frameLength, bufferPtr, numBytes, freeOnDestruct);}
         
-        void GetSrcAddr(ProtoAddress& addr)
-            {addr.SetRawHostAddress(ProtoAddress::ETH, ((char*)buffer_ptr)+OFFSET_SRC, ADDR_LEN);}
-        void GetDstAddr(ProtoAddress& addr)
-            {addr.SetRawHostAddress(ProtoAddress::ETH, ((char*)buffer_ptr)+OFFSET_DST, ADDR_LEN);}
-        Type GetType()
-            {return((Type)ntohs(*(((UINT16*)buffer_ptr)+OFFSET_TYPE)));}
-        unsigned int GetPayloadLength() {return (GetLength() - HDR_LEN);}
-        const char* GetPayload() {return (((const char*)buffer_ptr)+OFFSET_PAYLOAD);}
-        char* AccessPayload() {return (((char*)buffer_ptr)+OFFSET_PAYLOAD);}
+        void GetSrcAddr(ProtoAddress& addr) 
+            {addr.SetRawHostAddress(ProtoAddress::ETH, (char*)AccessBuffer(OFFSET_SRC), ADDR_LEN);}
+        void GetDstAddr(ProtoAddress& addr) const
+            {addr.SetRawHostAddress(ProtoAddress::ETH, (char*)GetBuffer(OFFSET_DST), ADDR_LEN);}
+        Type GetType() const
+            {return (Type)GetWord16(OFFSET_TYPE);}
+                
+        unsigned int GetPayloadLength()  const
+            {return (GetLength() - HDR_LEN);}
+        const void* GetPayload() const
+            {return GetBuffer(OFFSET_PAYLOAD);}
+        void* AccessPayload() 
+            {return AccessBuffer(OFFSET_PAYLOAD);}
+        unsigned int GetPayloadMax() const
+            {return (GetBufferLength() - OFFSET_PAYLOAD);}
         
-        bool InitIntoBuffer(UINT32*         bufferPtr = NULL, 
+        bool InitIntoBuffer(void*           bufferPtr = NULL, 
                             unsigned int    bufferBytes = 0, 
                             bool            freeOnDestruct = false);
         void SetSrcAddr(ProtoAddress srcAddr)
-            {memcpy(((char*)buffer_ptr)+OFFSET_SRC, srcAddr.GetRawHostAddress(), ADDR_LEN);}
+            {memcpy(AccessBuffer(OFFSET_SRC), srcAddr.GetRawHostAddress(), ADDR_LEN);}
+        
         void SetDstAddr(ProtoAddress dstAddr)
-            {memcpy(((char*)buffer_ptr)+OFFSET_DST, dstAddr.GetRawHostAddress(), ADDR_LEN);}  
+            {memcpy(AccessBuffer(OFFSET_DST), dstAddr.GetRawHostAddress(), ADDR_LEN);}  
+        
         void SetType(Type type)
-            {*(((UINT16*)buffer_ptr)+OFFSET_TYPE) = htons((UINT16)type);}
+            {SetWord16(OFFSET_TYPE, (UINT16)type);}
         void SetPayload(const char* payload, unsigned int numBytes)
         {
-            memcpy(((char*)buffer_ptr)+OFFSET_PAYLOAD, payload, numBytes);
+            memcpy(AccessBuffer(OFFSET_PAYLOAD), payload, numBytes);
             SetPayloadLength(numBytes);
         }
         void SetPayloadLength(unsigned int numBytes)

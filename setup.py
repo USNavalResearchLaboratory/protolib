@@ -39,5 +39,5 @@ setup(name='protokit',
                                srcFiles, 
                                include_dirs = ['./include'],
                                define_macros = sys_macros,
-                               library_dirs = ['./lib'], 
+                               library_dirs = ['./lib', './build'], 
                                libraries = sys_libs)])

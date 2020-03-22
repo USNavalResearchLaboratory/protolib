@@ -28,6 +28,23 @@ typedef unsigned short UINT16;
 const char PROTO_PATH_DELIMITER = '/';
 #endif // if/else WIN32/UNIX
 
+// Stuff for handling UNICODE
+#if defined(UNICODE) || defined(_UNICODE)
+#ifndef UNICODE
+#define UNICODE
+#endif
+#ifndef _UNICODE
+#define _UNICODE
+#endif
+#ifndef TCHAR
+#define TCHAR wchar_t
+#endif
+#else
+#ifndef TCHAR
+#define TCHAR char
+#endif
+#endif // if/else UNICODE || _UNICODE
+
 #ifdef SIMULATE
 #ifdef NS2
 #include "scheduler.h"

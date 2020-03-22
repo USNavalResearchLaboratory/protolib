@@ -212,11 +212,15 @@ bool ProtoTimerMgr::OnPulseTimeout(ProtoTimer& /*theTimer*/)
     while (NULL != next)
     {
         double delta = ProtoTime::Delta(next->timeout, pulse_mark);
-        if (delta < PRECISION_TIME_THRESHOLD)
-        {
-            RemoveLongTimer(*next);
-            GetCurrentProtoTime(next->timeout);
-            next->timeout += delta;
+		if (delta < PRECISION_TIME_THRESHOLD)
+		{
+			RemoveLongTimer(*next);
+			GetCurrentProtoTime(next->timeout);
+			if (delta >= 0.0)
+				next->timeout += delta;
+			else if (delta < -0.100)
+				PLOG(PL_DEBUG, "ProtoTimerMgr: Warning! real time failure interval:%lf (delta:%lf)\n",
+					           next->GetInterval(), delta);
             InsertShortTimer(*next);
             next = GetLongHead();
         }
@@ -257,7 +261,9 @@ void ProtoTimerMgr::ActivateTimer(ProtoTimer& theTimer)
             update_pending = updateStatus;
         }
         theTimer.timeout = pulse_mark;
-        theTimer.timeout += timerInterval + 1.0 - pulse_timer.GetTimeRemaining();
+		double delta = timerInterval + 1.0 - pulse_timer.GetTimeRemaining();
+		ASSERT(delta >= 0.0);
+		theTimer.timeout += delta;
         InsertLongTimer(theTimer);   
     }
     theTimer.repeat_count = theTimer.repeat;
@@ -273,7 +279,7 @@ void ProtoTimerMgr::ReactivateTimer(ProtoTimer& theTimer, const ProtoTime& now)
         theTimer.timeout += timerInterval;
         //TRACE("   new timeout %lu:%lu\n",  theTimer.timeout.sec(), theTimer.timeout.usec());
         double delta = ProtoTime::Delta(theTimer.timeout, now);
-        if (delta < -0.01 )
+        if (delta < -0.100 )
         {
             GetCurrentProtoTime(theTimer.timeout);
             PLOG(PL_DEBUG, "ProtoTimerMgr: Warning! real time failure interval:%lf (delta:%lf)\n", 
