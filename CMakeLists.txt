@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.10)
 # set the project name
 project(protolib)
 
+set(COMMON src/common)
+
 option(BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
 option(BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
 option(BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
@@ -77,12 +79,12 @@ endif()
 # Check for libraries
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-find_package(libxml2)
-if(libxml2_FOUND)
+find_package(LibXml2)
+if(LibXml2_FOUND)
 	list(APPEND PLATFORM_LIBS libxml2)
 endif()
-find_package(wxwidgets)
-if(libxml2_FOUND)
+find_package(wxWidgets)
+if(wxWidgets_FOUND)
 	list(APPEND PLATFORM_LIBS wx)
 	list(APPEND PLATFORM_SOURCE_FILES src/wx/wxProtoApp.cpp)
 endif()
@@ -144,7 +146,6 @@ include/unix/zebraRouteMgr.h
 )
 
 # List platform-independent source files
-set(COMMON src/common)
 list(APPEND COMMON_SOURCE_FILES 
           ${COMMON}/protoAddress.cpp  
 		  ${COMMON}/protoApp.cpp 
