@@ -216,7 +216,7 @@ bool LinuxRouteMgr::NetlinkCheckResponse(UINT32 seq)
           if ((msg->nlmsg_pid == port_id) && (msg->nlmsg_seq == seq))
 #else
     //DMSG(0,"J Namspaces comment in NetlinkCheckResponse\n");
-            if (msg->nlmsg_seq == seq)
+          if (msg->nlmsg_seq == seq)
 #endif // if/else !CORE_NAMESPACES
             {
                 switch(msg->nlmsg_type)
@@ -226,7 +226,7 @@ bool LinuxRouteMgr::NetlinkCheckResponse(UINT32 seq)
                         struct nlmsgerr* errorMsg = (struct nlmsgerr*)NLMSG_DATA(msg);
                         if (0 != errorMsg->error)
                         {
-                            PLOG(PL_ERROR, "LinuxRouteMgr::NetlinkCheckResponse() recvd NLMSG_ERROR "
+                            PLOG(PL_DEBUG, "LinuxRouteMgr::NetlinkCheckResponse() recvd NLMSG_ERROR "
                                            "error seq:%d code:%d...\n", msg->nlmsg_seq, errorMsg->error);
                             return false;
                         }
@@ -264,9 +264,10 @@ bool LinuxRouteMgr::SetRoute(const ProtoAddress&   dst,
         PLOG(PL_DEBUG, "direct if:%d\n", ifIndex);
     if (!DeleteRoute(dst, prefixLen, gw, ifIndex))
     {    
-        PLOG(PL_DEBUG, "LinuxRouteMgr::SetRoute() error deleting pre-existing route to %s/%d\n",
+        // Limited to PL_DEBUG since route may _not_ pre-exist.  TBD - improve this by checking first???
+        PLOG(PL_DEBUG, "LinuxRouteMgr::SetRoute() error deleting _possible_ pre-existing route to %s/%d\n",
                 dst.GetHostString(), prefixLen);
-    }       
+    }    
     
     struct
     {
@@ -418,12 +419,10 @@ bool LinuxRouteMgr::SetRoute(const ProtoAddress&   dst,
     }
     else
     {
-        TRACE("LinuxRouteMgr::SetRoute() error setting route\n");
+        PLOG(PL_ERROR, "LinuxRouteMgr::SetRoute() error setting route\n");
         return false;
     }    
 }  // end LinuxRouteMgr::SetRoute()
-
-
 
 bool LinuxRouteMgr::DeleteRoute(const ProtoAddress& dst,
                                 unsigned int        prefixLen,
@@ -564,7 +563,7 @@ bool LinuxRouteMgr::DeleteRoute(const ProtoAddress& dst,
         // Check response for error code
         if (!NetlinkCheckResponse(seq))
         {
-            PLOG(PL_ERROR, "LinuxRouteMgr::DeleteRoute() error deleting route\n");
+            PLOG(PL_DEBUG, "LinuxRouteMgr::DeleteRoute() error deleting route\n");
             return false;   
         }
     }

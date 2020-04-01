@@ -70,6 +70,8 @@ class ProtoRouteTable
             public:
                 bool IsValid() const 
                     {return destination.IsValid();}
+                bool IsDefault() const
+                    {return (0 == GetKeysize());}
                 bool IsGatewayRoute() const 
                     {return gateway.IsValid();}
                 bool IsDirectRoute() const
@@ -107,6 +109,8 @@ class ProtoRouteTable
             private:
                 Entry();
                 Entry(const ProtoAddress& dstAddr, unsigned int prefixSize);
+                Entry(const Entry& entry)
+                    {*this = entry;}
                 ~Entry();
                 
                 void Init(const ProtoAddress& dstAddr, unsigned int prefixSize);
@@ -151,6 +155,12 @@ class ProtoRouteTable
             {return (default_entry.IsValid() ? (Entry*)&default_entry : NULL);}
         
         void DeleteEntry(ProtoRouteTable::Entry* entry);
+        
+        // IMPORTANT - cannot use these two for default route entries
+        void InsertEntry(ProtoRouteTable::Entry& entry)
+            {tree.Insert(entry);}
+        void RemoveEntry(ProtoRouteTable::Entry& entry)
+            {tree.Remove(entry);}
                       
     private:
         ProtoTree  tree;
