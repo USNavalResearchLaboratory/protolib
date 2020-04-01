@@ -157,7 +157,7 @@ def configure(ctx):
 
 def build(ctx):
     protolib = ctx.stlib(
-        target = 'protolib',
+        target = 'protokit',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
         use = ctx.env.USE_BUILD_PROTOLIB,
