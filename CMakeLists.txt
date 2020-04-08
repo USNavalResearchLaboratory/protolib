@@ -8,6 +8,7 @@ set(COMMON src/common)
 option(BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
 option(BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
 option(BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
+option(WX_SUPPORT "Enables building with WX Widgets" OFF)
 
 # Availability checks
 include(CheckCXXSymbolExists)
@@ -83,10 +84,14 @@ find_package(LibXml2)
 if(LibXml2_FOUND)
 	list(APPEND PLATFORM_LIBS libxml2)
 endif()
-find_package(wxWidgets)
-if(wxWidgets_FOUND)
-	list(APPEND PLATFORM_LIBS wx)
-	list(APPEND PLATFORM_SOURCE_FILES src/wx/wxProtoApp.cpp)
+
+if(WX_SUPPORT)
+	find_package(wxWidgets core base REQUIRED)
+	if(wxWidgets_FOUND)
+		include(${wxWidgets_USE_FILE})
+		list(APPEND PLATFORM_LIBS ${wxWidgets_LIBRARIES})
+		list(APPEND PLATFORM_SOURCE_FILES src/wx/wxProtoApp.cpp)
+	endif()
 endif()
 
 # List header files
