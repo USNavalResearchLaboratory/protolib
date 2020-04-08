@@ -8,7 +8,7 @@ set(COMMON src/common)
 option(BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
 option(BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
 option(BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
-option(WX_SUPPORT "Enables building with WX Widgets" OFF)
+option(ENABLE_WX "Enables building with WX Widgets" OFF)
 
 # Availability checks
 include(CheckCXXSymbolExists)
@@ -85,7 +85,7 @@ if(LibXml2_FOUND)
 	list(APPEND PLATFORM_LIBS libxml2)
 endif()
 
-if(WX_SUPPORT)
+if(ENABLE_WX)
 	find_package(wxWidgets core base REQUIRED)
 	if(wxWidgets_FOUND)
 		include(${wxWidgets_USE_FILE})
