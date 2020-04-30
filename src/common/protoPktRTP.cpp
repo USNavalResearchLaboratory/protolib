@@ -15,10 +15,13 @@ ProtoPktRTP::ProtoPktRTP(void*          bufferPtr,
                          bool           freeOnDestruct)
  : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
 {
-	if (0 != pktLength) 
-        InitFromBuffer(pktLength);
-    else
-        Init();
+    if (NULL != bufferPtr)
+    {
+	    if (0 != pktLength) 
+            InitFromBuffer(pktLength);
+        else
+            InitIntoBuffer();
+    }
 }
 
 ProtoPktRTP::~ProtoPktRTP()
@@ -73,7 +76,7 @@ bool ProtoPktRTP::GetExtension(Extension& extension)
     }
 }  // end ProtoPktRTP::GetExtension()
 
-bool ProtoPktRTP::Init(void*   bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktRTP::Init(void* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
    if (NULL != bufferPtr) AttachBuffer(bufferPtr, bufferBytes, freeOnDestruct);
    if (GetBufferLength() >= BASE_HDR_LEN)

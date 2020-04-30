@@ -1094,7 +1094,7 @@ bool ManetPkt::InitIntoBuffer(void* bufferPtr, unsigned int numBytes)
 
 void ManetPkt::SetVersion(UINT8 version)
 {
-    u_int8_t flags = GetUINT8(OFFSET_SEMANTICS) & 0x0F; // clear version
+    uint8_t flags = GetUINT8(OFFSET_SEMANTICS) & 0x0F; // clear version
     SetUINT8(OFFSET_SEMANTICS, (version << 4) | flags);
 }  // end ManetPkt::SetVersion()
 

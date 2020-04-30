@@ -108,7 +108,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         {
             // Count was limited, so return remainder as last item 
             // (strip whitespace from head if required)
-            unsigned int itemLen = next_ptr - text_ptr + 1;
+            long itemLen = next_ptr - text_ptr + 1;
             const char* headPtr = text_ptr;
             if (strip_whitespace)
             {
@@ -232,7 +232,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         {
             // Count was limited, so return remainder as last item 
             // (strip trailing whitespace if required)
-            unsigned int itemLen = strlen(next_ptr);
+            size_t itemLen = strlen(next_ptr);
             if (strip_whitespace)
             {
                 const char* tailPtr = next_ptr + itemLen - 1;

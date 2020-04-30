@@ -159,6 +159,9 @@ class ProtoPktRTP : public ProtoPkt
                     0);
 		}
 		
+        static unsigned int GetBaseHeaderLength()
+            {return BASE_HDR_LEN;}
+        
         unsigned int GetHeaderLength() const
             {return (BASE_HDR_LEN + (GetCsrcCount() << 2) + GetExtensionLength());}
         
@@ -175,7 +178,10 @@ class ProtoPktRTP : public ProtoPkt
         
         // Message building 
         // if "bufferPtr == NULL", current "buffer_ptr" is used
-        bool Init(void*   bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
+        bool Init(void* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);  // to be deprecated
+        
+        bool InitIntoBuffer(void* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false)
+            {return Init(bufferPtr, numBytes, freeOnDestruct);}
 
 		void SetVersion(UINT8 version = VERSION) 
         {

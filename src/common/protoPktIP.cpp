@@ -950,7 +950,7 @@ ProtoPktIPv6::Option* ProtoPktIPv6::Extension::AddOption(Option::Type optType)
                 size_t extLen = (char*)opt.GetBuffer() - (char*)GetBuffer();
                 if (extLen != (ProtoPkt::GetLength() - opt.GetLength()))
                     PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() warning: extension used multiple PADS ?!\n");
-                ProtoPkt::SetLength(extLen);
+                ProtoPkt::SetLength((unsigned int)extLen);
                 break;
             }
         }
@@ -992,7 +992,7 @@ bool ProtoPktIPv6::Extension::ReplaceOption(Option& oldOpt, Option& newOpt)
                 size_t extLen = (char*)opt.GetBuffer() - (char*)GetBuffer();
                 if (extLen != (ProtoPkt::GetLength() - opt.GetLength()))
                     PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() warning: extension used multiple PADS ?!\n");
-                ProtoPkt::SetLength(extLen);
+                ProtoPkt::SetLength((unsigned int)extLen);
                 break;
             }
         }
