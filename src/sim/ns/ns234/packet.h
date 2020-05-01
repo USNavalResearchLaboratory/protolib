@@ -521,7 +521,7 @@ public:
          * the recv() function of an object.
 	 * 
          */
-        u_int8_t        incoming;
+        uint8_t        incoming;
 
 	//monarch extns end;
 };
