@@ -37,11 +37,6 @@ if(HAVE_SELECT_H)
 	list(APPEND PLATFORM_DEFINITIONS USE_SELECT)
 endif()
 
-check_cxx_symbol_exists(dirfd "dirent.h" HAVE_DIRFD)
-if(HAVE_DIRFD)
-	list(APPEND PLATFORM_DEFINITIONS HAVE_DIRFD)
-endif()
-
 check_cxx_symbol_exists(assert "assert.h" HAVE_ASSERT)
 if(HAVE_ASSERT)
 	list(APPEND PLATFORM_DEFINITIONS HAVE_ASSERT)

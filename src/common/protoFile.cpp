@@ -14,11 +14,7 @@
 #include <io.h>
 #endif // !_WIN32_WCE
 #else
-#include <unistd.h>
-// Most don't have the dirfd() function
-#ifndef HAVE_DIRFD
-static inline int dirfd(DIR *dir) {return (dir->dd_fd);}
-#endif // HAVE_DIRFD    
+#include <unistd.h> 
 #endif // if/else WIN32
 
 #ifndef _WIN32_WCE
