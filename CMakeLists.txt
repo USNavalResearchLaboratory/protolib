@@ -195,7 +195,6 @@ elseif(UNIX)
 	list(APPEND PLATFORM_SOURCE_FILES 	src/unix/unixNet.cpp 
 										src/unix/unixSerial.cpp 
 										src/unix/unixVif.cpp
-										src/unix/zebraRouteMgr.cpp
 										src/manet/manetGraph.cpp
 										src/manet/manetMsg.cpp)
 	if(${CMAKE_SYSTEM_NAME} STREQUAL Linux)
@@ -203,7 +202,8 @@ elseif(UNIX)
 		list(APPEND PLATFORM_LIBS dl rt)
 		list(APPEND PLATFORM_SOURCE_FILES 	src/linux/linuxCap.cpp 
 										src/linux/linuxNet.cpp 
-										src/linux/linuxRouteMgr.cpp)
+										src/linux/linuxRouteMgr.cpp
+										src/unix/zebraRouteMgr.cpp)
 		
 		check_library_exists(netfilter_queue pktb_alloc "" HAVE_NETFILTER_QUEUE)
 		if(HAVE_NETFILTER_QUEUE)
