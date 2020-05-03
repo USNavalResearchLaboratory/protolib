@@ -281,7 +281,8 @@ if(BUILD_EXAMPLES)
 
 	foreach(example ${examples})
 		add_executable(${example} examples/${example}.cpp)
-		target_link_libraries(${example} PRIVATE protolib)
+		target_link_libraries(${example} PRIVATE protokit)
+		include_directories(${CMAKE_SOURCE_DIR}/include)
 	endforeach()
 endif()
 
