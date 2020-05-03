@@ -78,6 +78,8 @@ find_package(Threads REQUIRED)
 find_package(LibXml2)
 if(LibXml2_FOUND)
 	list(APPEND PLATFORM_LIBS libxml2)
+	list(APPEND PUBLIC_HEADER_FILES include/protoXml.h)
+	list(APPEND COMMON_SOURCE_FILES ${COMMON}/protoXml.cpp)
 endif()
 
 if(ENABLE_WX)
@@ -93,7 +95,6 @@ endif()
 list(APPEND PUBLIC_HEADER_FILES
 include/manetGraph.h        
 include/manetGraphML.h      
-include/manetGraphML2.h     
 include/manetMsg.h          
 include/ns3ProtoSimAgent.h  
 include/protoAddress.h      
@@ -138,7 +139,6 @@ include/protoTimer.h
 include/protoTree.h
 include/protoVersion
 include/protoVif.h
-include/protoXml.h
 include/protokit.h
 include/testFuncs.h
 include/wxProtoApp.h
