@@ -1729,7 +1729,7 @@ void ProtoDispatcher::Wait()
             (unsigned long)(1.0e+09 * (timerDelay - (double)timeout.tv_sec));
 #else
         timeout.tv_usec = 
-            (unsigned long)(1.0e+06 * (timerDelay - (double)timeout.tv_sec));
+            (suseconds_t)(1.0e+06 * (timerDelay - (double)timeout.tv_sec));
 #endif // if/else USE_TIMESPEC
         timeoutPtr = &timeout;
 #ifdef USE_TIMERFD
