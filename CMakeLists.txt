@@ -81,7 +81,7 @@ if(LibXml2_FOUND)
 endif()
 
 if(ENABLE_WX)
-	find_package(wxWidgets core base REQUIRED)
+        find_package(wxWidgets REQUIRED COMPONENTS core base)
 	if(wxWidgets_FOUND)
 		include(${wxWidgets_USE_FILE})
 		list(APPEND PLATFORM_LIBS ${wxWidgets_LIBRARIES})
