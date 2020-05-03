@@ -55,3 +55,6 @@ makefiles/win32/Debug
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Build dir
+build

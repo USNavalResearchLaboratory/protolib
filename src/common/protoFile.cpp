@@ -3,6 +3,9 @@
 #include <string.h>  // for strerror()
 #include <stdio.h>   // for rename()
 #include <time.h>  // for difftime()
+#ifdef HAVE_FLOCK
+#include <sys/file.h> // for flock()
+#endif
 #ifdef WIN32
 #ifndef _WIN32_WCE
 #include <errno.h>
@@ -11,11 +14,7 @@
 #include <io.h>
 #endif // !_WIN32_WCE
 #else
-#include <unistd.h>
-// Most don't have the dirfd() function
-#ifndef HAVE_DIRFD
-static inline int dirfd(DIR *dir) {return (dir->dd_fd);}
-#endif // HAVE_DIRFD    
+#include <unistd.h> 
 #endif // if/else WIN32
 
 #ifndef _WIN32_WCE
