@@ -17,11 +17,6 @@ include(CheckTypeSize)
 include(CheckIncludeFiles)
 include(CheckLibraryExists)
 
-check_include_files( sched.h HAVE_SCHED_H )
-if(HAVE_SCHED_H)
-	list(APPEND PLATFORM_DEFINITIONS HAVE_SCHED)
-endif()
-
 check_include_files( pcap.h HAVE_PCAP_H)
 if(HAVE_PCAP_H)
 	list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
@@ -35,6 +30,11 @@ endif()
 check_include_files( sys/select.h HAVE_SELECT_H) #USE
 if(HAVE_SELECT_H)
 	list(APPEND PLATFORM_DEFINITIONS USE_SELECT)
+endif()
+
+check_cxx_symbol_exists( sched_setscheduler "sched.h" HAVE_SCHED_SETSCHEDULER )
+if(HAVE_SCHED_SETSCHEDULER)
+	list(APPEND PLATFORM_DEFINITIONS HAVE_SCHED)
 endif()
 
 check_cxx_symbol_exists(assert "assert.h" HAVE_ASSERT)
