@@ -237,7 +237,7 @@ install( TARGETS protolib EXPORT protolibTargets
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} )
 
 install( EXPORT protolibTargets
-	FILE protolibTargets.cmake
+	FILE protolibConfig.cmake
 	NAMESPACE protolib::
 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protolib
 )
