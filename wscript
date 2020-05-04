@@ -173,7 +173,7 @@ def configure(ctx):
         ctx.env.CFLAGS
 
 def build(ctx):
-        obj = ctx.objects(
+    obj = ctx.objects(
         target = 'protoObjs',
         includes = ['include', 'include/unix'],
         export_includes = ['include', 'include/unix'],
