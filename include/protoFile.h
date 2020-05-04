@@ -229,7 +229,7 @@ class ProtoFile : public ProtoChannel
                 const char* GetKey(const Item& item) const
                     {return static_cast<const Path&>(item).GetPath();}
                 unsigned int GetKeysize(const Item& item) const
-                    {return (strlen(static_cast<const Path&>(item).GetPath()) << 3);}
+                    {return ((unsigned int)strlen(static_cast<const Path&>(item).GetPath()) << 3);}
         };  // end class ProtoFile::PathTable
         
         
