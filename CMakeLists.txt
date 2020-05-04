@@ -19,7 +19,7 @@ include(CheckLibraryExists)
 
 check_include_files( pcap.h HAVE_PCAP_H)
 if(HAVE_PCAP_H)
-	list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
+	#list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
 endif()
 
 check_include_files( sys/timerfd.h HAVE_TIMERFD_H) #USE
@@ -202,9 +202,9 @@ elseif(UNIX)
 		list(APPEND PLATFORM_DEFINITIONS LINUX )
 		list(APPEND PLATFORM_LIBS dl rt)
 		list(APPEND PLATFORM_SOURCE_FILES 	src/linux/linuxCap.cpp 
-										src/linux/linuxNet.cpp 
-										src/linux/linuxRouteMgr.cpp
-										src/unix/zebraRouteMgr.cpp)
+										    src/linux/linuxNet.cpp 
+										    src/linux/linuxRouteMgr.cpp
+										    src/unix/zebraRouteMgr.cpp)
 		
 		check_library_exists(netfilter_queue pktb_alloc "" HAVE_NETFILTER_QUEUE)
 		if(HAVE_NETFILTER_QUEUE)
