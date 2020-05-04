@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 
 # set the project name
-project(protolib)
+project(protokit)
 
 set(COMMON src/common)
 
@@ -218,10 +218,10 @@ elseif(UNIX)
 											src/bsd/bsdRouteMgr.cpp
 											src/bsd/bsdNet.cpp
 											src/unix/bpfCap.cpp)
-        SET(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
-        SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
-        SET(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
-        SET(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+            SET(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
+            SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
+            SET(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+            SET(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
 	endif()
 endif()
 
@@ -229,6 +229,7 @@ include(GNUInstallDirs)
 
 # Setup target
 add_library(protokit ${PLATFORM_SOURCE_FILES} ${COMMON_SOURCE_FILES} ${PUBLIC_HEADER_FILES})
+add_library(protokit::protokit ALIAS protokit)
 target_link_libraries(protokit PRIVATE ${PLATFORM_LIBS})
 target_compile_definitions(protokit PUBLIC ${PLATFORM_DEFINITIONS})
 target_compile_options(protokit PUBLIC ${PLATFORM_FLAGS})
@@ -236,19 +237,19 @@ target_include_directories(protokit PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(protokit PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 
 # Install target
-install( TARGETS protokit EXPORT protolibTargets
-		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+install( TARGETS protokit EXPORT protokitTargets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} )
 
-install( EXPORT protolibTargets
-	FILE protolibTargets.cmake
-	NAMESPACE protolib::
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protolib
+install( EXPORT protokitTargets
+	FILE protokitTargets.cmake
+	NAMESPACE protokit::
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protokit
 )
 
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protolib)
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protokit)
 
 if(BUILD_EXAMPLES)
 	# Setup examples
