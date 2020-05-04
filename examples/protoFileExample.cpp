@@ -1,10 +1,10 @@
 #ifdef SIMULATE
 #include "nsProtoSimAgent.h"
 #else
-#include "protoApp.h"
+#include "protokit/protoApp.h"
 #endif  // if/else SIMULATE
 
-#include "protokit.h"
+#include "protokit/protokit.h"
 
 #include <stdlib.h>  // for atoi()
 #include <stdio.h>   // for stdout/stderr printouts
@@ -62,7 +62,7 @@ private:
 
 // (TBD) Note this #if/else code could be replaced with something like
 // a PROTO_INSTANTIATE(ProtoFileExample) macro defined differently
-// in "protoApp.h" and "nsProtoSimAgent.h"
+// in "protokit/protoApp.h" and "nsProtoSimAgent.h"
 #ifdef SIMULATE
 #ifdef NS2
 static class NsProtoFileExampleClass : public TclClass

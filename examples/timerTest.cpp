@@ -1,5 +1,5 @@
-#include "protoApp.h"
-#include "protoTimer.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoTimer.h"
 
 #include <stdlib.h>
 #include <stdio.h>

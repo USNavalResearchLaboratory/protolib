@@ -1,7 +1,7 @@
 // This program validates and illustrates the use of the ProtoLFSR class
 
-#include "protoTime.h"
-#include "protoLFSR.h"
+#include "protokit/protoTime.h"
+#include "protokit/protoLFSR.h"
 #include <stdio.h>
 #include <stdlib.h>  // for rand(), srand()
 

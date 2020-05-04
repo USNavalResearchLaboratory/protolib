@@ -1,6 +1,6 @@
 
-#include "protoString.h"
-#include "protoDefs.h"  // for PATH_MAX
+#include "protokit/protoString.h"
+#include "protokit/protoDefs.h"  // for PATH_MAX
 #include <ctype.h>
 #include <string.h>
 

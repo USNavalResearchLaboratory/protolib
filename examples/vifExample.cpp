@@ -1,12 +1,12 @@
-#include "protoApp.h"
-#include "protoVif.h"
-#include "protoCap.h"
-#include "protoPktIP.h"
-#include "protoPktETH.h"
-#include "protoPktARP.h"
-#include "protoTimer.h"
-#include "protoPipe.h"
-#include "protoNet.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoVif.h"
+#include "protokit/protoCap.h"
+#include "protokit/protoPktIP.h"
+#include "protokit/protoPktETH.h"
+#include "protokit/protoPktARP.h"
+#include "protokit/protoTimer.h"
+#include "protokit/protoPipe.h"
+#include "protokit/protoNet.h"
 
 #include <stdlib.h>
 #include <stdio.h>

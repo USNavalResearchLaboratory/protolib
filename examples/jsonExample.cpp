@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include "protoJson.h"
-#include "protoDebug.h"
+#include "protokit/protoJson.h"
+#include "protokit/protoDebug.h"
 
 int main(int argc, char* argv[])
 {

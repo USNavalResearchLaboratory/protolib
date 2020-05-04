@@ -10,7 +10,7 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "IvoxActivityComponent.h"
-#include "protoDebug.h"
+#include "protokit/protoDebug.h"
 
 //==============================================================================
 IvoxActivityComponent::IvoxActivityComponent()

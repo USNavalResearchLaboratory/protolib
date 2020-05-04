@@ -94,56 +94,56 @@ endif()
 
 # List header files
 list(APPEND PUBLIC_HEADER_FILES
-include/manetGraph.h        
-include/manetGraphML.h      
-include/manetMsg.h          
-include/ns3ProtoSimAgent.h  
-include/protoAddress.h      
-include/protoApp.h          
-include/protoAverage.h      
-include/protoBase64.h       
-include/protoBitmask.h      
-include/protoCap.h          
-include/protoChannel.h     
-include/protoCheck.h     
-include/protoDebug.h       
-include/protoDefs.h        
-include/protoDetour.h      
-include/protoDispatcher.h  
-include/protoEvent.h       
-include/protoFile.h        
-include/protoGraph.h       
-include/protoJson.h        
-include/protoLFSR.h        
-include/protoList.h     
-include/protoNet.h      
-include/protoNotify.h   
-include/protoPipe.h     
-include/protoPkt.h      
-include/protoPktARP.h   
-include/protoPktETH.h   
-include/protoPktIGMP.h  
-include/protoPktIP.h    
-include/protoPktRIP.h   
-include/protoPktRTP.h   
-include/protoPktTCP.h      
-include/protoQueue.h       
-include/protoRouteMgr.h    
-include/protoRouteTable.h  
-include/protoSerial.h      
-include/protoSimAgent.h    
-include/protoSocket.h      
-include/protoSpace.h       
-include/protoString.h
-include/protoTime.h
-include/protoTimer.h
-include/protoTree.h
-include/protoVersion
-include/protoVif.h
-include/protokit.h
-include/testFuncs.h
-include/wxProtoApp.h
-include/unix/zebraRouteMgr.h
+include/protokit/manetGraph.h        
+include/protokit/manetGraphML.h      
+include/protokit/manetMsg.h          
+include/protokit/ns3ProtoSimAgent.h  
+include/protokit/protoAddress.h      
+include/protokit/protoApp.h          
+include/protokit/protoAverage.h      
+include/protokit/protoBase64.h       
+include/protokit/protoBitmask.h      
+include/protokit/protoCap.h          
+include/protokit/protoChannel.h     
+include/protokit/protoCheck.h     
+include/protokit/protoDebug.h       
+include/protokit/protoDefs.h        
+include/protokit/protoDetour.h      
+include/protokit/protoDispatcher.h  
+include/protokit/protoEvent.h       
+include/protokit/protoFile.h        
+include/protokit/protoGraph.h       
+include/protokit/protoJson.h        
+include/protokit/protoLFSR.h        
+include/protokit/protoList.h     
+include/protokit/protoNet.h      
+include/protokit/protoNotify.h   
+include/protokit/protoPipe.h     
+include/protokit/protoPkt.h      
+include/protokit/protoPktARP.h   
+include/protokit/protoPktETH.h   
+include/protokit/protoPktIGMP.h  
+include/protokit/protoPktIP.h    
+include/protokit/protoPktRIP.h   
+include/protokit/protoPktRTP.h   
+include/protokit/protoPktTCP.h      
+include/protokit/protoQueue.h       
+include/protokit/protoRouteMgr.h    
+include/protokit/protoRouteTable.h  
+include/protokit/protoSerial.h      
+include/protokit/protoSimAgent.h    
+include/protokit/protoSocket.h      
+include/protokit/protoSpace.h       
+include/protokit/protoString.h
+include/protokit/protoTime.h
+include/protokit/protoTimer.h
+include/protokit/protoTree.h
+include/protokit/protoVersion
+include/protokit/protoVif.h
+include/protokit/protokit.h
+include/protokit/testFuncs.h
+include/protokit/wxProtoApp.h
+include/protokit/unix/zebraRouteMgr.h
 )
 
 # List platform-independent source files
@@ -233,7 +233,7 @@ add_library(protokit::protokit ALIAS protokit)
 target_link_libraries(protokit PRIVATE ${PLATFORM_LIBS})
 target_compile_definitions(protokit PUBLIC ${PLATFORM_DEFINITIONS})
 target_compile_options(protokit PUBLIC ${PLATFORM_FLAGS})
-target_include_directories(protokit PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(protokit PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/protokit)
 target_include_directories(protokit PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 
 # Install target
@@ -249,7 +249,7 @@ install( EXPORT protokitTargets
 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protokit
 )
 
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protokit)
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if(BUILD_EXAMPLES)
 	# Setup examples

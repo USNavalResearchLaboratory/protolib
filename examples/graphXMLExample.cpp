@@ -4,8 +4,8 @@
 //  created with different metric properties.  The "MyManetGraphML" assumes
 //  a non-negative "double" value metric for "link cost".
 
-#include "manetGraphML.h"
-#include "protoSpace.h"  // we use this for its bounding box iteration
+#include "protokit/manetGraphML.h"
+#include "protokit/protoSpace.h"  // we use this for its bounding box iteration
 #include <protoDebug.h>
 #include <protoDefs.h>
 

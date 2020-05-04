@@ -1,7 +1,7 @@
 // This the the "node test" (nt) program to exercise our node, iface, link data structures
 
 
-#include "manetMsg.h"
+#include "protokit/manetMsg.h"
 #include "testFuncs.h"
 #include <stdio.h>  // for sprintf()
 #include <stdlib.h>  // for rand(), srand()

@@ -1,12 +1,12 @@
 
-#include "protoApp.h"
-#include "protoDetour.h"
-#include "protoPktIP.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoDetour.h"
+#include "protokit/protoPktIP.h"
 
 #include <stdlib.h>  // for atoi()
 #include <stdio.h>   // for stdout/stderr printouts
 #include <string.h>
-#include "protoBase64.h"
+#include "protokit/protoBase64.h"
 
 /**
  * @class DetourExample

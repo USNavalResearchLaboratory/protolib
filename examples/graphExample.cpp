@@ -4,10 +4,10 @@
 // be created with different metric properties.  The "MyGraph" exaple here 
 // assumes a non-negative "double" value metric for "link cost".
 
-#include "manetGraph.h"
-#include "protoSpace.h"  // we use this for its bounding box iteration
-#include <protoDebug.h>
-#include <protoDefs.h>
+#include "protokit/manetGraph.h"
+#include "protokit/protoSpace.h"  // we use this for its bounding box iteration
+#include "protokit/protoDebug.h"
+#include "protokit/protoDefs.h"
 
 #include <stdio.h>   // for sprintf()
 #include <stdlib.h>  // for rand(), srand()

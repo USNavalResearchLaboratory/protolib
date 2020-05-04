@@ -1,13 +1,13 @@
 
-#include "protoApp.h"
-#include "protoCap.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoCap.h"
 
-#include "protoPktETH.h"
-#include "protoPktIP.h"
-#include "protoPktIGMP.h"
-#include "protoAddress.h"
-#include "protoString.h"  // for ProtoTokenator
-#include "protoNet.h"
+#include "protokit/protoPktETH.h"
+#include "protokit/protoPktIP.h"
+#include "protokit/protoPktIGMP.h"
+#include "protokit/protoAddress.h"
+#include "protokit/protoString.h"  // for ProtoTokenator
+#include "protokit/protoNet.h"
 
 #include <stdlib.h>  // for atoi(), rand(), RAND_MAX
 #include <stdio.h>   // for stdout/stderr printouts

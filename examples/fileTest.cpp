@@ -1,7 +1,7 @@
 // This examples tests and demonstrates a number of the
 // ProtoFile features including directory iteration, etc.
 
-#include "protoFile.h"
+#include "protokit/protoFile.h"
 #include <stdio.h>
 #ifdef WIN32
 #include <windows.h>  // for Sleep()

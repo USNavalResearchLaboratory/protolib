@@ -1,6 +1,6 @@
-#include "protoApp.h"
-#include "protoSocket.h"
-#include "protoPktRIP.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoSocket.h"
+#include "protokit/protoPktRIP.h"
 
 #include <stdlib.h>
 #include <stdio.h>

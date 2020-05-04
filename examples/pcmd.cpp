@@ -1,5 +1,5 @@
  
-#include "protoPipe.h"
+#include "protokit/protoPipe.h"
 #include <stdio.h>  // for stderr output as needed
 #include <stdlib.h> // for atoi()
 

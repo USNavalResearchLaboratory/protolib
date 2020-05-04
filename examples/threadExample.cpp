@@ -1,4 +1,4 @@
-#include "protokit.h"
+#include "protokit/protokit.h"
 
 #ifdef UNIX
 #include <unistd.h>  // for sleep() function

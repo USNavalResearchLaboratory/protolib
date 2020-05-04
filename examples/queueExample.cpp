@@ -14,7 +14,7 @@
 // illustrate the use of the ProtoQueue classes.
 
 
-#include "protoQueue.h"
+#include "protokit/protoQueue.h"
 
 #include <stdlib.h> // for rand()
 #include <arpa/inet.h> // for htonl()

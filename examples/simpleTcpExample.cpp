@@ -15,7 +15,7 @@
  *
  * (it can also be similarly built with -DWIN32 instead of -DUNIX)
  */
-#include "protoSocket.h"
+#include "protokit/protoSocket.h"
 #include <stdio.h>
 
 inline void usage() 

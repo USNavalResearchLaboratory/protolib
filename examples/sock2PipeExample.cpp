@@ -1,5 +1,5 @@
  
-#include "protokit.h"
+#include "protokit/protokit.h"
 #include <stdio.h>  // for stderr output as needed
 #include <stdlib.h> // for atoi()
 

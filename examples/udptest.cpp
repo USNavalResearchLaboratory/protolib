@@ -1,5 +1,5 @@
-#include "protoApp.h"
-#include "protoSocket.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoSocket.h"
 
 class UdpTest : public ProtoApp
 {

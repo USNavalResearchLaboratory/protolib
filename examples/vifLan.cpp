@@ -1,10 +1,10 @@
-#include "protoApp.h"
-#include "protoVif.h"
-#include "protoPktIP.h"
-#include "protoPktETH.h"
-#include "protoPktARP.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoVif.h"
+#include "protokit/protoPktIP.h"
+#include "protokit/protoPktETH.h"
+#include "protokit/protoPktARP.h"
 
-#include "protoList.h"
+#include "protokit/protoList.h"
 
 #include <stdlib.h>
 #include <stdio.h>

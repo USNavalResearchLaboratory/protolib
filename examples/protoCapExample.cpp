@@ -1,6 +1,6 @@
 
-#include "protoApp.h"
-#include "protoCap.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoCap.h"
 
 #include <stdlib.h>  // for atoi()
 #include <stdio.h>   // for stdout/stderr printouts

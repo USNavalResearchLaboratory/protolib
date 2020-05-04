@@ -8,9 +8,9 @@
 // is essentially passed through but modifies the coloring of SDT nodes to illustrate
 // the relay set selection.
 
-#include "manetGraph.h"
-#include "manetGraphML.h"
-#include "protoSpace.h"  // we use this for its bounding box iteration
+#include "protokit/manetGraph.h"
+#include "protokit/manetGraphML.h"
+#include "protokit/protoSpace.h"  // we use this for its bounding box iteration
 #include <protoDebug.h>
 #include <protoDefs.h>
 #include <protoString.h> // for ProtoTokenator

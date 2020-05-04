@@ -18,7 +18,7 @@
 */
 
 //[Headers] You can add your own extra header files here...
-#include "protoDebug.h"
+#include "protokit/protoDebug.h"
 //[/Headers]
 
 #include "ControlWindow.h"

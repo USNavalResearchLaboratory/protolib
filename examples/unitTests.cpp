@@ -1,6 +1,6 @@
-#include "protoApp.h"
-#include "protoNet.h"
-#include "protoRouteMgr.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoNet.h"
+#include "protokit/protoRouteMgr.h"
 #include "testFuncs.h"
 
 #include <stdlib.h>  // for atoi()

@@ -1,5 +1,5 @@
-#include "protoApp.h"
-#include "protoSerial.h"
+#include "protokit/protoApp.h"
+#include "protokit/protoSerial.h"
 
 #include <stdlib.h>
 #include <stdio.h>

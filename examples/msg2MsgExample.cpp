@@ -1,6 +1,6 @@
  
-#include "protokit.h"
-#include "protoList.h"
+#include "protokit/protokit.h"
+#include "protokit/protoList.h"
 #include <stdio.h>  // for stderr output as needed
 #include <stdlib.h> // for atoi()
 

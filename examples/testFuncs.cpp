@@ -1,4 +1,4 @@
-#include "manetMsg.h"
+#include "protokit/manetMsg.h"
 #include "testFuncs.h"
 
 #include <stdio.h>  // for sprintf()
