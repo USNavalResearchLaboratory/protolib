@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 
 # set the project name
-project(protolib)
+project(protokit)
 
 set(COMMON src/common)
 
@@ -236,19 +236,19 @@ target_include_directories(protokit PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(protokit PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 
 # Install target
-install( TARGETS protokit EXPORT protolibTargets
+install( TARGETS protokit EXPORT protokitTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} )
 
-install( EXPORT protolibTargets
-	FILE protolibTargets.cmake
-	NAMESPACE protolib::
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protolib
+install( EXPORT protokitTargets
+	FILE protokitTargets.cmake
+	NAMESPACE protokit::
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protokit
 )
 
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protolib)
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protokit)
 
 if(BUILD_EXAMPLES)
 	# Setup examples
