@@ -229,6 +229,7 @@ include(GNUInstallDirs)
 
 # Setup target
 add_library(protokit ${PLATFORM_SOURCE_FILES} ${COMMON_SOURCE_FILES} ${PUBLIC_HEADER_FILES})
+add_library(protokit::protokit ALIAS protokit)
 target_link_libraries(protokit PRIVATE ${PLATFORM_LIBS})
 target_compile_definitions(protokit PUBLIC ${PLATFORM_DEFINITIONS})
 target_compile_options(protokit PUBLIC ${PLATFORM_FLAGS})
