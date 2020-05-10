@@ -727,6 +727,7 @@ void ProtoTree::Iterator::Reset(bool                reverse,
         }
         prefix_size = prefixSize;
         prefix_item = prefixItem;
+        //reversed = reverse;
         return;
     }
     
