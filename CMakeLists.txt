@@ -251,6 +251,10 @@ install( EXPORT protokitTargets
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+export(EXPORT protokitTargets
+    FILE ${CMAKE_CURRENT_BINARY_DIR}/protokitTargets.cmake
+	NAMESPACE protokit::)
+	
 export(PACKAGE protokit)
 
 if(BUILD_EXAMPLES)
