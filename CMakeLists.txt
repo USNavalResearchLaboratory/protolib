@@ -5,10 +5,10 @@ project(protokit)
 
 set(COMMON src/common)
 
-option(BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
-option(BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
-option(BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
-option(ENABLE_WX "Enables building with WX Widgets" OFF)
+option(PROTOKIT_BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
+option(PROTOKIT_BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
+option(PROTOKIT_BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
+option(PROTOKIT_ENABLE_WX "Enables building with WX Widgets" OFF)
 
 # Availability checks
 include(CheckCXXSymbolExists)
@@ -83,7 +83,7 @@ if(LibXml2_FOUND)
 	list(APPEND COMMON_SOURCE_FILES ${COMMON}/protoXml.cpp)
 endif()
 
-if(ENABLE_WX)
+if(PROTOKIT_ENABLE_WX)
         find_package(wxWidgets REQUIRED COMPONENTS core base)
 	if(wxWidgets_FOUND)
 		include(${wxWidgets_USE_FILE})
@@ -257,7 +257,7 @@ export(EXPORT protokitTargets
 	
 export(PACKAGE protokit)
 
-if(BUILD_EXAMPLES)
+if(PROTOKIT_BUILD_EXAMPLES)
 	# Setup examples
 	list(APPEND examples 
 	base64Example
