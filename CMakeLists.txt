@@ -167,6 +167,7 @@ list(APPEND COMMON_SOURCE_FILES
           ${COMMON}/protoPkt.cpp 
 		  ${COMMON}/protoPktARP.cpp 
 		  ${COMMON}/protoPktETH.cpp 
+		  ${COMMON}/protoPktIGMP.cpp 
 		  ${COMMON}/protoPktIP.cpp 
 		  ${COMMON}/protoPktRTP.cpp 
 		  ${COMMON}/protoQueue.cpp 
