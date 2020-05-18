@@ -161,6 +161,9 @@ class ProtoPktRTP : public ProtoPkt
 
         UINT32 GetTimestamp() const
             {return GetWord32(OFFSET_TIMESTAMP);}
+        
+        const void* GetTimestampPtr() const
+            {return GetBuffer32(OFFSET_TIMESTAMP);}
 
         UINT32 GetSsrc() const
             {return GetWord32(OFFSET_SSRC);}

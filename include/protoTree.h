@@ -81,7 +81,7 @@ class ProtoTree : public ProtoIterable
 {
     public:
         ProtoTree();
-        ~ProtoTree();
+        virtual ~ProtoTree();
         
         bool IsEmpty() const
             {return (NULL == root);}
@@ -220,7 +220,7 @@ class ProtoTree : public ProtoIterable
         {
             public:
                 ItemPool();
-                ~ItemPool();
+                virtual ~ItemPool();
                 void Destroy();
                 bool IsEmpty() const
                     {return (NULL == head);}
@@ -248,7 +248,7 @@ class ProtoTree : public ProtoIterable
                 Iterator(ProtoTree& tree, 
                          bool       reverse = false,
                          Item*      cursor = NULL);
-                ~Iterator();
+                virtual ~Iterator();
                 
                 void Reset(bool         reverse = false,
                            const char*  prefix = NULL,
@@ -293,7 +293,7 @@ class ProtoTree : public ProtoIterable
         {
             public:
                 SimpleIterator(ProtoTree& theTree);
-                ~SimpleIterator();
+                virtual ~SimpleIterator();
                 
                 void Reset();
                 Item* GetNextItem();
@@ -378,7 +378,7 @@ class ProtoTreeTemplate : public ProtoTree
                          bool               reverse = false,
                          Item*              cursor = NULL)
                  : ProtoTree::Iterator(theTree, reverse, cursor) {}
-                ~Iterator() {}
+                virtual ~Iterator() {}
                 
                 ITEM_TYPE* GetPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoTree::Iterator::GetPrevItem());}
@@ -397,7 +397,7 @@ class ProtoTreeTemplate : public ProtoTree
             public:
                 SimpleIterator(ProtoTreeTemplate& theTree)
                  : ProtoTree::SimpleIterator(theTree) {}
-                ~SimpleIterator() {}
+                virtual ~SimpleIterator() {}
                 
                 ITEM_TYPE* GetNextItem()
                     {return static_cast<ITEM_TYPE*>(ProtoTree::SimpleIterator::GetNextItem());}
@@ -408,7 +408,7 @@ class ProtoTreeTemplate : public ProtoTree
         {
             public:
                 ItemPool() {}
-                ~ItemPool() {}
+                virtual ~ItemPool() {}
                 
                 void Put(ITEM_TYPE& item)
                     {ProtoTree::ItemPool::Put(item);}
@@ -455,7 +455,7 @@ class ProtoSortedTree
     //       threaded aspect.
     public:
         ProtoSortedTree(bool uniqueItemsOnly = false);
-        ~ProtoSortedTree();
+        virtual ~ProtoSortedTree();
         
         bool IsEmpty() const
             {return item_tree.IsEmpty();}
@@ -555,7 +555,7 @@ class ProtoSortedTree
                          bool               reverse = false, 
                          const char*        keyMin = NULL, 
                          unsigned int       keysize = 0);
-                ~Iterator();
+                virtual ~Iterator();
                 
                 bool HasEmptyTree() const
                     {return tree.IsEmpty();}
@@ -598,7 +598,7 @@ class ProtoSortedTree
                 {
                     public:
                         TempItem(const char* theKey, unsigned int theKeysize, ProtoTree::Endian keyEndian);
-                        ~TempItem();
+                        virtual ~TempItem();
 
                         const char* GetKey() const {return key;}            
                         unsigned int GetKeysize() const {return keysize;}
@@ -666,7 +666,7 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
                          const char*                keyMin = NULL, 
                          unsigned int               keysize = 0)
                     : ProtoSortedTree::Iterator(theTree, reverse, keyMin, keysize) {}
-                ~Iterator() {}
+                virtual ~Iterator() {}
                 
                 ITEM_TYPE* GetPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::GetPrevItem());}
@@ -679,6 +679,19 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::PeekNextItem());}
 
         };  // end class ProtoSortedTreeTemplate::Iterator
+        
+        class ItemPool : public ProtoSortedTree::ItemPool
+        {
+            public:
+                ItemPool() {}
+                virtual ~ItemPool() {}
+                
+                void Put(ITEM_TYPE& item)
+                    {ProtoSortedTree::ItemPool::Put(item);}
+
+                ITEM_TYPE* Get()
+                    {return static_cast<ITEM_TYPE*>(ProtoSortedTree::ItemPool::Get());}
+        };  // end class ProtoSortedTreeTemplate::ItemPool
         
 };  // end class ProtoSortedTreeTemplate
 
