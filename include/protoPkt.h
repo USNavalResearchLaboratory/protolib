@@ -31,8 +31,9 @@ class ProtoPkt
         
         bool AllocateBuffer(unsigned int numBytes)
         {
-            unsigned int len = numBytes / sizeof(unsigned int);
-            len += (0 == (len % sizeof(int))) ? 0 : 1;
+            unsigned int len = numBytes / sizeof(UINT32);
+            len += (0 == (len % sizeof(UINT32))) ? 0 : 1;
+            if (NULL != buffer_allocated) delete[] buffer_allocated;
             buffer_ptr = buffer_allocated = new UINT32[len];
             buffer_bytes = (NULL != buffer_ptr) ? numBytes : 0;
             pkt_length = 0;
