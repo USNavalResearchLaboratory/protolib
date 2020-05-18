@@ -8,6 +8,7 @@ set(COMMON src/common)
 option(PROTOKIT_BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
 option(PROTOKIT_BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
+option(PROTOKIT_ENABLE_DEBUG "Include debugging messages/logging **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_WX "Enables building with WX Widgets" OFF)
 
 # Availability checks
