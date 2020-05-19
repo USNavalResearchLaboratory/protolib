@@ -47,8 +47,10 @@
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               + 
 // |                        source MAC address                     |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// |  *Ethertype = 0x8100          |            *Vlan-id           |
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                                 +
 // |           Ethertype           |                               |
-// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               +
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               + 
 // |                            data ...                           |
 // +                                                               +
 // |                                                               |
@@ -69,13 +71,13 @@ class ProtoPktETH : public ProtoPkt
         {
             IP   = 0x0800,
             ARP  = 0x0806,
+            VLAN = 0x8100,  // 802.1Q vlan tagged frame
             IPv6 = 0x86dd    
         };
             
         enum 
         {
-            ADDR_LEN = 6,
-            HDR_LEN  = 2*ADDR_LEN + 2
+            ADDR_LEN = 6
         };  
         
         bool InitFromBuffer(unsigned int    frameLength,
@@ -89,16 +91,31 @@ class ProtoPktETH : public ProtoPkt
         void GetDstAddr(ProtoAddress& addr) const
             {addr.SetRawHostAddress(ProtoAddress::ETH, (char*)GetBuffer(OFFSET_DST), ADDR_LEN);}
         Type GetType() const
-            {return (Type)GetWord16(OFFSET_TYPE);}
-                
+        {
+            Type type = GetType1();
+            return (VLAN == type) ? GetType2() : type;
+        }       
+        unsigned int GetHeaderLength() const
+        {
+            unsigned int len = 2*ADDR_LEN + 2;
+            return (VLAN == GetType1()) ? (len + 4) : len;
+        }
+        static unsigned int GetHeaderLength(void* bufferPtr, unsigned int bufferLen)
+        {
+            unsigned int len = 2*ADDR_LEN + 2;
+            const char* ptr =(const char*)bufferPtr;
+            return (bufferLen > OFFSET_TYPE1) ? 
+                        ((VLAN == (Type)ptr[OFFSET_TYPE1]) ? (len + 4) : len) : 0;
+        }
+        
         unsigned int GetPayloadLength()  const
-            {return (GetLength() - HDR_LEN);}
+            {return (GetLength() - GetHeaderLength());}
         const void* GetPayload() const
-            {return GetBuffer(OFFSET_PAYLOAD);}
+            {return GetBuffer(OffsetPayload());}
         void* AccessPayload() 
-            {return AccessBuffer(OFFSET_PAYLOAD);}
+            {return AccessBuffer(OffsetPayload());}
         unsigned int GetPayloadMax() const
-            {return (GetBufferLength() - OFFSET_PAYLOAD);}
+            {return (GetBufferLength() - OffsetPayload());}
         
         bool InitIntoBuffer(void*           bufferPtr = NULL, 
                             unsigned int    bufferBytes = 0, 
@@ -110,23 +127,39 @@ class ProtoPktETH : public ProtoPkt
             {memcpy(AccessBuffer(OFFSET_DST), dstAddr.GetRawHostAddress(), ADDR_LEN);}  
         
         void SetType(Type type)
-            {SetWord16(OFFSET_TYPE, (UINT16)type);}
+            {SetWord16(OFFSET_TYPE1, (UINT16)type);}
+        // TBD - add SetVlanTag() method for 802.1Q
+        void SetVlanType(Type type)
+            {SetWord16(OFFSET_TYPE2, (UINT16)type);}
         void SetPayload(const char* payload, unsigned int numBytes)
         {
-            memcpy(AccessBuffer(OFFSET_PAYLOAD), payload, numBytes);
+            memcpy(AccessBuffer(OffsetPayload()), payload, numBytes);
             SetPayloadLength(numBytes);
         }
         void SetPayloadLength(unsigned int numBytes)
-            {SetLength(numBytes + HDR_LEN);}
+            {SetLength(numBytes + GetHeaderLength());}
     
     private:
+        Type GetType1() const
+            {return (Type)GetWord16(OFFSET_TYPE1);}   
+        Type GetType2() const
+            {return (Type)GetWord16(OFFSET_TYPE2);} 
+            
         enum
         {
             OFFSET_DST     = 0,                         //  6 bytes, zero offset
             OFFSET_SRC     = OFFSET_DST + ADDR_LEN,     //  6 bytes, UINT8 offset
-            OFFSET_TYPE    = (OFFSET_SRC + ADDR_LEN)/2, //  2 bytes, UINT16 offset
-            OFFSET_PAYLOAD = 2*(OFFSET_TYPE+1)          //  UINT8 offset
+            OFFSET_TYPE1   = (OFFSET_SRC + ADDR_LEN)/2, //  2 bytes, UINT16 offset
+            OFFSET_TYPE2   = OFFSET_TYPE1 + 1,          //  2 bytes, UINT16 offset
+            OFFSET_TAG     = OFFSET_TYPE2 + 1           //  2 bytes, UINT16 offset
         };
+            
+        unsigned OffsetPayload() const  // UINT8 offset
+        {
+            unsigned int offset = OFFSET_TYPE2*2; // UINT8 offset
+            return (VLAN == GetType1()) ? (offset + 4) : offset;
+        }
+                
 };  // end class ProtoPktETH
 
 
