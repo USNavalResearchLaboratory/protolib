@@ -39,6 +39,7 @@ bool OpenDebugPipe(const char* pipeName);  // log debug messages to a datagram P
 void CloseDebugPipe();
 void ProtoDMSG(unsigned int level, const char *format, ...);
 void ProtoLog(ProtoDebugLevel level, const char *format, ...);
+FILE* GetDebugLog();
 #ifdef WIN32
 void OpenDebugWindow();
 void PopupDebugWindow();
