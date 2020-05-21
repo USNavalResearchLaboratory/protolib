@@ -150,13 +150,13 @@ class ProtoPktETH : public ProtoPkt
             OFFSET_DST     = 0,                         //  6 bytes, zero offset
             OFFSET_SRC     = OFFSET_DST + ADDR_LEN,     //  6 bytes, UINT8 offset
             OFFSET_TYPE1   = (OFFSET_SRC + ADDR_LEN)/2, //  2 bytes, UINT16 offset
-            OFFSET_TYPE2   = OFFSET_TYPE1 + 1,          //  2 bytes, UINT16 offset
-            OFFSET_TAG     = OFFSET_TYPE2 + 1           //  2 bytes, UINT16 offset
+            OFFSET_TAG     = OFFSET_TYPE1 + 1,          //  2 bytes, UINT16 offset
+            OFFSET_TYPE2   = OFFSET_TAG + 1             //  2 bytes, UINT16 offset
         };
             
         unsigned OffsetPayload() const  // UINT8 offset
         {
-            unsigned int offset = OFFSET_TYPE2*2; // UINT8 offset
+            unsigned int offset = OFFSET_TAG*2; // UINT8 offset
             return (VLAN == GetType1()) ? (offset + 4) : offset;
         }
                 
