@@ -2,21 +2,17 @@
 
 OVERVIEW
  
-Protolib is not so much a library as it is a toolkit.  The goal
-of the Protolib is to provide a set of simple, cross-platform
-C++ classes that allow development of network protocols and
-applications that can run on different platforms and in network
-simulation environments.  Although Protolib is principally for
-research purposes, the code has been constructed to provide
-robust, efficient performance and adaptability to real
-applications.
+Protolib is not so much a library as it is a toolkit.  The goal of the Protolib
+is to provide a set of simple, cross-platform C++ classes that allow development
+of network protocols and applications that can run on different platforms and in
+network simulation environments.  Although Protolib is principally for research
+purposes, the code has been constructed to provide robust, efficient performance
+and adaptability to real applications.
 
-Currently Protolib supports most Unix platforms (including
-MacOS X) and WIN32 platforms.  The most recent version also
-supports building Protolib-based code for the ns-2 simulation
-environment. The OPNET simulation tool has also been supported
-in the past and could be once again with a small amount of
-effort.
+Currently Protolib supports most Unix platforms (including MacOS X) and WIN32
+platforms.  The most recent version also supports building Protolib-based code
+for the ns-2 simulation environment. The OPNET simulation tool has also been
+supported in the past and could be once again with a small amount of effort.
 
 CLASSES:
 
@@ -45,12 +41,39 @@ ProtoTimerMgr:   This class manages ProtoTimer instances when
                  ProtoSimAgent base class contains a
                  ProtoTimerMgr to similarly manage timers for a
                  simulation instance).
+                 
+ProtoList:       Basic linked list data structure, but is a
+                 ProtoIterable that enables the list to be
+                 updated within ProtoList::Iterator loops, etc.
+                 A template class ProtoListTemplate is provided
+                 to make it easy to create lists of user-defined
+                 ProtoList::Item subclass types.
 
 ProtoTree:       Flexible implementation of a Patricia tree
                  data structure.  Includes a ProtoTree::Item
                  which may be derived from or used as a
                  container for  whatever data structures and
-                 application may require.
+                 application may require. A template class 
+                 ProtoListTemplate is provided to make it easy 
+                 to create lists of user-defined ProtoList::Item 
+                 subclass types.  Also ProtoSortedTree is provided
+                 as a threaded Patricia tree that allows multiple
+                 entries for the same key value with controls to 
+                 allow sorting and closest match search even for
+                 items indexed with numeric (int, double, etc)
+                 vslues.
+                 
+ProtoQueue:      A slightly heavier weight derivation from the basic
+                 ProtoList and ProtoTree data structures.  Unlike
+                 ProtoList::Item or ProtoTree::Item instances that
+                 are limited to exclusive inclusion in a single
+                 list or tree, ProtoQueue:Item instances may be 
+                 members of multiple ProtoQueues.  Queue variants include
+                 ProtoSimpleQueue - linked list usable for FIFO, stack, etc
+                 ProtoIndexedQueue - ProtoTree of queue items indexed by a key
+                 ProtoSortedQueue - ProtoSortedTree of queue items.
+                 Again, template classes are provided these to make it easy
+                 to create and manage user-derived ProtoQueue::Item types.
 
 ProtoRouteTable: Class based on the ProtoTree Patricia tree to
                  store routing table information. Uses the
@@ -59,7 +82,7 @@ ProtoRouteTable: Class based on the ProtoTree Patricia tree to
                  table at the moment, but may be enhanced in
                  the future.  Example use of the ProtoTree.
 
-ProtoRouteMgr:   Base class for providing  a conistent
+ProtoRouteMgr:   Base class for providing  a consistent
                  interface to manage operating system (or
                  other) routing engines.
                  

@@ -11,7 +11,7 @@
 class ProtoPktTCP : public ProtoPkt
 {
     public:
-        ProtoPktTCP(UINT32*        bufferPtr = 0, 
+        ProtoPktTCP(void*          bufferPtr = 0, 
                     unsigned int   numBytes = 0, 
                     bool           initFromBuffer = true,
                     bool           freeOnDestruct = false);
@@ -31,91 +31,90 @@ class ProtoPktTCP : public ProtoPkt
         };
         
         // Use these to parse the datagram
-        bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+        bool InitFromBuffer(void*   bufferPtr       = NULL, 
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         bool InitFromPacket(ProtoPktIP& pkt);
         UINT16 GetSrcPort() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_SRC]);}
+            {return GetWord16(OFFSET_SRC);}
         UINT16 GetDstPort() const
-            {return ntohs(((UINT16*)buffer_ptr)[OFFSET_DST]);}
+            {return GetWord16(OFFSET_DST);}
         UINT32 GetSequence() const
-            {return ntohl(buffer_ptr[OFFSET_SEQ]);}
+            {return GetWord32(OFFSET_SEQ);}
         UINT32 GetAckNumber() const
-            {return ntohl(buffer_ptr[OFFSET_ACK]);}
+            {return GetWord32(OFFSET_ACK);}
         UINT16 GetFlags() const
-            {return (0x01ff & GetUINT16(2*OFFSET_FLAGS));}
+            {return (0x01ff & GetWord16(OFFSET_FLAGS));}
         bool FlagIsSet(Flag flag) const
             {return (0 != (flag & GetFlags()));}
         UINT16 GetWindowSize() const
-            {return GetUINT16(2*OFFSET_WINDOW);}
+            {return GetWord16(OFFSET_WINDOW);}
         UINT16 GetChecksum() const
-            {return GetUINT16(2*OFFSET_CHECKSUM);}
+            {return GetWord16(OFFSET_CHECKSUM);}
         UINT16 GetUrgentPointer() const
-            {return GetUINT16(2*OFFSET_URGENT);}
+            {return GetWord16(OFFSET_URGENT);}
         bool HasOptions() const
             {return (OffsetPayload() > 5);}
-        UINT32* GetOptions() const
-            {return (buffer_ptr + OFFSET_OPTIONS);}
+        const void* GetOptions() const
+            {return GetBuffer32(OFFSET_OPTIONS);}
         UINT16 GetPayloadLength() const
             {return (GetLength() - (OffsetPayload() << 2));}
-        const UINT32* GetPayload() const
-            {return (buffer_ptr + OffsetPayload());}
-        UINT32* AccessPayload()
-            {return (buffer_ptr + OffsetPayload());}
+        const void* GetPayload() const
+            {return GetBuffer32(OffsetPayload());}
+        void* AccessPayload()
+            {return AccessBuffer32(OffsetPayload());}
         UINT16 ComputeChecksum(ProtoPktIP& ipPkt) const;
         bool ChecksumIsValid(ProtoPktIP& ipPkt) const
             {return (GetChecksum() == ComputeChecksum(ipPkt));}
         
         // Use these to build the datagram
-        bool InitIntoBuffer(UINT32*        bufferPtr = 0, 
+        bool InitIntoBuffer(void*          bufferPtr = 0, 
                             unsigned int   numBytes = 0, 
                             bool           freeOnDestruct = false);
         void SetSrcPort(UINT16 port)
-            {((UINT16*)buffer_ptr)[OFFSET_SRC] = htons(port);}
+            {SetWord16(OFFSET_SRC, port);}
         void SetDstPort(UINT16 port)
-            {((UINT16*)buffer_ptr)[OFFSET_DST] = htons(port);}
-        
+            {SetWord16(OFFSET_DST, port);}
         void SetSequence(UINT32 seq)
-            {buffer_ptr[OFFSET_SEQ] = htonl(seq);}
+            {SetWord32(OFFSET_SEQ, seq);}
         void SetAckNumber(UINT32 ackNumber)
         {
             SetFlag(FLAG_ACK);
-            buffer_ptr[OFFSET_ACK] = htonl(ackNumber);
+            SetWord32(OFFSET_ACK, ackNumber);
         }
         void SetFlags(UINT16 flags)
         {
-            UINT16 field = 0xfe00 & GetUINT16(2*OFFSET_FLAGS);
-            SetUINT16(OFFSET_FLAGS*2, field | flags);
+            UINT16 field = 0xfe00 & GetWord16(OFFSET_FLAGS);
+            SetWord16(OFFSET_FLAGS, field | flags);
         }
         void ClearFlags()
         {
-            UINT16 field = 0xfe00 & GetUINT16(2*OFFSET_FLAGS);
-            SetUINT16(OFFSET_FLAGS*2, field);
+            UINT16 field = 0xfe00 & GetWord16(OFFSET_FLAGS);
+            SetWord16(OFFSET_FLAGS, field);
         } 
         void SetFlag(Flag flag)
         {
-            UINT16 field = GetUINT16(2*OFFSET_FLAGS);
-            SetUINT16(OFFSET_FLAGS*2, field | (UINT16)flag);
+            UINT16 field = GetWord16(OFFSET_FLAGS);
+            SetWord16(OFFSET_FLAGS, field | (UINT16)flag);
         }       
         void ClearFlag(Flag flag)
         {
-            UINT16 field = GetUINT16(2*OFFSET_FLAGS);
-            SetUINT16(OFFSET_FLAGS*2, field & ~(UINT16)flag);
+            UINT16 field = GetWord16(OFFSET_FLAGS);
+            SetWord16(OFFSET_FLAGS, field & ~(UINT16)flag);
         }
         void SetWindowSize(UINT16 windowSize)
-            {SetUINT16(OFFSET_WINDOW*2, windowSize);}
+            {SetWord16(OFFSET_WINDOW, windowSize);}
         void SetChecksum(UINT16 checksum)
-            {SetUINT16(OFFSET_CHECKSUM*2, checksum);}
+            {SetWord16(OFFSET_CHECKSUM, checksum);}
         void SetUrgentPointer(UINT16 value)
         {
             SetFlag(FLAG_URG);
-            SetUINT16(OFFSET_URGENT*2, value);
+            SetWord16(OFFSET_URGENT, value);
         }
         void SetPayload(const char* payload, UINT16 numBytes)
         {
-            memcpy((char*)(buffer_ptr+OffsetPayload()), payload, numBytes);
-            pkt_length = numBytes + (OffsetPayload() << 2);
+            memcpy((char*)AccessBuffer32(OffsetPayload()), payload, numBytes);
+            ProtoPkt::SetLength(numBytes + (OffsetPayload() << 2));
         }    
         // This must be called after payload is set
         void FinalizeChecksum(ProtoPktIP& ipPkt)
@@ -137,12 +136,12 @@ class ProtoPktTCP : public ProtoPkt
         };
         
         unsigned int OffsetPayload() const  // UINT32 offset value
-            {return (((( UINT8*)buffer_ptr)[OFFSET_DATA] >> 4) & 0x0f);}
+            {return ((GetUINT8(OFFSET_DATA) >> 4) & 0x0f);}
         void SetDataOffset(UINT8 offset)  // as a UINT32 offset value
         {
             // Replace upper 4 bits of the data offset/reserved/ns byte
-            UINT8 field = ((UINT8*)buffer_ptr)[OFFSET_DATA] & 0x0f;
-           ((UINT8*)buffer_ptr)[OFFSET_DATA] = ((offset & 0x0f) << 4) | field;
+            UINT8 field = GetUINT8(OFFSET_DATA) & 0x0f;
+            SetUINT8(OFFSET_DATA, ((offset & 0x0f) << 4) | field);
        }
 };  // end class ProtoPktTCP
 

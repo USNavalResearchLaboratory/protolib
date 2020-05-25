@@ -13,43 +13,39 @@
 /**
  * @class ProtoPkt
  * 
- * @brief This is a base class that maintains a 32-bit 
- * aligned buffer for "packet"
- * (or message) building and parsing.  
+ * @brief This is a base class that maintains a uffer for "packet"
+ * (or message) building and parsing.
  *
  * Generally, classes will be derived
- * from this base class to create classed for 
+ * from this base class to create classes for 
  * protocol-specific packet/message
  * building and parsing (For examples, see 
  * ProtoPktIP, ProtoPktRTP, etc)
  */
- 
- // TBD - we should make this a template class so we can use different "buffer_ptr" types
- //       such as char*, UINT16*, etc depending upon the alignment requirements of the
- //       packet format specification.
- 
+
 class ProtoPkt
 {
     public:
-        ProtoPkt(UINT32* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
+        ProtoPkt(void* bufferPtr = NULL, unsigned int numBytes = 0, bool freeOnDestruct = false);
         virtual ~ProtoPkt();
         
         bool AllocateBuffer(unsigned int numBytes)
         {
-            unsigned int len = numBytes / sizeof(unsigned int);
-            len += (0 == (len % sizeof(int))) ? 0 : 1;
+            unsigned int len = numBytes / sizeof(UINT32);
+            len += (0 == (len % sizeof(UINT32))) ? 0 : 1;
+            if (NULL != buffer_allocated) delete[] buffer_allocated;
             buffer_ptr = buffer_allocated = new UINT32[len];
             buffer_bytes = (NULL != buffer_ptr) ? numBytes : 0;
             pkt_length = 0;
             return (NULL != buffer_ptr);
         }
-        void AttachBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false)
+        void AttachBuffer(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct = false)
         {
-            buffer_ptr = (0 != numBytes) ? bufferPtr : NULL;
+            buffer_ptr = (0 != numBytes) ? (UINT32*)bufferPtr : NULL;
             buffer_bytes = (NULL != bufferPtr) ? numBytes : 0;
             pkt_length = 0;
             if (NULL != buffer_allocated) delete[] buffer_allocated;
-            if (freeOnDestruct) buffer_allocated = bufferPtr;
+            buffer_allocated =  freeOnDestruct ? (UINT32*)bufferPtr : NULL;
         }
         UINT32* DetachBuffer()
         {
@@ -59,7 +55,7 @@ class ProtoPkt
             return theBuffer;  
         }
         bool InitFromBuffer(unsigned int    packetLength,
-                            UINT32*         bufferPtr = NULL,
+                            void*           bufferPtr = NULL,
                             unsigned int    numBytes = 0,
                             bool            freeOnDestruct = false)
         {
@@ -69,90 +65,132 @@ class ProtoPkt
             return result;
         }
         
-        const char* GetBuffer() const {return (char*)buffer_ptr;} 
-        const UINT32* GetBuffer32() const {return buffer_ptr;}
-        unsigned int GetBufferLength() const {return buffer_bytes;}
-        unsigned int GetLength() const {return pkt_length;} 
+        unsigned int GetBufferLength() const 
+            {return buffer_bytes;}
         
-        UINT32* AccessBuffer() {return buffer_ptr;}
-        void SetLength(unsigned int bytes) {pkt_length = bytes;}
-            
-    protected:
+        void SetLength(unsigned int bytes) 
+            {pkt_length = bytes;}   
+        unsigned int GetLength() const 
+            {return pkt_length;} 
+        
+        // These methods get/set fields by byte offsets, using 
+        // alignment check and different access methods to 
+        // guarantee safety regardless of alignment.
+        
+        const void* GetBuffer() const 
+            {return (void*)buffer_ptr;} 
+        const void* GetBuffer(unsigned int byteOffset) const
+            {return (char*)buffer_ptr + byteOffset;}
+        void* AccessBuffer() 
+            {return (void*)buffer_ptr;}  
+        void* AccessBuffer(unsigned int offset)
+            {return (char*)buffer_ptr + offset;}
+        
+        // These methods get/set fields by byte offsets
         UINT8 GetUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
+        UINT8& AccessUINT8(unsigned int byteOffset) const
+            {return ((UINT8*)buffer_ptr)[byteOffset];}
         void SetUINT8(unsigned int byteOffset, UINT8 value)
-            {((UINT8*)buffer_ptr)[byteOffset] = value;}     
-        
-        // These helper methods are defined for setting multi-byte protocol
-        // fields in one of two ways:  1) "cast and assign", or 2) memcpy()
-        // **IMPORTANT** Note the offsets are _byte_ offsets!!!
-#ifdef CAST_AND_ASSIGN
-        static UINT16 GetUINT16(UINT16* ptr) const
-            {return ntohs(*ptr);}
-        static UINT32 GetUINT32(UINT32* ptr) const
-            {return ntohl(*ptr);}
-        static void SetUINT16(UINT16* ptr, UINT16 value) 
-            {*ptr = htons(value);}
-        static void SetUINT32(UINT32* ptr, UINT32 value)
-            {*ptr = htonl(value);}
+            {((UINT8*)buffer_ptr)[byteOffset] = value;}  
         
         UINT16 GetUINT16(unsigned int byteOffset) const
-            {return ntohs((UINT16*)(((char*)buffer_ptr) + byteOffset));}     
-        UINT32 GetUINT32(unsigned int byteOffset) const
-            {return ntohl((UINT32*)(((char*)buffer_ptr) + byteOffset));}    
+            {return GetUINT16(GetBuffer(byteOffset));}
         void SetUINT16(unsigned int byteOffset, UINT16 value)
-            {*((UINT16*)(((char*)buffer_ptr) + byteOffset)) = htons(value);}        
+            {SetUINT16(AccessBuffer(byteOffset), value);}
+        UINT32 GetUINT32(unsigned int byteOffset) const
+            {return GetUINT32(GetBuffer(byteOffset));}
         void SetUINT32(unsigned int byteOffset, UINT32 value)
-            {*((UINT32*)(((char*)buffer_ptr) + byteOffset)) = htonl(value);}
-#else
-        static UINT16 GetUINT16(UINT16* ptr)
+            {SetUINT32(AccessBuffer(byteOffset), value);}
+        
+        // These methods get/set fields by word offsets
+        UINT16 GetWord16(unsigned int wordOffset) const
+            {return GetUINT16((UINT16*)buffer_ptr + wordOffset);}
+        void SetWord16(unsigned int wordOffset, UINT16 value) 
+            {SetUINT16((UINT16*)buffer_ptr + wordOffset, value);}
+        UINT32 GetWord32(unsigned int wordOffset) const
+            {return GetUINT32((UINT32*)buffer_ptr + wordOffset);}
+        void SetWord32(unsigned int wordOffset, UINT32 value) 
+            {SetUINT32((UINT32*)buffer_ptr + wordOffset, value);}
+       
+        const void* GetBuffer16(unsigned int wordOffset) const
+            {return (void*)((const UINT16*)buffer_ptr + wordOffset);}
+        void* AccessBuffer16(unsigned int wordOffset)
+            {return (void*)((const UINT16*)buffer_ptr + wordOffset);}         
+            
+        const void* GetBuffer32(unsigned int wordOffset) const
+            {return (void*)((const UINT32*)buffer_ptr + wordOffset);}
+        void* AccessBuffer32(unsigned int wordOffset)
+            {return (void*)((const UINT32*)buffer_ptr + wordOffset);}
+                
+        // Pointer alignment checks to determine safe access strategy
+        static inline bool IsAligned16(const void* pointer)
+            {return (0 == ((uintptr_t)pointer & 1));}
+        
+        static inline bool IsAligned32(const void* pointer)
+            {return (0 == ((uintptr_t)pointer & 3));}
+        
+        // These methods get/set fields by pointer directly
+        // TBD - benchmark this code that does its own
+        // alignment checking versus just calling memcpy() always.
+        static inline UINT16 GetUINT16(const void* ptr) 
         {
-            UINT16 value;
-            memcpy(&value, ptr, sizeof(UINT16));
-            return ntohs(value);
-        } 
-        static UINT32 GetUINT32(UINT32* ptr)
-        {
-            UINT32 value;
-            memcpy(&value, ptr, sizeof(UINT32));
-            return ntohl(value);
+            if (IsAligned16(ptr))
+            {   
+                return ntohs(*((const UINT16*)ptr));
+            }
+            else
+            {
+                UINT16 value;
+                memcpy(&value, ptr, 2);
+                return ntohs(value);
+            }
         }
-        static void SetUINT16(UINT16* ptr, UINT16 value)
+        static inline void SetUINT16(void* ptr, UINT16 value) 
         {
-            value = htons(value);
-            memcpy(ptr, &value, sizeof(UINT16));
+            if (IsAligned16(ptr))
+            {   
+                *((UINT16*)ptr) = htons(value);
+            }
+            else
+            {
+                value = htons(value);
+                memcpy(ptr, &value, 2);
+            }
         }
-        static void SetUINT32(UINT32* ptr, UINT32 value)
+        static inline UINT32 GetUINT32(const void* ptr)
         {
-            value = htonl(value);
-            memcpy(ptr, &value, sizeof(UINT32));
+            if (IsAligned32(ptr))
+            {   
+                return ntohl(*((const UINT32*)ptr));
+            }
+            else
+            {
+                UINT32 value;
+                memcpy(&value, ptr, 4);
+                return ntohl(value);
+            }
+        }
+        static inline void SetUINT32(void* ptr, UINT32 value)
+        {
+            if (IsAligned32(ptr))
+            {   
+                *((UINT32*)ptr) = htonl(value);
+            }
+            else
+            {
+                value = htonl(value);
+                memcpy(ptr, &value, 4);
+            }
         }
         
-        UINT16 GetUINT16(unsigned int byteOffset) const
-        {
-            UINT16 value;
-            memcpy(&value, (char*)buffer_ptr + byteOffset, 2);
-            return ntohs(value);
-        }
-        UINT32 GetUINT32(unsigned int byteOffset) const
-        {
-            UINT32 value;
-            memcpy(&value, (char*)buffer_ptr + byteOffset, 4);
-            return ntohl(value);
-        }
-        void SetUINT16(unsigned int byteOffset, UINT16 value)
-        {
-            value = htons(value);
-            memcpy((char*)buffer_ptr + byteOffset, &value, 2);
-        }
-        void SetUINT32(unsigned int byteOffset, UINT32 value)
-        {
-            value = htonl(value);
-            memcpy((char*)buffer_ptr + byteOffset, &value, 4);
-        }
-#endif // if/else CAST_AND_ASSIGN
-            
-            
+        bool FreeOnDestruct() const
+            {return (NULL != buffer_allocated);}
+        
+    protected:
+        // Note if externally allocated, these pointers may
+        // _not_ be 32-bit aligned, but access routines above
+        // safely allow for this.
         UINT32*         buffer_ptr;
         UINT32*         buffer_allocated;
         unsigned int    buffer_bytes;

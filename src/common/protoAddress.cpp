@@ -1,8 +1,3 @@
-/**
-* @file protoAddress.cpp
-*
-* @brief Network address container class with support for IPv4, IPv6, and "SIM" address types. Also includes functions for name/address resolution.
-*/
 
 #include "protoAddress.h"
 #include "protoSocket.h"  // for ProtoSocket::GetInterfaceAddress() routines
@@ -617,7 +612,11 @@ bool ProtoAddress::SetRawHostAddress(ProtoAddress::Type theType,
     return true;
 }  // end ProtoAddress::SetRawHostAddress()
         
+
 const char* ProtoAddress::GetRawHostAddress() const
+    {return AccessRawHostAddress();}
+
+char* ProtoAddress::AccessRawHostAddress() const
 {
     switch (type)
     {
@@ -914,6 +913,28 @@ void ProtoAddress::GetSubnetAddress(UINT8         prefixLen,
     memset(ptr + nbytes, 0, length - nbytes);           
 }  // end ProtoAddress::GetSubnetAddress()
 
+bool ProtoAddress::Increment()
+{
+    if (!IsValid()) 
+    {
+        PLOG(PL_ERROR, "ProtoAddress::Increment() error:  invalid address\n");
+        return false;
+    }
+    int index = GetLength() - 1;
+    UINT8* byte = (UINT8*)AccessRawHostAddress();
+    while (index >= 0)
+    {
+        if (255 != byte[index])
+        {
+            byte[index] += 1;
+            return true;
+        }
+        byte[index--] = 0;
+    }
+    return false;
+}  // end ProtoAddress::Increment()
+    
+
 void ProtoAddress::GetBroadcastAddress(UINT8         prefixLen, 
                                        ProtoAddress& broadcastAddr) const
 {
@@ -958,12 +979,12 @@ void ProtoAddress::GetBroadcastAddress(UINT8         prefixLen,
     memset(ptr + nbytes, 0xff, length - nbytes);           
 }  // end ProtoAddress::GetBroadcastAddress()
 
-void ProtoAddress::GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr)
+ProtoAddress& ProtoAddress::GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr)
 {
     if (!ipMcastAddr.IsMulticast())
     {
         Invalidate();
-        return;
+        return *this;
     }
     // Ethernet mcast addr begins with 00:00:5e ...
     UINT8 ethMcastAddr[6];
@@ -991,10 +1012,11 @@ void ProtoAddress::GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr)
             break;
         default:
             PLOG(PL_ERROR, "ProtoAddress::GetEthernetMulticastAddress() error : non-IP address!\n");
-        Invalidate();
-        return;
+            Invalidate();
+            return *this;
     }
     SetRawHostAddress(ETH, (char*)ethMcastAddr, 6);
+    return *this;
 }  // end ProtoAddress::GetEthernetMulticastAddress()
 
 void ProtoAddress::SetEndIdentifier(UINT32 endIdentifier)
@@ -1182,10 +1204,16 @@ bool ProtoAddress::ConvertFromString(const char* text)
 	sa.sin_family = AF_INET;
 	int addrSize = sizeof(struct sockaddr_storage);
 
-	if (0 == WSAStringToAddress((LPSTR)text,AF_INET, NULL,(LPSOCKADDR)&sa,&addrSize))
+#ifdef _UNICODE
+	WCHAR theString[256];
+	mbstowcs(theString, text, 255);
+#else
+	const char* theString = text;
+#endif // if/else _UNICODE
+
+	if (0 == WSAStringToAddress((LPTSTR)theString, AF_INET, NULL,(LPSOCKADDR)&sa,&addrSize))
 	{
 		addr = (struct sockaddr_storage&)sa;
-		type = IPv4;
 		length = 4;
 		Win32Cleanup();
 		return true;
@@ -1196,7 +1224,7 @@ bool ProtoAddress::ConvertFromString(const char* text)
     sa6.sin6_family = AF_INET6;
 	addrSize = sizeof(struct sockaddr_storage);
 
-	if (0 == WSAStringToAddress((LPTSTR)text,AF_INET6, NULL,(LPSOCKADDR)&sa6,&addrSize))
+	if (0 == WSAStringToAddress((LPTSTR)theString, AF_INET6, NULL,(LPSOCKADDR)&sa6,&addrSize))
 	{
 		addr = (struct sockaddr_storage&)sa6;
 		type = IPv6;
@@ -1606,7 +1634,13 @@ bool ProtoAddressList::Insert(const ProtoAddress& theAddress, const void* userDa
         PLOG(PL_ERROR, "ProtoAddressList::Insert() error: invalid address\n");
         return false;
     }
-    if (!Contains(theAddress))
+    Item* entry = static_cast<Item*>(addr_tree.Find(theAddress.GetRawHostAddress(), theAddress.GetLength() << 3));
+    if (NULL != entry)
+    {
+        // Just update user data
+        entry->SetUserData(userData);
+    }
+    else
     {
         Item* entry = new Item(theAddress, userData);
         if (NULL == entry)

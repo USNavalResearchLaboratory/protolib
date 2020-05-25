@@ -28,6 +28,7 @@
 #include "protoCap.h"
 #include "protoDefs.h"
 #include "protoDebug.h"
+#include "protoQueue.h"
 
 #ifndef MIN
 #define MIN(X,Y) ((X<Y)?X:Y)
@@ -58,10 +59,6 @@ class ProtoFile : public ProtoChannel
 #else
 		typedef off_t Offset;
 #endif // if/else WIN32/UNIX
-        enum {BLOCKSIZE = 2048};
-        char savebuf[BLOCKSIZE];
-        char* saveptr;
-        unsigned int savecount;
 
         enum Type {INVALID, NORMAL, DIRECTORY};        
         ProtoFile();
@@ -77,12 +74,10 @@ class ProtoFile : public ProtoChannel
 #ifdef _WIN32_WCE
             return ((NULL != file_ptr) && ProtoChannel::IsOpen());
 #else
-            return ((descriptor >= 0) && ProtoChannel::IsOpen());
+			return ((descriptor >= 0) && ProtoChannel::IsOpen());
 #endif // _WIN32_WCE
         }
         bool Read(char* buffer, unsigned int& numBytes);//numBytes going is is requested amount comming out is amount read.  Note that a return value of true with numBytes =0 means nothing was read.
-        //DO NOT USE bufferedRead and Readline in conjunction with other read functions including Read!!!
-        bool bufferedRead(char* buffer, unsigned int& numBytes);//this funciton reads things in blocks when needed.
         bool Readline(char* buffer, unsigned int& bufferSize);//uses bufferedRead to read in a line quickly will return false if full line is not available
         size_t Write(const char* buffer, size_t len);
         bool Seek(Offset theOffset);
@@ -127,147 +122,159 @@ class ProtoFile : public ProtoChannel
             return (0 == access(path, W_OK));
 #endif // if/else WIN32
         }
-    
-    // Members
-    private:
-#ifdef _WIN32_WCE
-        FILE*   file_ptr;
-#else
-        //int     fd;
-#endif // if/else _WIN32_WCE
-        //int     flags;
-#ifdef WIN32
-		__int64 offset;
-#else
-        off_t   offset;
-#endif // if/else WIN32/UNIX
-};  // end class ProtoFile
-
-
         
-/******************************************
-* The ProtoDirectory and ProtoDirectoryIterator classes
-* can be used to walk directory trees
-*/      
-
-class ProtoDirectoryIterator
-{
-    public:
-        ProtoDirectoryIterator();
-        ~ProtoDirectoryIterator();
-        bool Open(const char* thePath);
-        void Close();
-        bool GetPath(char* pathBuffer);
-        // "buffer" here _MUST_ be PATH_MAX long!
-        bool GetNextFile(char* buffer);
-        void Recursive(bool stepIntoDirs = false);
-    private:            
-        class ProtoDirectory
+        class Path : public ProtoQueue::Item
         {
-            friend class ProtoDirectoryIterator;
-            private:           
-                char            path[PATH_MAX];
-                ProtoDirectory*  parent;
+            
+            // wrapper around file path string
+            // with helper methods like GetBaseName(), GetDirName(), 
+            // IsDirectory(), etc
+            public:
+                Path(const char* path) 
+                    {SetPath(path);}
+                ~Path() {}
+                const char* GetPath() const
+                    {return path_name;}
+                void SetPath(const char* path)
+                {
+                    strncpy(path_name, path, PATH_MAX);
+                    path_name[PATH_MAX] = '\0';
+                }
+                Type GetType() const
+                    {return ProtoFile::GetType(path_name);}
+                bool IsDirectory() const
+                    {return (DIRECTORY == GetType());}
+                
+            private:
+                char    path_name[PATH_MAX + 1];
+        };  // end class ProtoFile::Path
+        
+        private:
+            class Directory;  // forward declaration for the DirectoryIterator
+    
+    public:
+        class DirectoryIterator
+        {
+            public:
+                DirectoryIterator();
+                ~DirectoryIterator();
+                bool Open(const char* thePath);
+                void Close();
+                bool GetPath(char* pathBuffer) const;
+                // "path" here _MUST_ be at least PATH_MAX long! (should use Path object instead)
+                bool GetNextPath(char* path, bool includeFiles=true, bool includeDirs=true);
+                bool GetNextFile(char* path)
+                    {return GetNextPath(path, true, false);}
+                bool GetNextDirectory(char* path)
+                    {return GetNextPath(path, false, true);}
+            private:
+                Directory*  current;
+                int         path_len;
+        };  // end class ProtoFile::DirectoryIterator
+        
+        // linked list of Path items, with added directory tree iteration capability
+        class PathList : public ProtoSimpleQueueTemplate<Path> 
+        {
+            public:
+                bool AppendPath(const char* thePath);    
+                class PathIterator 
+                {
+                    // This class iterates over the path list and walks any directory
+                    // trees found. (Alternatively, use the PathList::Iterator to 
+                    // simpy iterate over the linked list of Path items if that is 
+                    // needed instead).
+                    public:
+                        // Use current, non-zero initTime so only files modified _after_ Init() are returned
+                        // Otherwise, the first pass iteration will include _all_ files
+                        PathIterator(PathList& pathList, bool updatesOnly = false, time_t initTime = 0);
+                        ~PathIterator();
+                        void Init(bool updatesOnly = false, time_t initTime = 0)
+                        {
+                            updates_only = updatesOnly;
+                            big_time = initTime;
+                            Reset();
+                        }
+                        void Reset()
+                        {
+                            last_time = big_time;
+                            list_iterator.Reset();
+                        }    
+                        bool AppendPath(const char* thePath);
+                        // TBD - replace all the "char*" args with Path reference args instead
+                        // (and the "time_t initTime" should be a ProtoTime instead ...)
+                        bool GetNextPath(char* path, bool includeFiles=true, bool includeDirs=true);
+                        bool GetNextFile(char* path)
+                            {return GetNextPath(path, true, false);}
+                        bool GetNextDirectory(char* path)
+                            {return GetNextPath(path, false, true);}
+                        
+                        const Path* GetCurrentPathItem() const
+                            {return list_iterator.PeekPrevItem();}                        
+                        
+                    private:
+                        Iterator            list_iterator;
+                        DirectoryIterator   dir_iterator;  
+                        time_t              big_time;
+                        time_t              last_time;
+                        bool                updates_only;
+                    
+                };  // end class ProtoFile::PathList::PathIterator
+                
+        };  // end class ProtoFile::PathList
+        
+        class PathTable : public ProtoIndexedQueueTemplate<Path> 
+        {
+            // Table of Path items, indexed by path name for quick lookup
+            private:
+                const char* GetKey(const Item& item) const
+                    {return static_cast<const Path&>(item).GetPath();}
+                unsigned int GetKeysize(const Item& item) const
+                    {return ((unsigned int)strlen(static_cast<const Path&>(item).GetPath()) << 3);}
+        };  // end class ProtoFile::PathTable
+        
+        
+    private:
+        bool ReadPrivate(char* buffer, unsigned int& numBytes);  // helper for Readline()
+    
+        // This is used by the ProtoFile::DirectoryIterator
+        class Directory
+        {
+            public:           
+                char        path[PATH_MAX+1];
+                Directory*  parent;
 #ifdef WIN32
-                HANDLE          hSearch;
-#else
-                DIR*            dptr;
-#endif  // if/else WIN32    
-                ProtoDirectory(const char *thePath, ProtoDirectory* theParent = NULL);
-                ~ProtoDirectory();
+                HANDLE      hSearch;
+#else  // UNIX
+                DIR*        dptr;
+#endif  // if/else WIN32/UNIX    
+                Directory(const char *thePath, Directory* theParent = NULL);
+                ~Directory();
                 void GetFullName(char* namePtr);
                 bool Open();
                 void Close();
 
                 const char* Path() const {return path;}
                 void RecursiveCatName(char* ptr);
-        };  // end class ProtoDirectoryIterator::ProtoDirectory    
+        };  // end class ProtoFile::Directory    
             
-        ProtoDirectory* current;
-        int             path_len;
-        bool            search_dirs;
-};  // end class ProtoDirectoryIterator
-
-
-class ProtoFileList
-{
-    public:
-        ProtoFileList();
-        ~ProtoFileList();
-        void Destroy();
-        bool IsEmpty() {return (NULL == head);}
-        void ResetIterator() 
-        {
-            last_time = this_time;
-            this_time = big_time;
-            next = NULL;
-            reset = true;
-        }
-        void InitUpdateTime(bool updatesOnly, time_t initTime = 0)
-        {
-            updates_only = updatesOnly;
-            last_time = this_time = big_time = initTime;
-            if (0 == initTime)
-            {
-                struct timeval currentTime;
-                ProtoSystemTime(currentTime);
-                this_time = currentTime.tv_sec;   
-            }
-        }
+#ifdef WIN32
+#ifdef _WIN32_WCE
+        FILE*           file_ptr;
+#else
+		int				descriptor;
+#endif // if/else _WIN32_WCE
+		__int64         offset;
+#else  // UNIX
+        off_t           offset;
+#endif // if/else WIN32/UNIX
+		int				flags;
+        // This is used for buffered reading that enables
+        // better performance for ProtoFile::Readline()
+        // (TBD - allocate this only when needed or split to separate "FastReader" class?)
+        enum {BUFFER_SIZE = 2048};
+        char            read_buffer[BUFFER_SIZE];
+        char*           read_ptr;
+        unsigned int    read_count;             
+};  // end class ProtoFile
         
-        bool Append(const char* path);
-        bool Remove(const char* path);
-        bool GetNextFile(char* pathBuffer);
-        void GetCurrentBasePath(char* pathBuffer);
-                     
-    private:
-        class FileItem
-        {
-            friend class ProtoFileList;
-            public:
-                FileItem(const char* thePath);
-                virtual ~FileItem();
-                ProtoFile::Type GetType() {return ProtoFile::GetType(path);}
-				ProtoFile::Offset Size() const {return size;}
-                virtual bool GetNextFile(char*   thePath,
-                                         bool    reset,
-                                         bool    updatesOnly,
-                                         time_t  lastTime,
-                                         time_t  thisTime,
-                                         time_t& bigTime);
-                    
-            protected:        
-                const char* Path() {return path;}
-            
-                char			 path[PATH_MAX];
-				ProtoFile::Offset size;
-                FileItem*		 prev;
-                FileItem*		 next;
-        };
-        class DirectoryItem : public FileItem
-        {
-            friend class ProtoFileList;
-            public:
-                DirectoryItem(const char* thePath);
-                ~DirectoryItem();
-                virtual bool GetNextFile(char*   thePath,
-                                         bool    reset,
-                                         bool    updatesOnly,
-                                         time_t  lastTime,
-                                         time_t  thisTime,
-                                         time_t& bigTime);    
-            private:
-                ProtoDirectoryIterator diterator;
-        };    
-        
-        time_t          this_time;
-        time_t          big_time;
-        time_t          last_time;
-        bool            updates_only;
-        FileItem*       head;  
-        FileItem*       tail;
-        FileItem*       next;
-        bool            reset;
-};  // end class ProtoFileList
-
 #endif // _PROTO_FILE

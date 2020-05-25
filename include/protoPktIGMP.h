@@ -7,7 +7,7 @@
 class ProtoPktIGMP : public ProtoPkt
 {
     public:
-        ProtoPktIGMP(UINT32*        bufferPtr = NULL, 
+        ProtoPktIGMP(void*          bufferPtr = NULL, 
                      unsigned int   numBytes = 0, 
                      bool           initFromBuffer = false,
                      bool           freeOnDestruct = false); 
@@ -30,10 +30,10 @@ class ProtoPktIGMP : public ProtoPkt
         class GroupRecord : public ProtoPkt
         {
             public:
-               GroupRecord(UINT32*        bufferPtr = NULL, 
-                           unsigned int   numBytes = 0, 
-                           bool           initFromBuffer = false,
-                           bool           freeOnDestruct = false); 
+                GroupRecord(void*          bufferPtr = NULL, 
+                            unsigned int   numBytes = 0, 
+                            bool           initFromBuffer = false,
+                            bool           freeOnDestruct = false); 
                 ~GroupRecord(); 
                 
                 enum Type
@@ -48,7 +48,7 @@ class ProtoPktIGMP : public ProtoPkt
                 };
                     
                 // Use these to parse Group Records
-                bool InitFromBuffer(UINT32* bufferPtr       = NULL, 
+                bool InitFromBuffer(void*   bufferPtr       = NULL, 
                                     unsigned int bufferBytes = 0, 
                                     bool freeOnDestruct     = false);    
                     
@@ -63,20 +63,19 @@ class ProtoPktIGMP : public ProtoPkt
                     {return GetUINT16(OFFSET_NUM_SRC);}
                 bool GetGroupAddress(ProtoAddress& groupAddr)
                 {
-                    const char* ptr = (char*)buffer_ptr + OFFSET_GROUP;
-                    groupAddr.SetRawHostAddress(ProtoAddress::IPv4, ptr, 4);
+                    groupAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OFFSET_GROUP), 4);
                     return groupAddr.IsMulticast();
                 }
                 bool GetSourceAddress(UINT16 index, ProtoAddress& srcAddr) const;
-                const char* GetAuxData() const
-                    {return ((char*)buffer_ptr + OffsetAuxData());}
+                const void* GetAuxData() const
+                    {return GetBuffer(OffsetAuxData());}
                 
                 // Use these to create group records
-                bool InitIntoBuffer(UINT32*      bufferPtr = NULL, 
+                bool InitIntoBuffer(void*        bufferPtr = NULL, 
                                     unsigned int numBytes = 0, 
                                     bool         freeOnDestruct = false);
                 void SetType(Type type)
-                    {SetUINT8(OFFSET_TYPE, type);}
+                    {SetUINT8(OFFSET_TYPE, (UINT8)type);}
                 void SetGroupAddress(const ProtoAddress* groupAddr = NULL);
                 bool AppendSourceAddress(const ProtoAddress& srcAddr);
                 bool AppendAuxiliaryData(const char* data, UINT16 len);
@@ -96,7 +95,7 @@ class ProtoPktIGMP : public ProtoPkt
         
         // Use these to parse the IGMP message
         bool InitFromBuffer(UINT16  pktLength,
-                            UINT32* bufferPtr       = NULL, 
+                            void*   bufferPtr       = NULL, 
                             unsigned int buferBytes = 0, 
                             bool freeOnDestruct     = false);
         
@@ -110,8 +109,7 @@ class ProtoPktIGMP : public ProtoPkt
         // For QUERY, REPORT_V1, REPORT_V2, LEAVE only
         bool GetGroupAddress(ProtoAddress& groupAddr) const
         {
-            const char* ptr = (char*)buffer_ptr + OFFSET_GROUP;
-            groupAddr.SetRawHostAddress(ProtoAddress::IPv4, ptr, 4);
+            groupAddr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer(OFFSET_GROUP), 4);
             return groupAddr.IsMulticast();
         }
         // These 5 are for IGMPv3 QUERY messages only
@@ -129,13 +127,13 @@ class ProtoPktIGMP : public ProtoPkt
         // This uses the prev groupRecord state to fetch next.  If "groupRecord"
         // passed in has a NULL buffer_ptr _or_ "first_ is true, then the
         // first record is fetched.
-        bool GetNextGroupRecord(GroupRecord& groupRecord, bool first = false) const;
+        bool GetNextGroupRecord(GroupRecord& groupRecord, bool first = false);
         
         
         // Use these for building IGMP packets
         bool InitIntoBuffer(Type         type,
                             unsigned int version,
-                            UINT32*      bufferPtr = NULL, 
+                            void*        bufferPtr = NULL, 
                             unsigned int numBytes = 0, 
                             bool         freeOnDestruct = false);
         
@@ -161,6 +159,7 @@ class ProtoPktIGMP : public ProtoPkt
              
     private:
         // shared offsets for IGMP query, report, and leave messages
+        // (all UINT8 offsets used here)
         enum
         {
             OFFSET_TYPE     = 0,

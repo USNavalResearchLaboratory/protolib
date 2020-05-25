@@ -6,8 +6,8 @@
 #include "protoDebug.h"
 #include "protoPkt.h"
 
-ProtoPkt::ProtoPkt(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
- : buffer_ptr(bufferPtr), buffer_allocated(freeOnDestruct ? bufferPtr : NULL),
+ProtoPkt::ProtoPkt(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+ : buffer_ptr((UINT32*)bufferPtr), buffer_allocated(freeOnDestruct ? (UINT32*)bufferPtr : NULL),
    buffer_bytes(numBytes), pkt_length(0)
 {    
     

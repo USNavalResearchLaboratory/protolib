@@ -2,7 +2,7 @@
 #include "protoPktRIP.h"
 #include <string.h>  // for memset(), etc
 
-ProtoPktRIP::ProtoPktRIP(UINT32*        bufferPtr, 
+ProtoPktRIP::ProtoPktRIP(void*          bufferPtr, 
                          unsigned int   numBytes,  
                          unsigned int   pktLength,
                          bool           freeOnDestruct)
@@ -18,7 +18,7 @@ ProtoPktRIP::~ProtoPktRIP()
 {
 }
 
-bool ProtoPktRIP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktRIP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -69,8 +69,7 @@ bool ProtoPktRIP::AddRouteEntry(const ProtoAddress&  destAddr,
         PLOG(PL_WARN, "ProtoPktRIP::AddRouteEntry() warning: insufficient buffer space\n");
         return false;
     }
-    unsigned int offset = GetLength() / 4;
-    ProtoPktRIP::RouteEntry entry(AccessBuffer() + offset, 20);
+    ProtoPktRIP::RouteEntry entry((char*)AccessBuffer() + GetLength(), 20);
     entry.SetAddressFamily(IPv4);
     entry.SetRouteTag(routeTag);
     entry.SetAddress(destAddr);
@@ -82,7 +81,7 @@ bool ProtoPktRIP::AddRouteEntry(const ProtoAddress&  destAddr,
 }  // end ProtoPktRIP::AddRouteEntry()
 
 bool ProtoPktRIP::InitFromBuffer(unsigned int   pktLength,
-                                 UINT32*        bufferPtr, 
+                                 void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
@@ -125,11 +124,11 @@ bool ProtoPktRIP::AccessRouteEntry(unsigned int index, RouteEntry& entry)
         return false;
     }
     // Compute UINT32* pointer (20 byte entry is 5 UINT32's)
-    UINT32* entryBuffer = AccessBuffer() + OFFSET_PAYLOAD + 5*index;
+    void* entryBuffer = AccessBuffer32(OFFSET_PAYLOAD + 5*index);
     return entry.InitFromBuffer(20, entryBuffer, 20);
 }  // end ProtoPktRIP::AccessRouteEntry()
 
-ProtoPktRIP::RouteEntry::RouteEntry(UINT32*        bufferPtr, 
+ProtoPktRIP::RouteEntry::RouteEntry(void*          bufferPtr, 
                                     unsigned int   numBytes,  
                                     bool           initFromBuffer,
                                     bool           freeOnDestruct)
@@ -145,7 +144,7 @@ ProtoPktRIP::RouteEntry::~RouteEntry()
 {
 }
 
-bool ProtoPktRIP::RouteEntry::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktRIP::RouteEntry::InitIntoBuffer(void*          bufferPtr, 
                                              unsigned int   numBytes, 
                                              bool           freeOnDestruct)
 {
@@ -172,7 +171,7 @@ bool ProtoPktRIP::RouteEntry::SetAddress(const ProtoAddress& addr)
         PLOG(PL_ERROR, "ProtoPktRIP::RouteEntry::SetAddress() error: invalid address type\n");
         return false;
     }
-    memcpy(AccessBuffer() + OFFSET_ADDR, addr.GetRawHostAddress(), 4);
+    memcpy(AccessBuffer(OFFSET_ADDR), addr.GetRawHostAddress(), 4);
     return true;
 }  // end ProtoPktRIP::RouteEntry::SetAddress()
 
@@ -183,7 +182,7 @@ bool ProtoPktRIP::RouteEntry::SetMask(const ProtoAddress& addr)
         PLOG(PL_ERROR, "ProtoPktRIP::RouteEntry::SetMask() error: invalid mask address\n");
         return false;
     }
-    memcpy(AccessBuffer() + OFFSET_MASK, addr.GetRawHostAddress(), 4);
+    memcpy(AccessBuffer32(OFFSET_MASK), addr.GetRawHostAddress(), 4);
     return true;
 }  // end ProtoPktRIP::RouteEntry::SetMaskLength()
 
@@ -206,12 +205,12 @@ bool ProtoPktRIP::RouteEntry::SetNextHop(const ProtoAddress& nextHop)
         PLOG(PL_ERROR, "ProtoPktRIP::RouteEntry::SetAddress() error: invalid address type\n");
         return false;
     }
-    memcpy(AccessBuffer() + OFFSET_NHOP, nextHop.GetRawHostAddress(), 4);
+    memcpy(AccessBuffer32(OFFSET_NHOP), nextHop.GetRawHostAddress(), 4);
     return true;
 }  // end ProtoPktRIP::RouteEntry::SetNextHop()
 
 bool ProtoPktRIP::RouteEntry::InitFromBuffer(unsigned int   pktLength,
-                                             UINT32*        bufferPtr, 
+                                             void*          bufferPtr, 
                                              unsigned int   numBytes, 
                                              bool           freeOnDestruct)
 {
@@ -243,7 +242,7 @@ bool ProtoPktRIP::RouteEntry::GetAddress(ProtoAddress& addr) const
         PLOG(PL_ERROR, "ProtoPktRIP::RouteEntry::GetAddress() error: invalid address family: %d\n", GetAddressFamily());
         return false;
     }
-    addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(GetBuffer32() + OFFSET_ADDR), 4);
+    addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_ADDR), 4);
     return true;
 }  // end ProtoPktRIP::RouteEntry::GetAddress()
 
@@ -254,7 +253,7 @@ bool ProtoPktRIP::RouteEntry::GetMask(ProtoAddress& addr) const
         PLOG(PL_ERROR, "ProtoPktRIP::RouteEntry::GetMask() error: invalid address family\n");
         return 0;
     }
-    addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(GetBuffer32() + OFFSET_MASK), 4);
+    addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_MASK), 4);
     return true;
 }  // end ProtoPktRIP::RouteEntry::GetMask()
 
@@ -276,7 +275,7 @@ bool ProtoPktRIP::RouteEntry::GetNextHop(ProtoAddress& addr) const
         PLOG(PL_ERROR, "ProtoPktRIP::RouteEntry::GetNextHop() error: invalid address family\n");
         return 0;
     }
-    addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)(GetBuffer32() + OFFSET_NHOP), 4);
+    addr.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_NHOP), 4);
     return true;
 }  // end ProtoPktRIP::RouteEntry::GetNextHop()
 

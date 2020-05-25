@@ -1,6 +1,15 @@
 # main build
 bin/
 lib/
+build/
+
+# Any compiled object files
+*.o
+*.a
+
+# waf generated files
+.waf*
+.lock-waf*
 
 # build executables
 makefiles/arposer
@@ -8,6 +17,7 @@ makefiles/averageExample
 makefiles/base64Example
 makefiles/detourExample
 makefiles/eventExample
+makefiles/fileTest
 makefiles/graphExample
 makefiles/graphRider
 makefiles/graphXMLExample
@@ -34,6 +44,8 @@ makefiles/tokenatorExample
 makefiles/unitTests
 makefiles/vifExample
 makefiles/vifLan
+makefiles/win32/Release
+makefiles/win32/Debug
 
 # OS generated files #
 .DS_Store
@@ -43,3 +55,6 @@ makefiles/vifLan
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Build dir
+build

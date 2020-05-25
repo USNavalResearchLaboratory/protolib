@@ -8,7 +8,7 @@
 #include "protoDebug.h"
 
 // begin ProtoPktIP implementation
-ProtoPktIP::ProtoPktIP(UINT32*        bufferPtr, 
+ProtoPktIP::ProtoPktIP(void*          bufferPtr, 
                        unsigned int   numBytes,
                        bool           freeOnDestruct)
  : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
@@ -18,7 +18,6 @@ ProtoPktIP::ProtoPktIP(UINT32*        bufferPtr,
 ProtoPktIP::~ProtoPktIP()
 {
 }
-
 
 bool ProtoPktIP::GetDstAddr(ProtoAddress& dst) 
 {   
@@ -105,24 +104,8 @@ bool ProtoPktIP::SetSrcAddr(ProtoAddress& src)
     }
 }  // end ProtoPktIP::SetSrcAddr() 
 
-
-// begin ProtoPktIP::OptionBase implementation
-ProtoPktIP::OptionBase::OptionBase(char* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
- : buffer_ptr(bufferPtr), buffer_allocated(freeOnDestruct ? bufferPtr : NULL), buffer_bytes(numBytes)
-{
-}
-
-ProtoPktIP::OptionBase::~OptionBase()
-{
-    if (NULL != buffer_allocated)
-    {
-        delete[] buffer_allocated;
-        buffer_allocated = NULL;
-    }
-}
-
 // begin ProtoPktIPv4 implementation
-ProtoPktIPv4::ProtoPktIPv4(UINT32*      bufferPtr, 
+ProtoPktIPv4::ProtoPktIPv4(void*        bufferPtr, 
                            unsigned int numBytes, 
                            bool         initFromBuffer,
                            bool         freeOnDestruct)
@@ -144,17 +127,17 @@ ProtoPktIPv4::~ProtoPktIPv4()
 {
 }
 
-bool ProtoPktIPv4::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv4::InitFromBuffer(void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
     else
         ProtoPkt::SetLength(0);
-    if (GetBufferLength() > (OFFSET_VERSION+1))
+    if (GetBufferLength() > OFFSET_VERSION)
     {
-        if (4 == (((UINT8*)buffer_ptr)[0] >> 4))
+        if (4 == (GetUINT8(OFFSET_VERSION) >> 4))
         {
-            if (GetBufferLength() > (OFFSET_LEN + 2) &&
+            if (GetBufferLength() > (2*OFFSET_LEN + 2) &&
                 ProtoPkt::InitFromBuffer(GetTotalLength()))
             {
                 return true;
@@ -174,7 +157,7 @@ bool ProtoPktIPv4::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
 }  // end ProtoPktIPv4::InitFromBuffer()
 
 
-bool ProtoPktIPv4::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktIPv4::InitIntoBuffer(void* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
     {
@@ -190,11 +173,11 @@ bool ProtoPktIPv4::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, b
     SetVersion(4);
     SetHeaderLength(20);
     SetChecksum(0);
-    ((UINT16*)buffer_ptr)[OFFSET_FRAGMENT] = 0;  // init flags & frag to ZERO
-    ((UINT8*)buffer_ptr)[OFFSET_TOS] = 0;
-    ((UINT8*)buffer_ptr)[OFFSET_FLAGS] = 0;
-    ((UINT8*)buffer_ptr)[OFFSET_TTL] = 255;
-    ((UINT8*)buffer_ptr)[OFFSET_PROTOCOL] = 0;
+    SetWord16(OFFSET_FRAGMENT, 0);  // init flags & frag to ZERO
+    SetTOS(0);
+    SetUINT8(OFFSET_FLAGS, 0);      
+    SetTTL(255);
+    SetProtocol(RESERVED);
     // (TBD) Set some header fields to default values? (e.g. fragment, flags)
     // (TBD) should we set total length to 20 here? 
     return true;
@@ -207,13 +190,13 @@ void ProtoPktIPv4::SetTOS(UINT8 tos, bool updateChecksum)
         bool oddOffset = (0 != (0x01 & OFFSET_TOS));
         UpdateChecksum(GetTOS(), tos, oddOffset);
     }
-    ((UINT8*)buffer_ptr)[OFFSET_TOS] = tos;
+    SetUINT8(OFFSET_TOS, tos);
 }  // end ProtoPktIPv4::SetTOS()
 
 void ProtoPktIPv4::SetID(UINT16 id, bool updateChecksum) 
 {
     if (updateChecksum) UpdateChecksum(GetID(), id);
-    ((UINT16*)buffer_ptr)[OFFSET_ID] = htons(id);
+    SetWord16(OFFSET_ID, id);
 }  // end ProtoPktIPv4::SetID()
         
 void ProtoPktIPv4::SetFlag(Flag flag, bool updateChecksum) 
@@ -221,14 +204,14 @@ void ProtoPktIPv4::SetFlag(Flag flag, bool updateChecksum)
     if (updateChecksum)
     {
         bool oddOffset = (0 != (0x01 & OFFSET_FLAGS));
-        UINT8 oldFlags = ((UINT8*)buffer_ptr)[OFFSET_FLAGS];
+        UINT8 oldFlags = GetUINT8(OFFSET_FLAGS);
         UINT8 newFlags = oldFlags | (UINT8)flag;
-        ((UINT8*)buffer_ptr)[OFFSET_FLAGS] = newFlags;
+        SetUINT8(OFFSET_FLAGS, newFlags);
         UpdateChecksum(oldFlags, newFlags, oddOffset);
     }
     else
     {
-        ((UINT8*)buffer_ptr)[OFFSET_FLAGS] |= flag;
+        AccessUINT8(OFFSET_FLAGS) |= flag;
     }
 }  // end ProtoPktIPv4::SetFlag()
 
@@ -237,24 +220,24 @@ void ProtoPktIPv4::ClearFlag(Flag flag, bool updateChecksum)
     if (updateChecksum)
     {
         bool oddOffset = (0 != (0x01 & OFFSET_FLAGS));
-        UINT8 oldFlags = ((UINT8*)buffer_ptr)[OFFSET_FLAGS];
+        UINT8 oldFlags = GetUINT8(OFFSET_FLAGS);
         UINT8 newFlags = oldFlags & ~(UINT8)flag;
-        ((UINT8*)buffer_ptr)[OFFSET_FLAGS] = newFlags;
+        SetUINT8(OFFSET_FLAGS, newFlags);
         UpdateChecksum(oldFlags, newFlags, oddOffset);
     }
     else
     {
-        ((UINT8*)buffer_ptr)[OFFSET_FLAGS] &= ~flag;
+        AccessUINT8(OFFSET_FLAGS) &= ~flag;
     }
 } // end ProtoPktIPv4::ClearFlag()
 
 void ProtoPktIPv4::SetFragmentOffset(UINT16 fragmentOffset, bool updateChecksum)  
 {
-    UINT16 fragOld = ntohs(((UINT16*)buffer_ptr)[OFFSET_FRAGMENT]);
+    UINT16 fragOld = GetWord16(OFFSET_FRAGMENT);
     UINT16 fragNew = fragOld & 0xe000;
     fragNew |= (fragmentOffset & 0x1fff);
     if (updateChecksum) UpdateChecksum(fragOld, fragNew);
-    ((UINT16*)buffer_ptr)[OFFSET_FRAGMENT] = htons(fragNew);
+    SetWord16(OFFSET_FRAGMENT, fragNew);
 } // end ProtoPktIPv4::SetFragmentOffset()
 
 
@@ -265,7 +248,7 @@ void ProtoPktIPv4::SetTTL(UINT8 ttl, bool updateChecksum)
         bool oddOffset = (0 != (0x01 & OFFSET_TTL));
         UpdateChecksum(GetTTL(), ttl, oddOffset);
     }
-    ((UINT8*)buffer_ptr)[OFFSET_TTL] = ttl;
+    SetUINT8(OFFSET_TTL, ttl);
 } // end ProtoPktIPv4::SetTTL()
    
 void ProtoPktIPv4::SetProtocol(Protocol protocol, bool updateChecksum) 
@@ -275,19 +258,19 @@ void ProtoPktIPv4::SetProtocol(Protocol protocol, bool updateChecksum)
         bool oddOffset = (0 != (0x01 & OFFSET_PROTOCOL));
         UpdateChecksum((UINT8)GetProtocol(), (UINT8)protocol, oddOffset);
     }
-    ((UINT8*)buffer_ptr)[OFFSET_PROTOCOL] = (UINT8)protocol;
+    SetUINT8(OFFSET_PROTOCOL, (UINT8)protocol);
 }  // end ProtoPktIPv4::SetProtocol()
 
 
 void ProtoPktIPv4::SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum)
 {
-    memcpy((char*)(buffer_ptr+OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?
+    memcpy((char*)AccessBuffer32(OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 4); 
     if (calculateChecksum) CalculateChecksum();  // (TBD) is it worth it to incrementally update
 }  // end ProtoPktIPv4::SetSrcAddr() 
 
 void ProtoPktIPv4::SetDstAddr(const ProtoAddress& addr, bool calculateChecksum)
 {
-    memcpy((char*)(buffer_ptr+OFFSET_DST_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
+    memcpy((char*)AccessBuffer32(OFFSET_DST_ADDR), addr.GetRawHostAddress(), 4); 
     if (calculateChecksum) CalculateChecksum();  // (TBD) is it worth it to incrementally update
 }  // end ProtoPktIPv4::SetDstAddr()  
 
@@ -303,14 +286,13 @@ void ProtoPktIPv4::SetPayloadLength(UINT16 numBytes, bool calculateChecksum)
 UINT16 ProtoPktIPv4::CalculateChecksum(bool set)
 {
     UINT32 sum = 0;
-    UINT16* ptr = (UINT16*)buffer_ptr;
     // Calculate checksum, skipping checksum field
     unsigned int i;
     for (i = 0; i < OFFSET_CHECKSUM; i++)
-        sum += ntohs(ptr[i]);
-    unsigned int hdrEndex = (((UINT8*)buffer_ptr)[OFFSET_HDR_LEN] & 0x0f) << 1;
+        sum += GetWord16(i);
+    unsigned int hdrEndex = (GetUINT8(OFFSET_HDR_LEN) & 0x0f) << 1;
     for (i = OFFSET_CHECKSUM+1; i < hdrEndex; i++)
-        sum += ntohs(ptr[i]);
+        sum += GetWord16(i);
     while (sum >> 16)
         sum = (sum & 0x0000ffff) + (sum >> 16);
     sum = ~sum;
@@ -321,8 +303,8 @@ UINT16 ProtoPktIPv4::CalculateChecksum(bool set)
 
 // begin ProtoPktIPv4::Option implementation
 
-ProtoPktIPv4::Option::Option(char* bufferPtr, unsigned int numBytes, bool initFromBuffer, bool freeOnDestruct)
- : ProtoPktIP::OptionBase(bufferPtr, numBytes, freeOnDestruct)
+ProtoPktIPv4::Option::Option(void* bufferPtr, unsigned int numBytes, bool initFromBuffer, bool freeOnDestruct)
+ : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
 {
     if (initFromBuffer && (NULL != bufferPtr)) InitFromBuffer(); 
 }
@@ -357,6 +339,8 @@ int ProtoPktIPv4::Option::GetLengthByType(Type type)
         case EIP:
         case CIPSO:
             return LENGTH_VARIABLE; // indicates variable length
+        case UMP:
+            return 8;
         // unsupported options 
         default: 
             return LENGTH_UNKNOWN;  // unsupported type
@@ -385,13 +369,13 @@ bool ProtoPktIPv4::Option::IsMutable(Type type)
 }  // end ProtoPktIPv4::Option::IsMutable()
 
 
-bool ProtoPktIPv4::Option::InitFromBuffer(char* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv4::Option::InitFromBuffer(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
-    if (buffer_bytes > OFFSET_TYPE)
+    if (GetBufferLength() > OFFSET_TYPE)
     {
         // Validate buffer length according to type
-        Type type = (Type)((UINT8)buffer_ptr[OFFSET_TYPE]);
+        Type type = (Type)GetUINT8(OFFSET_TYPE);
         int minLength = GetLengthByType(type);
         switch (minLength)
         {
@@ -399,42 +383,40 @@ bool ProtoPktIPv4::Option::InitFromBuffer(char* bufferPtr, unsigned int numBytes
                  PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: unsupported type: %d\n", (UINT8)type);
                  return false;
             case LENGTH_VARIABLE:
-                if (buffer_bytes <= OFFSET_LENGTH)
+                if (GetBufferLength() <= OFFSET_LENGTH)
                 {
                     PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: incomplete buffer\n");
                     return false;
                 }
-                minLength = (int)((UINT8)buffer_ptr[OFFSET_LENGTH]);
+                minLength = (int)GetUINT8(OFFSET_LENGTH);
                 break;
             default:
                 break;   
         }
-        if (buffer_bytes < (unsigned int)minLength)
+        if (GetBufferLength() < (unsigned int)minLength)
         {
-            opt_length = 0;
             PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: incomplete buffer\n");
             return false;
         }
         else
         {
-            opt_length = minLength;
+            SetLength(minLength);
             return true;
         }
     }
     else
     {
-        PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: null buffer\n");
+        PLOG(PL_ERROR, "ProtoPktIPv4::Option::InitFromBuffer() error: insufficient buffer\n");
         return false;
     }
 }  // end ProtoPktIPv4::Option::InitFromBuffer()
 
 
 bool ProtoPktIPv4::Option::InitIntoBuffer(Type         type,
-                                          char*        bufferPtr, 
+                                          void*        bufferPtr, 
                                           unsigned int numBytes, 
                                           bool         freeOnDestruct)
 {
-    bool initLength = false;
     int minLength = GetLengthByType(type);
     switch (minLength)
     {
@@ -443,7 +425,6 @@ bool ProtoPktIPv4::Option::InitIntoBuffer(Type         type,
             return false;
         case LENGTH_VARIABLE:
             minLength = 2;  // for type + length fields
-            initLength = true;
             break;
         default:
             break;
@@ -460,45 +441,38 @@ bool ProtoPktIPv4::Option::InitIntoBuffer(Type         type,
         return false;
     }
     // zero init "minLength" bytes?
-    buffer_ptr[OFFSET_TYPE] = (char)type;
-    if (initLength)
-    {
-        buffer_ptr[OFFSET_LENGTH] = 2;
-    }
-    else
-    {
-        memset(buffer_ptr+1, 0, minLength - 1);  // zero rest of packet
-        opt_length = minLength; // will be updated when data is set
-    }
+    SetUINT8(OFFSET_TYPE, (UINT8)type);
+    SetUINT8(OFFSET_LENGTH, (UINT8)minLength);
+    SetLength(minLength);
+    // Zero the remaining content
+    if (minLength > OFFSET_LENGTH + 1)
+        memset(AccessBuffer(OFFSET_LENGTH + 1), 0, minLength - (OFFSET_LENGTH+1));
     return true;
 }  // end ProtoPktIPv4::Option::InitIntoBuffer()
 
 bool ProtoPktIPv4::Option::SetData(const char* data, unsigned int length)
 {
-    if (0 == buffer_bytes)
+    if (0 == GetBufferLength())
     {
         PLOG(PL_ERROR, "ProtoPktIPv4::Option::SetData() error: no buffer attached\n");
         return false;
     }
     // 1) Make sure data will fit into buffer _and_ appropo for type
-    int maxLength = GetLengthByType(GetType());
-    char* dataPtr;
-    bool setLength = false;
-    switch (maxLength)
+    int optLength = GetLengthByType(GetType());
+    int maxLength = 0;
+    switch (optLength)
     {
         case LENGTH_UNKNOWN:
             PLOG(PL_ERROR, "ProtoPktIPv4::Option::SetData() error: unsupported type: %d\n", GetType());
             return false;
             
         case LENGTH_VARIABLE:
-            maxLength = (buffer_bytes < 2) ? 0 : (buffer_bytes - 2);
-            dataPtr = buffer_ptr + 2;
-            setLength = true;
+            optLength = length + 2;
+            maxLength = (GetBufferLength() < 2) ? 0 : (GetBufferLength() - 2);
             break;
             
         default:
-            maxLength -= 1;
-            dataPtr = buffer_ptr + 1;
+            maxLength = (GetBufferLength() < (unsigned int)optLength) ? 0 : optLength - 2;
             break;
     } 
     if (length > (unsigned int)maxLength)
@@ -506,8 +480,9 @@ bool ProtoPktIPv4::Option::SetData(const char* data, unsigned int length)
         PLOG(PL_ERROR, "ProtoPktIPv4::Option::SetData() error: insufficient buffer space\n");
         return false;
     }
-    memcpy(dataPtr, data, length); 
-    if (setLength) buffer_ptr[OFFSET_LENGTH] = length + 2;
+    SetUINT8(OFFSET_LENGTH, optLength);
+    SetLength(optLength);
+    memcpy((char*)AccessBuffer(2), data, length); 
     return true;
 }  // end ProtoPktIPv4::Option::SetData()
 
@@ -536,7 +511,7 @@ bool ProtoPktIPv4::Option::Iterator::GetNextOption(Option& option)
 {
     if (offset < offset_end)
     {
-        bool result = option.InitFromBuffer((char*)(pkt_buffer + offset), offset_end - offset);
+        bool result = option.InitFromBuffer((char*)pkt_buffer + offset, offset_end - offset);
         offset = result ? (offset + option.GetLength()) : offset_end;
         return result;
     }
@@ -549,7 +524,7 @@ bool ProtoPktIPv4::Option::Iterator::GetNextOption(Option& option)
 
 // begin ProtoPktIPv6 implementation
 
-ProtoPktIPv6::ProtoPktIPv6(UINT32*      bufferPtr, 
+ProtoPktIPv6::ProtoPktIPv6(void*        bufferPtr, 
                            unsigned int numBytes, 
                            bool         initFromBuffer,
                            bool         freeOnDestruct)
@@ -572,7 +547,7 @@ ProtoPktIPv6::~ProtoPktIPv6()
 {
 }
 
-bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv6::InitFromBuffer(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     ext_pending = false;
     if (NULL != bufferPtr) 
@@ -581,7 +556,7 @@ bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
         ProtoPkt::SetLength(0);
     if (GetBufferLength() > OFFSET_VERSION)
     {
-        if (6 != (((UINT8*)buffer_ptr)[0] >> 4))
+        if (6 != (GetUINT8(OFFSET_VERSION) >> 4)) 
         {
             PLOG(PL_ERROR, "ProtoPktIPv6::InitFromBuffer() error: invalid version number\n");
         }
@@ -611,7 +586,7 @@ bool ProtoPktIPv6::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
 }  // end ProtoPktIPv6::InitFromBuffer()
 
 
-bool ProtoPktIPv6::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktIPv6::InitIntoBuffer(void*         bufferPtr, 
                                   unsigned int  bufferBytes, 
                                   bool          freeOnDestruct)
 {
@@ -636,7 +611,7 @@ bool ProtoPktIPv6::InitIntoBuffer(UINT32*       bufferPtr,
     return true;
 }  // end ProtoPktIPv6::InitIntoBuffer()
 
-ProtoPktIP::Protocol ProtoPktIPv6::GetLastHeader() const
+ProtoPktIP::Protocol ProtoPktIPv6::GetLastHeader()
 {
     if (HasExtendedHeader())
     {
@@ -661,7 +636,7 @@ ProtoPktIPv6::Extension* ProtoPktIPv6::AddExtension(Protocol extensionType)
     if (ext_pending)
     {
         PackHeader(extensionType);
-        hdrBytes = pkt_length;
+        hdrBytes = ProtoPkt::GetLength();
     }
     else if (HasExtendedHeader())
     {
@@ -676,13 +651,13 @@ ProtoPktIPv6::Extension* ProtoPktIPv6::AddExtension(Protocol extensionType)
     }
     else
     {
-        if (buffer_bytes <=  hdrBytes) return NULL;
+        if (GetBufferLength() <=  hdrBytes) return NULL;
         // (TBD) Should we return NULL if (NONE != GetNextHeader())???
         ASSERT(NONE == GetNextHeader());
         SetNextHeader(extensionType);
     }
     ASSERT(0 == (hdrBytes & 0x03));
-    ext_temp.AttachBuffer(buffer_ptr + (hdrBytes >> 2), buffer_bytes - hdrBytes);
+    ext_temp.AttachBuffer(AccessBuffer32(hdrBytes >> 2), GetBufferLength() - hdrBytes);
     ext_temp.SetType(extensionType);
     ext_pending = true;
     return &ext_temp;
@@ -717,15 +692,15 @@ bool ProtoPktIPv6::PrependExtension(Extension& ext)
 {
     if (ext_pending) PackHeader();
     // 1) Is there room in the IPv6 packer buffer_ptr for the extension?
-    if (buffer_bytes < (pkt_length + ext.GetLength())) return false;
+    if (GetBufferLength() < (ProtoPkt::GetLength() + ext.GetLength())) return false;
     // 2) Copy current packet next header to our ext next header
     ext.SetNextHeader(GetNextHeader());
     // 3) Move the current payload to make room for the extension
     UINT16 payloadLength = GetPayloadLength();
-    char* ptr = ((char*)buffer_ptr) + 40;
-    memmove(ptr+ext.GetLength(), ptr, payloadLength);
+    void* ptr = AccessBuffer(40);
+    memmove((char*)ptr+ext.GetLength(), ptr, payloadLength);
     // 4) Copy extension buffer_ptr into space made available
-    memcpy(ptr, (const char*)ext.GetBuffer(), ext.GetLength());
+    memcpy(ptr, (char*)ext.GetBuffer(), ext.GetLength());
     SetNextHeader(ext.GetType());
     SetPayloadLength(payloadLength + ext.GetLength());
     return true;
@@ -774,13 +749,13 @@ bool ProtoPktIPv6::AppendExtension(Extension& ext)
         
         PackHeader(ext.GetType());
         // Is there room in the IPv6 packer buffer_ptr for the additional extension?
-        if (buffer_bytes < (pkt_length + ext.GetLength())) return false;
-        hdrBytes = pkt_length;
+        if (GetBufferLength() < (ProtoPkt::GetLength() + ext.GetLength())) return false;
+        hdrBytes = ProtoPkt::GetLength();
     }
     else if (HasExtendedHeader())
     {
         // Is there room in the IPv6 packer buffer_ptr for the additional extension?
-        if (buffer_bytes < (pkt_length + ext.GetLength())) return false;
+        if (GetBufferLength() < (ProtoPkt::GetLength() + ext.GetLength())) return false;
         Extension::Iterator iterator(*this);
         Extension lastExt, x;
         while (iterator.GetNextExtension(x))
@@ -794,15 +769,15 @@ bool ProtoPktIPv6::AppendExtension(Extension& ext)
     else
     {
         // Is there room in the IPv6 packer buffer_ptr for the additional extension?
-        if (buffer_bytes < (pkt_length + ext.GetLength())) return false;
+        if (GetBufferLength() < (ProtoPkt::GetLength() + ext.GetLength())) return false;
         ext.SetNextHeader(GetNextHeader());
         SetNextHeader(ext.GetType());
     }
-    char* ptr = ((char*)buffer_ptr) + hdrBytes;
+    void* ptr = AccessBuffer(hdrBytes);
     UINT16 payloadLength = GetPayloadLength();
     UINT16 moveLength = payloadLength + 40 - hdrBytes;
-    memmove(ptr + ext.GetLength(), ptr, moveLength);
-    memcpy(ptr, (const char*)ext.GetBuffer(), ext.GetLength());
+    memmove((char*)ptr + ext.GetLength(), ptr, moveLength);
+    memcpy(ptr, (char*)ext.GetBuffer(), ext.GetLength());
     SetPayloadLength(payloadLength + ext.GetLength());
     return true;
 }  // end ProtoPktIPv6::AppendExtension()
@@ -812,13 +787,13 @@ bool ProtoPktIPv6::SetPayload(Protocol payloadType, const char* dataPtr, UINT16 
     if (ext_pending)
     {
         // Is there room for the payload?
-        if (buffer_bytes < (pkt_length + ext_temp.GetLength() + dataLen)) return false;
+        if (GetBufferLength() < (ProtoPkt::GetLength() + ext_temp.GetLength() + dataLen)) return false;
         PackHeader(payloadType);
     }
     else if (HasExtendedHeader())
     {
         // Is there room for the payload?
-        if (buffer_bytes < (pkt_length + dataLen)) 
+        if (GetBufferLength() < (ProtoPkt::GetLength() + dataLen)) 
         {
             PLOG(PL_ERROR, "ProtoPktIPv6::SetPayload() error: insufficient buffer space (1)\n");
             return false;
@@ -837,7 +812,7 @@ bool ProtoPktIPv6::SetPayload(Protocol payloadType, const char* dataPtr, UINT16 
         // Is there already a payload set?
         ASSERT(NONE == GetNextHeader());
         // Is there room for the payload?
-        if (buffer_bytes < (pkt_length + dataLen)) 
+        if (GetBufferLength() < (ProtoPkt::GetLength() + dataLen)) 
         {
             PLOG(PL_ERROR, "ProtoPktIPv6::SetPayload() error: insufficient buffer space (2)\n");
             return false;
@@ -845,15 +820,15 @@ bool ProtoPktIPv6::SetPayload(Protocol payloadType, const char* dataPtr, UINT16 
         ASSERT(0 == GetPayloadLength());
         SetNextHeader(payloadType);
     }
-    // 3) Copy payload into buffer_ptr space
-    memcpy(((char*)buffer_ptr) + pkt_length, dataPtr, dataLen);
+    // 3) Copy payload into buffer 
+    memcpy(AccessBuffer(ProtoPkt::GetLength()), dataPtr, dataLen);
     SetPayloadLength(GetPayloadLength() + dataLen);
     return true;
 }  // end ProtoPktIPv6::SetPayload()
                     
 
 ProtoPktIPv6::Extension::Extension(Protocol     extType, 
-                                   UINT32*      bufferPtr, 
+                                   void*        bufferPtr, 
                                    unsigned int numBytes, 
                                    bool         initFromBuffer, 
                                    bool         freeOnDestruct)
@@ -871,33 +846,36 @@ ProtoPktIPv6::Extension::~Extension()
 
 bool ProtoPktIPv6::Extension::Copy(const ProtoPktIPv6::Extension& ext)
 {
-    if ((NULL == buffer_ptr) || (ext.GetLength() > buffer_bytes))
+    if (ext.GetLength() > GetBufferLength())
     {
         PLOG(PL_ERROR, "ProtoPktIPv6::Extension::Copy() error: insufficient buffer size\n");
         return false;
     }
-    // a) save our buffer pointer and length
-    UINT32* bufferPtr = buffer_ptr;
-    UINT32 bufferBytes = buffer_bytes;
-    // b) copy all member variable values
+    // a) save our buffer pointer, length, and allocation status
+    UINT32 bufferBytes = GetBufferLength();
+    bool freeOnDestruct = FreeOnDestruct();
+    UINT32* bufferPtr = DetachBuffer();
+    // b) copy all 'ext' member variable values
     *this = ext;
-    // c) restore buffer pointer and length
-    buffer_ptr = bufferPtr;
-    buffer_bytes = bufferBytes;
-    // d) copy buffer content
-    memcpy(buffer_ptr, ext.GetBuffer(), ext.GetLength());
+    // c) restore buffer pointer, buffer length, and set to 'ext' length
+    DetachBuffer(); // detach the 'ext' buffer pointers copied
+    ProtoPkt::InitFromBuffer(ext.GetLength(), bufferPtr, bufferBytes, freeOnDestruct);
+    // d) copy 'ext' buffer content
+    memcpy(bufferPtr, ext.GetBuffer(), ext.GetLength());
     return true;
 }  // end ProtoPktIPv6::Extension::Copy()
 
 bool ProtoPktIPv6::Extension::InitIntoBuffer(Protocol       extType,
-                                             UINT32*        bufferPtr, 
+                                             void*          bufferPtr, 
                                              unsigned int   numBytes, 
                                              bool           freeOnDestruct)
 {
     if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
     ext_type = extType;
-    if (NULL == buffer_ptr) return true;  // don't worry if no buffer_ptr for moment
-    if (GetBufferLength() > OFFSET_NEXT_HDR) SetNextHeader(NONE);
+    if (0 == GetBufferLength())
+        return true;  // don't worry if no buffer_ptr for moment
+    else if (GetBufferLength() > OFFSET_NEXT_HDR) 
+        SetNextHeader(NONE);
     switch (extType)
     {
         // These types have length fields
@@ -911,7 +889,7 @@ bool ProtoPktIPv6::Extension::InitIntoBuffer(Protocol       extType,
         case AUTH:
             if (GetBufferLength() > OFFSET_LENGTH) 
             {
-                pkt_length = 2;
+                ProtoPkt::SetLength(2);
                 break;
             }
             else
@@ -919,7 +897,7 @@ bool ProtoPktIPv6::Extension::InitIntoBuffer(Protocol       extType,
                 PLOG(PL_ERROR, "ProtoPktIPv6::Extension::InitIntoBuffer() error: insufficient buffer space\n");
                 SetLength(0);
                 if (NULL != bufferPtr)
-                    buffer_ptr = buffer_allocated = NULL;
+                    DetachBuffer();
                 return false;
             }
         case FRAG:
@@ -944,16 +922,16 @@ void ProtoPktIPv6::Extension::SetExtensionLength(UINT16 numBytes)
         case DSTOPT:
         case RTG:
             ASSERT(0 == (0x07 & numBytes));
-            ((UINT8*)buffer_ptr)[OFFSET_LENGTH] = (UINT8)((numBytes - 8) >> 3);
+            SetUINT8(OFFSET_LENGTH, (numBytes - 8) >> 3);
             break;
         case AUTH:
             ASSERT(0 == (0x03 & numBytes));
-            ((UINT8*)buffer_ptr)[OFFSET_LENGTH] = (UINT8)((numBytes - 4) >> 2);
+            SetUINT8(OFFSET_LENGTH, (numBytes - 4) >> 2);
         case FRAG:
             ASSERT(8 == numBytes);
             break;
     }
-    pkt_length = numBytes;
+    ProtoPkt::SetLength(numBytes);
 }  // end ProtoPktIPv6::Extension::SetExtensionLength()
 
 ProtoPktIPv6::Option* ProtoPktIPv6::Extension::AddOption(Option::Type optType)
@@ -969,10 +947,10 @@ ProtoPktIPv6::Option* ProtoPktIPv6::Extension::AddOption(Option::Type optType)
             Option::Type otype = opt.GetType();
             if ((Option::PAD1 == otype) || (Option::PADN == otype))
             {
-                unsigned int extLen = (unsigned int)(opt.GetBuffer() - GetBuffer());
-                if (extLen != (pkt_length - opt.GetLength()))
+                size_t extLen = (char*)opt.GetBuffer() - (char*)GetBuffer();
+                if (extLen != (ProtoPkt::GetLength() - opt.GetLength()))
                     PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() warning: extension used multiple PADS ?!\n");
-                pkt_length = extLen;
+                ProtoPkt::SetLength((unsigned int)extLen);
                 break;
             }
         }
@@ -984,13 +962,13 @@ ProtoPktIPv6::Option* ProtoPktIPv6::Extension::AddOption(Option::Type optType)
     }
     // If there is any room in the buffer, init the new option into the available space
     unsigned int minLength = (Option::PAD1 == optType) ? 1 : 2;
-    unsigned int bufferSpace = buffer_bytes - pkt_length;
-    if ((buffer_bytes - pkt_length) < minLength)
+    unsigned int bufferSpace = GetBufferLength() - ProtoPkt::GetLength();
+    if (bufferSpace < minLength)
     {
         PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() error: insufficient buffer space\n");
         return NULL;
     }        
-    opt_temp.InitIntoBuffer(optType, ((char*)buffer_ptr) + pkt_length, bufferSpace);
+    opt_temp.InitIntoBuffer(optType, (char*)AccessBuffer(ProtoPkt::GetLength()), bufferSpace);
     if (Option::PAD1 != optType) opt_temp.SetData(NULL, 0);
     opt_pending = true;
     return &opt_temp;
@@ -1011,10 +989,10 @@ bool ProtoPktIPv6::Extension::ReplaceOption(Option& oldOpt, Option& newOpt)
             Option::Type otype = opt.GetType();
             if ((Option::PAD1 == otype) || (Option::PADN == otype))
             {
-                unsigned int extLen = (unsigned int)(opt.GetBuffer() - GetBuffer());
-                if (extLen != (pkt_length - opt.GetLength()))
+                size_t extLen = (char*)opt.GetBuffer() - (char*)GetBuffer();
+                if (extLen != (ProtoPkt::GetLength() - opt.GetLength()))
                     PLOG(PL_ERROR, "ProtoPktIPv6::Extension::AddOption() warning: extension used multiple PADS ?!\n");
-                pkt_length = extLen;
+                ProtoPkt::SetLength((unsigned int)extLen);
                 break;
             }
         }
@@ -1031,11 +1009,11 @@ bool ProtoPktIPv6::Extension::ReplaceOption(Option& oldOpt, Option& newOpt)
         PLOG(PL_ERROR, "ProtoPktIPv6::Extension::ReplaceOption() error: insufficient buffer space!\n");
         return false;
     }
-    char* dataPtr = oldOpt.AccessBuffer() + oldOpt.GetLength();
+    char* dataPtr = (char*)oldOpt.AccessBuffer() + oldOpt.GetLength();
     UINT16 dataLen = (UINT16)((char*)GetBuffer() + GetLength() - dataPtr);
     memmove(dataPtr+spaceDelta, dataPtr, dataLen);
     memcpy(oldOpt.AccessBuffer(), newOpt.GetBuffer(), newOpt.GetLength());
-    pkt_length += spaceDelta;  // adjusts according to option
+    ProtoPkt::SetLength(ProtoPkt::GetLength() + spaceDelta);
     return Pack();
 }  // end ProtoPktIPv6::Extension::ReplaceOption()
 
@@ -1047,7 +1025,7 @@ bool ProtoPktIPv6::Extension::Pack()
         if (PadOptionHeader())
         {
             opt_packed = true;
-            SetExtensionLength(pkt_length);
+            SetExtensionLength(ProtoPkt::GetLength());
             return true;
         }
         else
@@ -1058,7 +1036,7 @@ bool ProtoPktIPv6::Extension::Pack()
     else
     {
         opt_packed = true;
-        SetExtensionLength(pkt_length);
+        SetExtensionLength(ProtoPkt::GetLength());
         return true;
     }   
 }  // end ProtoPktIPv6::Extension::Pack()
@@ -1069,7 +1047,7 @@ void ProtoPktIPv6::Extension::PackOption()
     {
         // Update Extension payload length field
         //SetExtensionLength(pkt_length + opt_temp.GetLength());
-        pkt_length += opt_temp.GetLength();
+        ProtoPkt::SetLength(ProtoPkt::GetLength() + opt_temp.GetLength());
         opt_pending = false;
     }
 }  // end ProtoPktIPv6::Extension::PackOption()
@@ -1096,7 +1074,7 @@ bool ProtoPktIPv6::Extension::PadOptionHeader()
 }  // end ProtoPktIPv6::Extension::PadOptionHeader()
 
 
-bool ProtoPktIPv6::Extension::InitFromBuffer(Protocol extType, UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv6::Extension::InitFromBuffer(Protocol extType, void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
@@ -1111,7 +1089,7 @@ bool ProtoPktIPv6::Extension::InitFromBuffer(Protocol extType, UINT32* bufferPtr
     else
     {
         if (NULL != bufferPtr) 
-            buffer_ptr = buffer_allocated = NULL;
+            DetachBuffer();
         ProtoPkt::SetLength(0);
         return false;
     }
@@ -1130,9 +1108,9 @@ UINT16 ProtoPktIPv6::Extension::GetExtensionLength() const
         case HOPOPT:
         case DSTOPT:
         case RTG:
-            return (8 + ((UINT16)(((UINT8*)buffer_ptr)[OFFSET_LENGTH]) << 3));
+            return (8 + (GetUINT8(OFFSET_LENGTH) << 3));
         case AUTH:
-            return (4 + ((UINT16)(((UINT8*)buffer_ptr)[OFFSET_LENGTH]) << 2));
+            return (4 + (GetUINT8(OFFSET_LENGTH) << 2));
         case FRAG:
             return 8;
     }
@@ -1140,7 +1118,7 @@ UINT16 ProtoPktIPv6::Extension::GetExtensionLength() const
 
 // class ProtoPktIPv6::Extension::Iterator implementation
 
-ProtoPktIPv6::Extension::Iterator::Iterator(const ProtoPktIPv6& pkt)
+ProtoPktIPv6::Extension::Iterator::Iterator(ProtoPktIPv6& pkt)
  : ipv6_pkt(pkt), next_hdr(pkt.GetNextHeader()), offset(40)
 {   
 }
@@ -1154,7 +1132,7 @@ bool ProtoPktIPv6::Extension::Iterator::GetNextExtension(Extension& extension)
     if ((6 != ipv6_pkt.GetVersion()) || (offset >= ipv6_pkt.GetLength())) return false;
     if (IsExtension(next_hdr))
     {
-        if (extension.InitFromBuffer(next_hdr, (UINT32*)ipv6_pkt.GetBuffer32()+(offset >> 2), ipv6_pkt.GetLength()-offset))
+        if (extension.InitFromBuffer(next_hdr, ipv6_pkt.AccessBuffer32(offset >> 2), ipv6_pkt.GetLength()-offset))
         {
             next_hdr = extension.GetNextHeader();
             offset += extension.GetLength();
@@ -1171,8 +1149,8 @@ bool ProtoPktIPv6::Extension::Iterator::GetNextExtension(Extension& extension)
     }
 }  // end ProtoPktIPv6::Extension::GetNextExtension()
 
-ProtoPktIPv6::Option::Option(char* bufferPtr, unsigned int numBytes, bool initFromBuffer, bool freeOnDestruct)
- : ProtoPktIP::OptionBase(bufferPtr, numBytes, freeOnDestruct)
+ProtoPktIPv6::Option::Option(void* bufferPtr, unsigned int numBytes, bool initFromBuffer, bool freeOnDestruct)
+ : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
 {
     if (initFromBuffer && (NULL != bufferPtr)) InitFromBuffer();
 }
@@ -1181,16 +1159,16 @@ ProtoPktIPv6::Option::~Option()
 {
 }
 
-bool ProtoPktIPv6::Option::InitFromBuffer(char* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktIPv6::Option::InitFromBuffer(void* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
-    if (buffer_bytes > 0)
+    if (GetBufferLength() > 0)
     {
         if (PAD1 == GetType())
         {
             return true;
         }
-        else if (buffer_bytes > 1)
+        else if (GetBufferLength() > 1)
         {
             // check that the embedded option length is in bounds
             if ((unsigned int)(OFFSET_DATA + GetDataLength()) > numBytes)  
@@ -1214,7 +1192,7 @@ bool ProtoPktIPv6::Option::InitFromBuffer(char* bufferPtr, unsigned int numBytes
 }  // end ProtoPktIPv6::Option::InitFromBuffer()
 
 bool ProtoPktIPv6::Option::InitIntoBuffer(Type         type,
-                                          char*        bufferPtr, 
+                                          void*        bufferPtr, 
                                           unsigned int numBytes, 
                                           bool         freeOnDestruct)
 {
@@ -1239,9 +1217,9 @@ bool ProtoPktIPv6::Option::InitIntoBuffer(Type         type,
 
 bool ProtoPktIPv6::Option::SetData(char* dataPtr, UINT8 dataLen)
 {
-    if (dataLen < (buffer_bytes - OFFSET_DATA))
+    if (dataLen < (GetBufferLength() - OFFSET_DATA))
     {
-        memcpy(buffer_ptr + OFFSET_DATA, dataPtr, dataLen);
+        memcpy(AccessBuffer(OFFSET_DATA), dataPtr, dataLen);
         SetDataLength(dataLen);
         return true;
     }
@@ -1253,14 +1231,14 @@ bool ProtoPktIPv6::Option::SetData(char* dataPtr, UINT8 dataLen)
 
 bool ProtoPktIPv6::Option::MakePad(UINT8 numBytes)
 {
-    if (buffer_bytes > OFFSET_TYPE)
+    if (GetBufferLength() > OFFSET_TYPE)
     {
         if (numBytes > 1)
         {
-            if (buffer_bytes > (unsigned int)(OFFSET_TYPE + numBytes))
+            if (GetBufferLength() > (unsigned int)(OFFSET_TYPE + numBytes))
             {
                 SetType(PADN);
-                memset(buffer_ptr + OFFSET_DATA, 0, numBytes-2);
+                memset(AccessBuffer(OFFSET_DATA), 0, numBytes-2);
                 SetDataLength(numBytes - (OFFSET_TYPE+2));
                 return true;
             }
@@ -1317,7 +1295,7 @@ bool ProtoPktIPv6::Option::Iterator::GetNextOption(Option& option)
 }  // end ProtoPktIPv6::Option::Iterator::GetNextOption()
 
 
-ProtoPktFRAG::ProtoPktFRAG(UINT32*       bufferPtr, 
+ProtoPktFRAG::ProtoPktFRAG(void*         bufferPtr, 
                            unsigned int  numBytes, 
                            bool          initFromBuffer,
                            bool          freeOnDestruct)
@@ -1329,7 +1307,7 @@ ProtoPktFRAG::~ProtoPktFRAG()
 {
 }
 
-bool ProtoPktFRAG::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktFRAG::InitIntoBuffer(void*         bufferPtr, 
                                   unsigned int  numBytes, 
                                   bool          freeOnDestruct)
 {
@@ -1341,14 +1319,11 @@ bool ProtoPktFRAG::InitIntoBuffer(UINT32*       bufferPtr,
         {
             SetLength(0);
             if (bufferPtr != NULL)
-            {
-                buffer_ptr = buffer_allocated = NULL;
-                buffer_bytes = 0;
-            }
+                DetachBuffer();
             return false;
         }
         // zero init everything (all 8 bytes)
-        buffer_ptr[0] = buffer_ptr[1] = 0;
+        memset(AccessBuffer(), 0, 8);
         SetLength(minLength);
         return true;
     }
@@ -1359,7 +1334,7 @@ bool ProtoPktFRAG::InitIntoBuffer(UINT32*       bufferPtr,
 }  // end ProtoPktFRAG::InitIntoBuffer()
 
 
-ProtoPktAUTH::ProtoPktAUTH(UINT32*       bufferPtr, 
+ProtoPktAUTH::ProtoPktAUTH(void*         bufferPtr, 
                            unsigned int  numBytes, 
                            bool          initFromBuffer,
                            bool          freeOnDestruct)
@@ -1371,7 +1346,7 @@ ProtoPktAUTH::~ProtoPktAUTH()
 {
 }
 
-bool ProtoPktAUTH::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktAUTH::InitIntoBuffer(void*         bufferPtr, 
                                   unsigned int  numBytes, 
                                   bool          freeOnDestruct)
 {
@@ -1383,13 +1358,10 @@ bool ProtoPktAUTH::InitIntoBuffer(UINT32*       bufferPtr,
         {
             SetLength(0);
             if (bufferPtr != NULL)
-            {
-                buffer_ptr = buffer_allocated = NULL;
-                buffer_bytes = 0;
-            }
+                DetachBuffer();
             return false;
         }
-        *(((UINT16*)buffer_ptr) + OFFSET_RESERVED) = 0;
+        SetWord16(OFFSET_RESERVED, 0);
         SetLength(minLength);
         return true;
     }
@@ -1399,7 +1371,7 @@ bool ProtoPktAUTH::InitIntoBuffer(UINT32*       bufferPtr,
     }
 }  // end ProtoPktAUTH::InitIntoBuffer()
 
-bool ProtoPktAUTH::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktAUTH::InitFromBuffer(void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (Extension::InitFromBuffer(ProtoPktIP::AUTH, bufferPtr, numBytes, freeOnDestruct))
     {
@@ -1411,10 +1383,7 @@ bool ProtoPktAUTH::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
         {
             SetLength(0);
             if (NULL != bufferPtr)
-            {
-                buffer_ptr = buffer_allocated = NULL;
-                buffer_bytes = 0;
-            }
+                DetachBuffer();
             return false;
         }
     }
@@ -1425,7 +1394,7 @@ bool ProtoPktAUTH::InitFromBuffer(UINT32* bufferPtr, unsigned int numBytes, bool
 }  // end ProtoPktAUTH::InitFromBuffer()
 
 
-ProtoPktESP::ProtoPktESP(UINT32*       bufferPtr, 
+ProtoPktESP::ProtoPktESP(void*         bufferPtr, 
                          unsigned int  numBytes, 
                          bool          freeOnDestruct)
 : ProtoPkt(bufferPtr, numBytes, freeOnDestruct)
@@ -1439,12 +1408,12 @@ ProtoPktESP::~ProtoPktESP()
  * This function makes sure the buffer is big enough for at least
  * spi and sequence fields.
  */
-bool ProtoPktESP::InitIntoBuffer(UINT32*       bufferPtr, 
+bool ProtoPktESP::InitIntoBuffer(void*         bufferPtr, 
                                  unsigned int  numBytes, 
                                  bool          freeOnDestruct)
 {
     if (NULL != bufferPtr) AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
-    if (NULL == buffer_ptr) return true;  // don't worry if no buffer_ptr for moment
+    if (0 == GetBufferLength()) return true;  // don't worry if no buffer_ptr for moment
     // Make sure it's big enough for at least spi and sequence fields
     unsigned int minLength = ((OFFSET_SEQUENCE+1) << 2);
     if (GetBufferLength() >= minLength)
@@ -1456,7 +1425,7 @@ bool ProtoPktESP::InitIntoBuffer(UINT32*       bufferPtr,
     {
         ProtoPkt::SetLength(0);
         if (NULL != bufferPtr)
-            buffer_ptr = buffer_allocated = NULL;
+            DetachBuffer();
         return false;   
     }
 }  // end ProtoPktESP::InitIntoBuffer()
@@ -1465,7 +1434,7 @@ bool ProtoPktESP::InitIntoBuffer(UINT32*       bufferPtr,
  * spi and sequence fields.
  */
 
-bool ProtoPktESP::InitFromBuffer(UINT16 espLength, UINT32* bufferPtr, unsigned int numBytes, bool freeOnDestruct)
+bool ProtoPktESP::InitFromBuffer(UINT16 espLength, void*   bufferPtr, unsigned int numBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
@@ -1480,14 +1449,14 @@ bool ProtoPktESP::InitFromBuffer(UINT16 espLength, UINT32* bufferPtr, unsigned i
     {
         ProtoPkt::SetLength(0);
         if (NULL != bufferPtr)
-            buffer_ptr = buffer_allocated = NULL;
+            DetachBuffer();
         return false;  
     }
 }  // end ProtoPktESP::InitFromBuffer()
 
 
 // (TBD) - move "ProtoPktDPD" implementation to the protolib/manet tree?
-ProtoPktDPD::ProtoPktDPD(char*        bufferPtr, 
+ProtoPktDPD::ProtoPktDPD(void*        bufferPtr, 
                          unsigned int numBytes, 
                          bool         initFromBuffer,
                          bool         freeOnDestruct)
@@ -1501,14 +1470,9 @@ ProtoPktDPD::ProtoPktDPD(char*        bufferPtr,
 
 ProtoPktDPD::~ProtoPktDPD()
 {
-    if (NULL != buffer_allocated)
-    {
-        delete[] buffer_allocated;
-        buffer_allocated = NULL;
-    }
 }
 
-bool ProtoPktDPD::InitFromBuffer(char*          bufferPtr,
+bool ProtoPktDPD::InitFromBuffer(void*          bufferPtr,
                                  unsigned int   numBytes,
                                  bool           freeOnDestruct)
 {
@@ -1568,7 +1532,7 @@ bool ProtoPktDPD::GetPktId(UINT8& value) const
 {
     if (1 == GetPktIdLength())
     {
-        value = buffer_ptr[OffsetPktId()];
+        value = GetUINT8(OffsetPktId());
         return true;
     }
     else
@@ -1581,7 +1545,7 @@ bool ProtoPktDPD::GetPktId(UINT16& value) const
 {
     if (2 == GetPktIdLength())
     {
-        memcpy(&value, buffer_ptr+OffsetPktId(), 2);
+        memcpy(&value, GetBuffer(OffsetPktId()), 2);
         value = ntohs(value);
         return true;
     }
@@ -1595,7 +1559,7 @@ bool ProtoPktDPD::GetPktId(UINT32& value) const
 {
     if (4 == GetPktIdLength())
     {
-        memcpy(&value, buffer_ptr+OffsetPktId(), 4);
+        memcpy(&value, GetBuffer(OffsetPktId()), 4);
         value = ntohl(value);
         return true;
     }
@@ -1605,7 +1569,7 @@ bool ProtoPktDPD::GetPktId(UINT32& value) const
     }
 }  // end ProtoPktDPD::GetPktId(UINT16& value)
 
-bool ProtoPktDPD::InitIntoBuffer(char*          bufferPtr,
+bool ProtoPktDPD::InitIntoBuffer(void*          bufferPtr,
                                  unsigned int   numBytes,
                                  bool           freeOnDestruct)
 {
@@ -1617,7 +1581,7 @@ bool ProtoPktDPD::InitIntoBuffer(char*          bufferPtr,
         return false;
     }
     // Set NULL tagger id
-    buffer_ptr[OFFSET_TID_TYPE] = 0;
+    SetUINT8(OFFSET_TID_TYPE, 0);
     SetDataLength(1);
     return 0;
 }  // end ProtoPktDPD::InitIntoBuffer()
@@ -1625,8 +1589,8 @@ bool ProtoPktDPD::InitIntoBuffer(char*          bufferPtr,
 bool ProtoPktDPD::SetHAV(const char* hashAssistValue, UINT8 numBytes)
 {
     unsigned int minLength = OFFSET_HAV + numBytes;
-    if (buffer_bytes < minLength) return false;
-    char* ptr = (char*)buffer_ptr + OFFSET_HAV;
+    if (GetBufferLength() < minLength) return false;
+    char* ptr = (char*)AccessBuffer(OFFSET_HAV);
     memcpy(ptr, hashAssistValue, numBytes);
     *ptr |= (char)0x80;  // make sure 'H' bit is set
     SetDataLength(numBytes);
@@ -1638,15 +1602,15 @@ bool ProtoPktDPD::SetTaggerId(TaggerIdType type, const char* taggerId, UINT8 tag
     if ((TID_NULL != type) && (0 != taggerIdLength))
     {
         unsigned int minLength = OFFSET_TID_VALUE + taggerIdLength;
-        if (buffer_bytes < minLength) return false;
-        buffer_ptr[OFFSET_TID_TYPE] = (char)(type << 4);
-        buffer_ptr[OFFSET_TID_LENGTH] |= ((taggerIdLength - 1) & 0x0f);
-        memcpy(buffer_ptr + OFFSET_TID_VALUE, taggerId, taggerIdLength);
+        if (GetBufferLength() < minLength) return false;
+        SetUINT8(OFFSET_TID_TYPE, (UINT8)(type << 4));
+        AccessUINT8(OFFSET_TID_LENGTH) |= ((taggerIdLength - 1) & 0x0f);
+        memcpy(AccessBuffer(OFFSET_TID_VALUE), taggerId, taggerIdLength);
         SetDataLength(1 + taggerIdLength);
     }
     else
     {
-        buffer_ptr[OFFSET_TID_TYPE] = 0;
+        SetUINT8(OFFSET_TID_TYPE, 0);
         SetDataLength(1);
     }
     return true;
@@ -1670,7 +1634,7 @@ bool ProtoPktDPD::SetTaggerId(const ProtoAddress& ipAddr)
 
 
 // begin ProtoPktMobile implementation
-ProtoPktMobile::ProtoPktMobile(UINT32*        bufferPtr, 
+ProtoPktMobile::ProtoPktMobile(void*          bufferPtr, 
                                unsigned int   numBytes,
                                bool           initFromBuffer,
                                bool           freeOnDestruct)
@@ -1689,7 +1653,7 @@ ProtoPktMobile::~ProtoPktMobile()
 {
 }
 
-bool ProtoPktMobile::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
+bool ProtoPktMobile::InitIntoBuffer(void*   bufferPtr, unsigned int bufferBytes, bool freeOnDestruct)
 {
     if (NULL != bufferPtr) 
     {
@@ -1712,14 +1676,14 @@ bool ProtoPktMobile::InitIntoBuffer(UINT32* bufferPtr, unsigned int bufferBytes,
 
 void ProtoPktMobile::SetDstAddr(const ProtoAddress& addr, bool calculateChecksum) 
 {   
-    memcpy((char*)(buffer_ptr+OFFSET_DST_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
+    memcpy((char*)AccessBuffer32(OFFSET_DST_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
     if (calculateChecksum) CalculateChecksum();  // (TBD) is it worth it to incrementally update
 }  // end ProtoPktMobile::SetDstAddr() 
 
 bool ProtoPktMobile::SetSrcAddr(const ProtoAddress& addr, bool calculateChecksum) 
 {   
     if (GetBufferLength() < 12) return false;
-    memcpy((char*)(buffer_ptr+OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
+    memcpy((char*)AccessBuffer32(OFFSET_SRC_ADDR), addr.GetRawHostAddress(), 4); // (TBD) leverage alignment?     
     if (calculateChecksum) CalculateChecksum();  // (TBD) is it worth it to incrementally update
     SetFlag(FLAG_SRC);
     SetLength(12);
@@ -1732,11 +1696,10 @@ UINT16 ProtoPktMobile::CalculateChecksum(bool set)
     UINT32 sum = 0;
     UINT16 savedSum = GetChecksum();
     SetChecksum(0);
-    UINT16* ptr = (UINT16*)buffer_ptr;
     // Calculate checksum, skipping checksum field
     unsigned int headerLen = FlagIsSet(FLAG_SRC) ? 12/2 : 8/2;
     for (unsigned int i = 0; i < headerLen; i++)
-        sum += ntohs(ptr[i]);
+        sum += GetWord16(i);
     while (sum >> 16)
         sum = (sum & 0x0000ffff) + (sum >> 16);
     sum = ~sum;
@@ -1747,25 +1710,25 @@ UINT16 ProtoPktMobile::CalculateChecksum(bool set)
     return sum;
 }  // ProtoPktMobile::CalculateChecksum()
 
-bool ProtoPktMobile::InitFromBuffer(UINT32*         bufferPtr, 
+bool ProtoPktMobile::InitFromBuffer(void*           bufferPtr, 
                                     unsigned int    numBytes, 
                                     bool            freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);    
     UINT16 minBytes = 8;
-    if (buffer_bytes > OFFSET_FLAGS)
+    if (GetBufferLength() > OFFSET_FLAGS)
     {
         if (FlagIsSet(FLAG_SRC))
             minBytes = 12;
     }
-    if (buffer_bytes < minBytes)
+    if (GetBufferLength() < minBytes)
     {
-        pkt_length = 0;
+        ProtoPkt::SetLength(0);
         if (NULL != bufferPtr) DetachBuffer();
         return false;
     }
-    pkt_length = numBytes;
+    ProtoPkt::SetLength(numBytes);
     return true;
 }  // end ProtoPktMobile::InitFromBuffer()
 
@@ -1773,7 +1736,7 @@ bool ProtoPktMobile::GetSrcAddr(ProtoAddress& src) const
 {       
     if (FlagIsSet(FLAG_SRC))
     {
-        src.SetRawHostAddress(ProtoAddress::IPv4, (char*)(buffer_ptr+OFFSET_DST_ADDR), 4);
+        src.SetRawHostAddress(ProtoAddress::IPv4, (char*)GetBuffer32(OFFSET_DST_ADDR), 4);
         return true;
     }
     else
@@ -1789,13 +1752,13 @@ bool ProtoPktDPD::SetPktId(const char* pktId, UINT8 pktIdLength)
     unsigned int taggerIdLength = GetTaggerIdLength();
     unsigned int offsetPktId = OFFSET_TID_VALUE + taggerIdLength;
     unsigned int minLength = offsetPktId + pktIdLength;
-    if (buffer_bytes < minLength) return false;
-    memcpy(buffer_ptr + offsetPktId, pktId, pktIdLength);
+    if (GetBufferLength() < minLength) return false;
+    memcpy(AccessBuffer(offsetPktId), pktId, pktIdLength);
     SetDataLength(1 + taggerIdLength + pktIdLength);
     return true;   
 }
 
-ProtoPktUDP::ProtoPktUDP(UINT32*        bufferPtr, 
+ProtoPktUDP::ProtoPktUDP(void*          bufferPtr, 
                          unsigned int   numBytes, 
                          bool           initFromBuffer,
                          bool           freeOnDestruct)
@@ -1845,7 +1808,7 @@ bool ProtoPktUDP::InitFromPacket(ProtoPktIP& ipPkt)
                     extHeaderLength += ext.GetLength();
                     if (ProtoPktIP::UDP == ext.GetNextHeader())
                     {
-                        UINT32* udpBuffer = ip6Pkt.AccessPayload() + (extHeaderLength >> 2);
+                        void* udpBuffer = (char*)ip6Pkt.AccessPayload() + extHeaderLength;
                         unsigned int udpLength = ip6Pkt.GetPayloadLength() - extHeaderLength;
                         return InitFromBuffer(udpBuffer, udpLength, false);
                     }
@@ -1869,28 +1832,28 @@ bool ProtoPktUDP::InitFromPacket(ProtoPktIP& ipPkt)
     return true;
 }  // end ProtoPktUDP::InitFromPacket()
 
-bool ProtoPktUDP::InitFromBuffer(UINT32*        bufferPtr, 
+bool ProtoPktUDP::InitFromBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
     UINT16 totalLen = GetPayloadLength() + 8;
-    if (totalLen > buffer_bytes)
+    if (totalLen > GetBufferLength())
     {
-        pkt_length = 0;
+        ProtoPkt::SetLength(0);
         if (NULL != bufferPtr) DetachBuffer();
         return false;
     }
     else
     {
         // (TBD) We could validate the checksum, too?
-        pkt_length = totalLen;
+        ProtoPkt::SetLength(totalLen);
         return true;
     }
 }  // end bool ProtoPktUDP::InitFromBuffer()
 
-bool ProtoPktUDP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktUDP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct) 
 {
@@ -1941,22 +1904,19 @@ UINT16 ProtoPktUDP::ComputeChecksum(ProtoPktIP& ipPkt) const
             return 0;   
     }
     // 2) UDP header part, sans "checksum" field
-    const UINT16* ptr = (const UINT16*)GetBuffer32();
     unsigned int i;
     for (i = 0; i < OFFSET_CHECKSUM; i++)
-        sum += (UINT16)ntohs(ptr[i]);
+        sum += GetWord16(i);
     // 3) UDP payload part (note adjustment for odd number of payload bytes)
     unsigned int dataEndex = GetLength();
     if (0 != (dataEndex & 0x01))
-        sum += (UINT16)(((UINT16)((UINT8*)ptr)[dataEndex-1]) << 8);
+        sum += (UINT16)((UINT16)GetUINT8(dataEndex-1) << 8);
     dataEndex >>= 1;  // convert from bytes to UINT16 index
-    for (i = (OFFSET_CHECKSUM+1); i < dataEndex; i++)
-        sum += (UINT16)ntohs(ptr[i]);
-    
+    for (i = (OFFSET_CHECKSUM+1); i < dataEndex; i++)  
+        sum += GetWord16(i);
     // 4) Carry as needed
     while (0 != (sum >> 16))
         sum = (sum & 0x0000ffff) + (sum >> 16);
-    
     sum = ~sum;
     
     // 5) ZERO check/correct as needed

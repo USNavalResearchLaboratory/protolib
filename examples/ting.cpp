@@ -168,7 +168,7 @@ class TingMessage : public ProtoPkt
         // Start with a null buffer report to reset iteration
         bool GetNextReport(Report& report) const
         {
-            UINT32* nextBuffer =  report.AccessBuffer();
+            UINT32* nextBuffer = (UINT32*)report.AccessBuffer();
             nextBuffer = (NULL != nextBuffer) ? (nextBuffer + report.GetReportWords()) : 
                                                 (buffer_ptr + OFFSET_REPORT);
             unsigned int nextOffset = (nextBuffer - buffer_ptr) << 2;

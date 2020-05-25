@@ -1,5 +1,8 @@
 
 #include "protoString.h"
+#include "protoDefs.h"  // for PATH_MAX
+#include <ctype.h>
+#include <string.h>
 
 int main(int argc, char* argv[])
 {
@@ -53,5 +56,35 @@ int main(int argc, char* argv[])
             delete[] item;
         }
     }    
+    
+    // This section illustrates using ProtoTokenator to help parse file path strings
+    // (Note the constant "PROTO_PATH_DELIMITER" is available for cross-platform use)
+    // The dirname/basename here works like Python os.path.dirname() and os.path.basename(),
+    // i.e., not exactly like Unix basename() function
+    const char* pathList[] = 
+    {
+        "/usr/include/stdio.h",
+        "/usr/local/include//"
+    };
+    char dirname[PATH_MAX + 1];
+    char basename[PATH_MAX + 1];
+    for (int i = 0; i < sizeof(pathList)/sizeof(pathList[0]); i++)
+    {
+        const char* thePath = pathList[i];
+        // Note we "stripTokens" to remove any extra trailing path delimiters on dirname
+        // delimiters on paths
+        ProtoTokenator pk(thePath, '/', true, 1, true, true);
+        const char* item = pk.GetNextItem();  // reverse gets basename first
+        if (NULL != item)
+            strncpy(basename, item, PATH_MAX);
+        else
+            basename[0] = '\0';
+        item = pk.GetNextItem();  // reverse gets dirname second (if present)
+        if (NULL != item)
+            strncpy(dirname, item, PATH_MAX);
+        else
+            dirname[0] = '\0';
+        printf("path: \"%s\" dirname: \"%s\" basename: \"%s\"\n", thePath, dirname, basename);
+    }
     
 }  // end main()

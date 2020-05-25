@@ -43,7 +43,7 @@ KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase
           $(COMMON)/protoRouteMgr.cpp $(COMMON)/protoRouteTable.cpp \
           $(COMMON)/protoTime.cpp $(COMMON)/protoTimer.cpp \
           $(COMMON)/protoTree.cpp $(COMMON)/protoList.cpp $(COMMON)/protoQueue.cpp \
-          $(COMMON)/protoVif.cpp $(COMMON)/protoCap.cpp  \
+          $(COMMON)/protoVif.cpp  \
           $(COMMON)/protoSerial.cpp $(COMMON)/protoLFSR.cpp \
           $(COMMON)/protoNet.cpp $(COMMON)/protoFile.cpp $(COMMON)/protoString.cpp \
           $(SYSTEM_SRC)
@@ -353,6 +353,15 @@ msgExample:    $(MSG_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(MSG_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
+    
+    
+FILE_SRC = $(EXAMPLES)/fileTest.cpp
+FILE_OBJ = $(FILE_SRC:.cpp=.o)
+
+fileTest:    $(FILE_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(FILE_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@    
     
 JSON_SRC = $(EXAMPLES)/jsonExample.cpp 
 JSON_OBJ = $(JSON_SRC:.cpp=.o)

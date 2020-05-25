@@ -81,7 +81,7 @@ class ProtoTree : public ProtoIterable
 {
     public:
         ProtoTree();
-        ~ProtoTree();
+        virtual ~ProtoTree();
         
         bool IsEmpty() const
             {return (NULL == root);}
@@ -133,11 +133,11 @@ class ProtoTree : public ProtoIterable
         static ProtoTree::Endian GetNativeEndian()
         {
 #if BYTE_ORDER == LITTLE_ENDIAN
-                    return ProtoTree::ENDIAN_LITTLE;
+            return ProtoTree::ENDIAN_LITTLE;
 #else
-                    return ProtoTree::ENDIAN_BIG;
-#endif  // end if/else (BYTE_ORDER == LITTLE_ENDIAN)                
-        }
+            return ProtoTree::ENDIAN_BIG;
+#endif // end if/else (BYTE_ORDER == LITTLE_ENDIAN)                
+        }  // end ProtoTree::GetNativeEndian()
         
         /**
          * @class Item
@@ -155,20 +155,23 @@ class ProtoTree : public ProtoIterable
                 Item();
                 virtual ~Item();
                 
-                // Require overrides
+                // Required overrides
                 virtual const char* GetKey() const = 0;
                 virtual unsigned int GetKeysize() const = 0;
                 
                 // Optional overrides 
+                // TBD - make the GetEndian() member of ProtoTree instead
+                // i.e., just like UseSignBit() and UseComplementTwo()
 #ifdef WIN32
                 // Some windows compilers don't like the other format
-                virtual Endian GetEndian() const;
+                virtual Endian GetEndian() const
+                    {return ENDIAN_BIG;}  // default endian for ProtoTree
 #else
-                virtual ProtoTree::Endian GetEndian() const;
+                virtual ProtoTree::Endian GetEndian() const
+                    {return ENDIAN_BIG;}  // default endian for ProtoTree
 #endif
                 // Returns how deep in its tree this Item lies
                 unsigned int GetDepth() const;
-                
                 
                 // Debug helper for keys that are strings
                 const char* GetKeyText() const
@@ -217,7 +220,7 @@ class ProtoTree : public ProtoIterable
         {
             public:
                 ItemPool();
-                ~ItemPool();
+                virtual ~ItemPool();
                 void Destroy();
                 bool IsEmpty() const
                     {return (NULL == head);}
@@ -245,7 +248,7 @@ class ProtoTree : public ProtoIterable
                 Iterator(ProtoTree& tree, 
                          bool       reverse = false,
                          Item*      cursor = NULL);
-                ~Iterator();
+                virtual ~Iterator();
                 
                 void Reset(bool         reverse = false,
                            const char*  prefix = NULL,
@@ -290,7 +293,7 @@ class ProtoTree : public ProtoIterable
         {
             public:
                 SimpleIterator(ProtoTree& theTree);
-                ~SimpleIterator();
+                virtual ~SimpleIterator();
                 
                 void Reset();
                 Item* GetNextItem();
@@ -364,6 +367,9 @@ class ProtoTreeTemplate : public ProtoTree
         ITEM_TYPE* FindPrefix(const char* key, unsigned int keysize) const
             {return (static_cast<ITEM_TYPE*>(ProtoTree::FindPrefix(key, keysize)));}
         
+        void Destroy()
+            {ProtoTree::Destroy();}
+        
         
         class Iterator : public ProtoTree::Iterator
         {
@@ -372,7 +378,7 @@ class ProtoTreeTemplate : public ProtoTree
                          bool               reverse = false,
                          Item*              cursor = NULL)
                  : ProtoTree::Iterator(theTree, reverse, cursor) {}
-                ~Iterator() {}
+                virtual ~Iterator() {}
                 
                 ITEM_TYPE* GetPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoTree::Iterator::GetPrevItem());}
@@ -391,7 +397,7 @@ class ProtoTreeTemplate : public ProtoTree
             public:
                 SimpleIterator(ProtoTreeTemplate& theTree)
                  : ProtoTree::SimpleIterator(theTree) {}
-                ~SimpleIterator() {}
+                virtual ~SimpleIterator() {}
                 
                 ITEM_TYPE* GetNextItem()
                     {return static_cast<ITEM_TYPE*>(ProtoTree::SimpleIterator::GetNextItem());}
@@ -402,7 +408,7 @@ class ProtoTreeTemplate : public ProtoTree
         {
             public:
                 ItemPool() {}
-                ~ItemPool() {}
+                virtual ~ItemPool() {}
                 
                 void Put(ITEM_TYPE& item)
                     {ProtoTree::ItemPool::Put(item);}
@@ -449,7 +455,7 @@ class ProtoSortedTree
     //       threaded aspect.
     public:
         ProtoSortedTree(bool uniqueItemsOnly = false);
-        ~ProtoSortedTree();
+        virtual ~ProtoSortedTree();
         
         bool IsEmpty() const
             {return item_tree.IsEmpty();}
@@ -549,7 +555,7 @@ class ProtoSortedTree
                          bool               reverse = false, 
                          const char*        keyMin = NULL, 
                          unsigned int       keysize = 0);
-                ~Iterator();
+                virtual ~Iterator();
                 
                 bool HasEmptyTree() const
                     {return tree.IsEmpty();}
@@ -592,7 +598,7 @@ class ProtoSortedTree
                 {
                     public:
                         TempItem(const char* theKey, unsigned int theKeysize, ProtoTree::Endian keyEndian);
-                        ~TempItem();
+                        virtual ~TempItem();
 
                         const char* GetKey() const {return key;}            
                         unsigned int GetKeysize() const {return keysize;}
@@ -660,7 +666,7 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
                          const char*                keyMin = NULL, 
                          unsigned int               keysize = 0)
                     : ProtoSortedTree::Iterator(theTree, reverse, keyMin, keysize) {}
-                ~Iterator() {}
+                virtual ~Iterator() {}
                 
                 ITEM_TYPE* GetPrevItem()
                     {return static_cast<ITEM_TYPE*>(ProtoSortedTree::Iterator::GetPrevItem());}
@@ -674,6 +680,46 @@ class ProtoSortedTreeTemplate : public ProtoSortedTree
 
         };  // end class ProtoSortedTreeTemplate::Iterator
         
+        class ItemPool : public ProtoSortedTree::ItemPool
+        {
+            public:
+                ItemPool() {}
+                virtual ~ItemPool() {}
+                
+                void Put(ITEM_TYPE& item)
+                    {ProtoSortedTree::ItemPool::Put(item);}
+
+                ITEM_TYPE* Get()
+                    {return static_cast<ITEM_TYPE*>(ProtoSortedTree::ItemPool::Get());}
+        };  // end class ProtoSortedTreeTemplate::ItemPool
+        
 };  // end class ProtoSortedTreeTemplate
 
+// Here's an example use of ProtoSortedTree configured to keep a table of items indexed
+// by a "double" key.  Note that multiple equal-valued items _can_ be included in a 
+// ProtoSortedTree (the basic ProtoTree only allows a single item with a given key).
+/*
+class ExampleItem : public ProtoSortedTree::Item
+{
+    public:
+        ExampleItem(double key);
+            
+    private:
+        const char* GetKey() const
+            {return (char*)&item_key;}
+        unsigned int GetKeysize() const
+            {return (sizeof(double) << 3);}
+        double  item_key;
+};  // end class ExampleItem
+
+class ExampleTree : public ProtoSortedTreeTemplate<ExampleItem>
+{
+    private:
+        // These configure the key interpretation to properly sort "double" type key values
+        virtual bool UseSignBit() const {return true;}
+        virtual bool UseComplement2() const {return false;}
+        virtual ProtoTree::Endian GetEndian() const {return ProtoTree::GetNativeEndian();}
+};
+*/
+        
 #endif // PROTO_TREE

@@ -51,14 +51,6 @@ ProtoTree::Item::~Item()
 {  
 }
 
-/**
- * We assume Big Endian key byte order by default
- */
-ProtoTree::Endian ProtoTree::Item::GetEndian() const
-{
-    return ENDIAN_BIG;
-}  // end ProtoTree::Item::GetEndian()
-
 unsigned int ProtoTree::Item::GetDepth() const 
 {
     unsigned int depth = 0;
@@ -897,9 +889,10 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
             prefix_size = 0;
             GetPrevItem();
             prefix_size = savePrefixSize;
+	        if (NULL == prev) return NULL;
         }
         Item* item = prev;
-        Endian keyEndian = item->GetEndian();
+	    Endian keyEndian = item->GetEndian();
         if (0 != prefix_size)
         {
             // Test "item" against our reference "prefix_item"
@@ -1038,14 +1031,15 @@ ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
     if (NULL != next)
     {
         ProtoTree* tree = static_cast<ProtoTree*>(iterable);
-        if (reversed)
+	    if (reversed)
         {
-            // This iterator has been going backwards
+	        // This iterator has been going backwards
             // so we need to turn it around
             reversed = false;
-            SetCursor(*next);
+	        SetCursor(*next);
+	        if (NULL == next) return NULL;  
         }
-        Item* item = next;
+	    Item* item = next;
         Endian keyEndian = next->GetEndian();
         if (NULL == curr_hop)
         {
@@ -1053,7 +1047,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
         }
         else
         {
-            Item* x = curr_hop;
+	        Item* x = curr_hop;
             if (((x->left != next) && (x->left->parent != x)) ||
                 (x->right->parent == x))
             {

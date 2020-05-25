@@ -63,7 +63,7 @@ class ProtoRouteMgr
          * @return true upon success.
          */
         bool GetDiff(ProtoRouteTable& oldRouteTable, ProtoRouteTable& newRouteTable, ProtoRouteTable& settedRouteTable, ProtoRouteTable& deletedRouteTable);
-	bool DeleteRoutes(ProtoRouteTable& routeTable);
+	    bool DeleteRoutes(ProtoRouteTable& routeTable);
         /**
          * 
          * @brief will save IPv4 and IPv6 route tables
@@ -108,6 +108,23 @@ class ProtoRouteMgr
                                  unsigned int           ifIndex) = 0;     
 
 
+        
+        bool SetRoute(ProtoRouteTable::Entry& entry)
+        {
+            return SetRoute(entry.GetDestination(),
+                            entry.GetPrefixSize(),
+                            entry.GetGateway(),
+                            entry.GetInterfaceIndex(),
+                            entry.GetMetric());
+        }
+        
+        bool DeleteRoute(ProtoRouteTable::Entry& entry)
+        {
+            return DeleteRoute(entry.GetDestination(),
+                               entry.GetPrefixSize(),
+                               entry.GetGateway(),
+                               entry.GetInterfaceIndex());
+        }
         
         // Here are some "shortcut" set route methods
         bool SetHostRoute(const ProtoAddress& dst,

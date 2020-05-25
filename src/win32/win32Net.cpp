@@ -1,7 +1,7 @@
-#include "protoNet.h"
 #include "protoList.h"
 #include "protoDebug.h"
 #include "protoDispatcher.h"
+#include "protoNet.h"
 
 #include <winsock2.h>
 #include <WS2tcpip.h>  // for extra socket options
@@ -195,8 +195,8 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
             addrEntry = addrEntry->Next;
         }
         delete[] addrBuffer;
-        if (!foundAddr)
-            PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressList(%s) warning: no matching interface found.  Checking for ip address\n", interfaceName);
+        //if (!foundAddr)
+        //    PLOG(PL_WARN, "ProtoNet::GetInterfaceAddressList(%s) warning: no matching interface found.  Checking for ip address\n", interfaceName);
     }
     else 
 #endif // if (WINVER >= 0x0501)
@@ -324,7 +324,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*           interfaceName,
     }
     else if ((ProtoAddress::IPv4 == addressType) || (ProtoAddress::INVALID == addressType))
     {
-        // Since GetAdaptersAddresses() failed, try the other approach iff IPv4 == addressType
+		// Since GetAdaptersAddresses() failed, try the other approach iff IPv4 == addressType
         DWORD ifCount;
         if (NO_ERROR != GetNumberOfInterfaces(&ifCount))
         {
@@ -671,7 +671,7 @@ unsigned int ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsign
             // We use the "bDescr" field because the "wszName" field doesn't seem to work
 #ifdef _UNICODE
             buflen = buflen < MAX_INTERFACE_NAME_LEN ? buflen : MAX_INTERFACE_NAME_LEN;
-            wcstombs(buffer, ifRow.wszName, buflen);
+            unsigned int nameLen = wcstombs(buffer, ifRow.wszName, buflen);
 #else
 			size_t nameLen = strnlen_s((char*)ifRow.bDescr, ifRow.dwDescrLen);
             strncpy_s(buffer, buflen, (char*)ifRow.bDescr, ifRow.dwDescrLen);
@@ -961,7 +961,7 @@ ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(unsigned int ifaceIndex)
 unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const ProtoAddress& ifAddr)
 {
 	char ifName[MAX_ADAPTER_NAME_LENGTH + 4];
-	unsigned int buflen;
+	//unsigned int buflen;
 	if (GetInterfaceName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
 	{
 		return GetInterfaceAddressMask(ifName, ifAddr);
@@ -1098,7 +1098,7 @@ bool ProtoNet::AddInterfaceAddress(unsigned int ifaceIndex, const ProtoAddress& 
 	Do not use in this case.
 	*/
 
-	unsigned int buflen;
+	//unsigned int buflen;
 	char ifName[MAX_ADAPTER_NAME_LENGTH];
 	if (GetInterfaceFriendlyName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH ))
 	{
@@ -1148,7 +1148,7 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
 bool ProtoNet::RemoveInterfaceAddress(unsigned int ifaceIndex, const ProtoAddress& addr, unsigned int maskLen)
 {
 	char ifName[MAX_ADAPTER_NAME_LENGTH];
-	unsigned int buflen;
+	//unsigned int buflen;
 	if (GetInterfaceName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH))
 	{
 		return RemoveInterfaceAddress(ifName, addr, maskLen);
@@ -1156,6 +1156,7 @@ bool ProtoNet::RemoveInterfaceAddress(unsigned int ifaceIndex, const ProtoAddres
 	PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() no matching interface found for ifaceIndex %s", ifaceIndex);
 	return false;
 };
+
 bool ProtoNet::RemoveInterfaceAddress(const char* ifaceAddress, const ProtoAddress& ifaceAddr, unsigned int maskLen)
 {
 	// Get the adapter name from the iface address
@@ -1393,7 +1394,7 @@ unsigned int ProtoNet::GetInterfaceFriendlyName(unsigned int index, char* buffer
 bool ProtoNet::GetInterfaceAddressDhcp(unsigned int ifaceIndex, const ProtoAddress& ifAddr)
 {
 	char ifName[MAX_ADAPTER_NAME_LENGTH + 4];
-	unsigned int buflen;
+	//unsigned int buflen;
 	if (GetInterfaceName(ifaceIndex, ifName, MAX_ADAPTER_NAME_LENGTH + 4))
 	{
 		return GetInterfaceAddressDhcp(ifName, ifAddr);

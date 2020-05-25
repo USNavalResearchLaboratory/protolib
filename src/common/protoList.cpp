@@ -222,7 +222,7 @@ void ProtoList::ItemPool::Put(Item& item)
 void ProtoList::ItemPool::Destroy()
 {
     Item* item;
-    while ((item = Get())) delete item;
+    while (NULL != (item = Get())) delete item;
 }  // end ProtoList::ItemPool::Destroy()
 
 

@@ -1,13 +1,18 @@
 #include "protoString.h"
 #include "protoDebug.h"
 
+#include <string.h>
+#include <stdio.h>
+#include <ctype.h>  // for isspace()
+
 ProtoTokenator::ProtoTokenator(const char*  text, 
                                char         delimiter, 
                                bool         stripWhiteSpace, 
                                unsigned int maxCount,
-                               bool         reverseOrder)
- : token(delimiter), strip(stripWhiteSpace), reverse(reverseOrder),
-   max_count(maxCount), remain(maxCount), 
+                               bool         reverseOrder,
+                               bool         stripTokens)
+ : token(delimiter), strip_whitespace(stripWhiteSpace), strip_tokens(stripTokens), 
+   reverse(reverseOrder), max_count(maxCount), remain(maxCount), 
    text_ptr(text), prev_item(NULL)       
 {
     Reset();
@@ -22,6 +27,11 @@ ProtoTokenator::~ProtoTokenator()
     }
 }
 
+bool ProtoTokenator::TokenMatch(char c) const
+{
+    return ((c == token) || (isspace(token) && isspace(c)));
+}  // end ProtoTokenator::TokenMatch()
+
 void ProtoTokenator::Reset(const char* text, char delimiter)
 {
     remain = max_count;
@@ -34,7 +44,7 @@ void ProtoTokenator::Reset(const char* text, char delimiter)
             next_ptr += strlen(next_ptr) - 1;
         if (isspace(token))
         {
-            // Advance to start of any traiing white space
+            // Advance to start of any trailing white space
             while (NULL != next_ptr)
             {
                 if (isspace(*next_ptr))
@@ -74,9 +84,9 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
 {
     if (reverse)
     {
-        if (strip)
+        if (strip_whitespace)
         {
-            // Strip any trailing white space
+            // Strip any trailing white space, if required
             while (NULL != next_ptr)
             {
                 if (isspace(*next_ptr))
@@ -96,10 +106,11 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         
         if ((0 != max_count) && (0 == remain))
         {
-            // Count was limited, so return remainder as last item (strip whitespace as required)
-            unsigned int itemLen = next_ptr - text_ptr + 1;
+            // Count was limited, so return remainder as last item 
+            // (strip whitespace from head if required)
+            long itemLen = next_ptr - text_ptr + 1;
             const char* headPtr = text_ptr;
-            if (strip)
+            if (strip_whitespace)
             {
                 while ((0 != itemLen) && (isspace(*headPtr)))
                 {
@@ -107,10 +118,20 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
                     itemLen--;
                 }
             }         
+            // (strip extraneous token(s) from tail if required)
+            if (strip_tokens)
+            {
+                const char* tailPtr = headPtr + itemLen - 1;
+                while ((0 != itemLen) && TokenMatch(*tailPtr))
+                {
+                    tailPtr--;
+                    itemLen--;
+                }
+            }
             if (NULL != prev_item) delete[] prev_item;
             if (NULL == (prev_item = new char[itemLen+1]))
             {
-                perror("ProtoTokenator::GetNextItem() new char[] error");
+                PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
                 return NULL;
             }
             strncpy(prev_item, headPtr, itemLen); 
@@ -128,41 +149,19 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
             }
         }
         const char* ptr = next_ptr;
-        if (isspace(token))
+        // Advance to next token
+        while (text_ptr != ptr)
         {
-            while (text_ptr != ptr)
-            {
-                if (isspace(*ptr))
-                {
-                    break;
-                }
-                else
-                {
-                    ptr--;
-                }
-            }
-        }
-        else
-        {
-            while (text_ptr != ptr)
-            {
-                if (*ptr == token)
-                {
-                    break;
-                }
-                else
-                {
-                    ptr--;
-                }
-            }
-        }
+            if (TokenMatch(*ptr))
+                break;
+            else
+                ptr--;
+        }    
         size_t itemLen = next_ptr - ptr;
         bool firstItem = false;
         if (text_ptr == ptr)
         {
-            if (isspace(token))
-                firstItem = isspace(*ptr) ? false : true;
-            else if (*ptr == token )
+            if (TokenMatch(*ptr))
                 firstItem = false;
             else
                 firstItem = true;
@@ -172,7 +171,8 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
             itemLen += 1;
         else
             headPtr += 1;
-        if (strip)
+        // Strip any leading whitespace, if required
+        if (strip_whitespace)
         {
             while ((0 != itemLen) && isspace(*headPtr))
             {
@@ -183,7 +183,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         if (NULL != prev_item) delete[] prev_item;
         if (NULL == (prev_item = new char[itemLen+1]))
         {
-            perror("ProtoTokenator::GetNextItem() new char[] error");
+            PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
             return NULL;
         }
         strncpy(prev_item, headPtr, itemLen);
@@ -214,9 +214,9 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
     }
     else
     {
-        if (strip)
+        // Strip any leading white space, if required
+        if (strip_whitespace)
         {
-            // Strip any leading white space
             while (NULL != next_ptr)
             {
                 if ('\0' == *next_ptr)
@@ -230,18 +230,31 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         if (NULL == next_ptr) return NULL;
         if ((0 != max_count) && (0 == remain))
         {
-            // Count was limited, so return remainder as last item (strip whitespace as required)
-            unsigned int itemLen = strlen(next_ptr);
-            if (strip)
+            // Count was limited, so return remainder as last item 
+            // (strip trailing whitespace if required)
+            size_t itemLen = strlen(next_ptr);
+            if (strip_whitespace)
             {
                 const char* tailPtr = next_ptr + itemLen - 1;
-                while ((0 != itemLen) && (isspace(*tailPtr--)))
+                while ((0 != itemLen) && (isspace(*tailPtr)))
+                {
+                    tailPtr--;
                     itemLen--;
+                }
             }         
+            // (strip extraneous leading token(s) if required)
+            if (strip_tokens)
+            {
+                while ((0 != itemLen) && TokenMatch(*next_ptr))
+                {
+                    next_ptr++;
+                    itemLen--;
+                }
+            }
             if (NULL != prev_item) delete[] prev_item;
             if (NULL == (prev_item = new char[itemLen+1]))
             {
-                perror("ProtoTokenator::GetNextItem() new char[] error");
+                PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
                 return NULL;
             }
             strncpy(prev_item, next_ptr, itemLen + 1); 
@@ -260,6 +273,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         const char* ptr;
         if (isspace(token))
         {
+            // Advance start of whitespace
             ptr = next_ptr;
             while (NULL != ptr)
             {
@@ -276,7 +290,8 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
             ptr = strchr(next_ptr, token);
         }
         size_t itemLen = (NULL == ptr) ? strlen(next_ptr) : (ptr++ - next_ptr);
-        if (strip)
+        // Strip trailing whitespace, if required
+        if (strip_whitespace)
         {
             const char* tailPtr = next_ptr + itemLen - 1;
             while ((0 != itemLen) && (isspace(*tailPtr--)))
@@ -285,12 +300,12 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         if (NULL != prev_item) delete[] prev_item;
         if (NULL == (prev_item = new char[itemLen+1]))
         {
-            perror("ProtoTokenator::GetNextItem() new char[] error");
+            PLOG(PL_ERROR, "ProtoTokenator::GetNextItem() new char[] error: %s\n", GetErrorString());
             return NULL;
         }
         strncpy(prev_item, next_ptr, itemLen);
         prev_item[itemLen] = '\0';
-        if (isspace(token))
+        if (strip_whitespace || isspace(token))
         {
             // advance to end of white space
             while (NULL != ptr)

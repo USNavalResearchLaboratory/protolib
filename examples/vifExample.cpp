@@ -986,7 +986,7 @@ void VifExampleApp::OnInboundPkt(ProtoChannel&              theChannel,
                 case ProtoPktETH::IPv6:
                 case ProtoPktETH::ARP:  
                     if (GetDebugLevel() >= 2) PeekPkt(ethPkt, true);
-                    vif->Write(ethPkt.GetBuffer(), ethPkt.GetLength());
+                    vif->Write((char*)ethPkt.GetBuffer(), ethPkt.GetLength());
                     break;
                 default:
                     break;

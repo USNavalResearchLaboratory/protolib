@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
         }
         
         fprintf(stderr, "simple: client sending request to server ...\n");
-        char* clientRequest = "Hello Server, this is a simple protolib client!";
+        const char* clientRequest = "Hello Server, this is a simple protolib client!";
         unsigned int length = strlen(clientRequest) + 1;
         unsigned int sent = 0;
         while (sent < length)
@@ -101,7 +101,7 @@ int main(int argc, char* argv[])
         while (receiving)
         {
             char buffer[256];
-            buffer[256] = '\0';
+            buffer[255] = '\0';
             unsigned int numBytes = 255;
             if (!clientSocket.Recv(buffer, numBytes))
             {
@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
                 while (receiving)
                 {
                     char buffer[256];
-                    buffer[256] = '\0';
+                    buffer[255] = '\0';
                     unsigned int numBytes = 255;
                     if (!serverSocket.Recv(buffer, numBytes))
                     {
@@ -179,7 +179,7 @@ int main(int argc, char* argv[])
                     }
                 }    
                 fprintf(stderr, "simple: server sending response to client ...\n");
-                char* serverResponse = "Hi there Client, this is a simple protolib server";
+                const char* serverResponse = "Hi there Client, this is a simple protolib server";
                 unsigned int length = strlen(serverResponse) + 1;
                 unsigned int sent = 0;
                 while (sent < length)

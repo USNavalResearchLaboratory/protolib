@@ -50,7 +50,7 @@ SYSTEM_SRC_EX = ../src/unix/bpfCap.cpp ../src/bsd/bsdDetour.cpp \
 SYSTEM = macosx
 CC = g++
 #SYSTEM_CFLAGS = -Wall -Wcast-align -fPIC
-SYSTEM_CFLAGS = -Wall -Wcast-align -fPIC -arch x86_64 -arch i386
+SYSTEM_CFLAGS = -Wall -Wcast-align -fPIC -arch x86_64
 SYSTEM_SOFLAGS = -dynamiclib 
 SYSTEM_SOEXT = dylib
 

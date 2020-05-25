@@ -1,6 +1,6 @@
 #include "protoPktTCP.h"
 
-ProtoPktTCP::ProtoPktTCP(UINT32*        bufferPtr, 
+ProtoPktTCP::ProtoPktTCP(void*          bufferPtr, 
                          unsigned int   numBytes, 
                          bool           initFromBuffer,
                          bool           freeOnDestruct)
@@ -50,7 +50,7 @@ bool ProtoPktTCP::InitFromPacket(ProtoPktIP& ipPkt)
                     extHeaderLength += ext.GetLength();
                     if (ProtoPktIP::TCP == ext.GetNextHeader())
                     {
-                        UINT32* tcpBuffer = ip6Pkt.AccessPayload() + (extHeaderLength >> 2);
+                        void* tcpBuffer = (char*)ip6Pkt.AccessPayload() + extHeaderLength;
                         unsigned int tcpLength = ip6Pkt.GetPayloadLength() - extHeaderLength;
                         return InitFromBuffer(tcpBuffer, tcpLength, false);
                     }
@@ -74,28 +74,28 @@ bool ProtoPktTCP::InitFromPacket(ProtoPktIP& ipPkt)
     return true;
 }  // end ProtoPktTCP::InitFromPacket()
 
-bool ProtoPktTCP::InitFromBuffer(UINT32*        bufferPtr, 
+bool ProtoPktTCP::InitFromBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct)
 {
     if (NULL != bufferPtr) 
         AttachBuffer(bufferPtr, numBytes, freeOnDestruct);
     UINT16 totalLen = GetPayloadLength() + (OffsetPayload() << 2);
-    if (totalLen > buffer_bytes)
+    if (totalLen > GetBufferLength())
     {
-        pkt_length = 0;
+        ProtoPkt::SetLength(0);
         if (NULL != bufferPtr) DetachBuffer();
         return false;
     }
     else
     {
         // (TBD) We could validate the checksum, too?
-        pkt_length = totalLen;
+        ProtoPkt::SetLength(totalLen);
         return true;
     }
 }  // end bool ProtoPktTCP::InitFromBuffer()
 
-bool ProtoPktTCP::InitIntoBuffer(UINT32*        bufferPtr, 
+bool ProtoPktTCP::InitIntoBuffer(void*          bufferPtr, 
                                  unsigned int   numBytes, 
                                  bool           freeOnDestruct) 
 {
@@ -126,7 +126,7 @@ UINT16 ProtoPktTCP::ComputeChecksum(ProtoPktIP& ipPkt) const
             const UINT16* ptr = (const UINT16*)ipv4Pkt.GetSrcAddrPtr();
             int addrEndex = ProtoPktIPv4::ADDR_LEN;  // note src + dst = 2 addresses
             for (int i = 0; i < addrEndex; i++)
-                sum += (UINT16)ntohs(ptr[i]);
+                sum += GetUINT16(ptr++);
             // b) protocol & "total length" pseudo header portions
             sum += (UINT16)ipv4Pkt.GetProtocol();
             sum += (UINT16)GetLength(); // TCP length
@@ -139,7 +139,7 @@ UINT16 ProtoPktTCP::ComputeChecksum(ProtoPktIP& ipPkt) const
             const UINT16* ptr = (const UINT16*)ipv6Pkt.GetSrcAddrPtr();
             int addrEndex = ProtoPktIPv6::ADDR_LEN;  // note src + dst = 2 addresses
             for (int i = 0; i < addrEndex; i++)
-                sum += (UINT16)ntohs(ptr[i]);
+                sum += GetUINT16(ptr++);
             sum += (UINT16)GetLength(); // TCP length
             sum += (UINT16)ipv6Pkt.GetNextHeader();
             break;
@@ -148,17 +148,16 @@ UINT16 ProtoPktTCP::ComputeChecksum(ProtoPktIP& ipPkt) const
             return 0;   
     }
     // 2) TCP header part, sans "checksum" field
-    const UINT16* ptr = (const UINT16*)GetBuffer32();
     unsigned int i;
     for (i = 0; i < OFFSET_CHECKSUM; i++)
-        sum += (UINT16)ntohs(ptr[i]);
+        sum += GetWord16(i);
     // 3) TCP payload part (note adjustment for odd number of payload bytes)
     unsigned int dataEndex = GetLength();
     if (0 != (dataEndex & 0x01))
-        sum += (UINT16)(((UINT16)((UINT8*)ptr)[dataEndex-1]) << 8);
+        sum += ((UINT16)GetUINT8(dataEndex-1) << 8);
     dataEndex >>= 1;  // convert from bytes to UINT16 index
     for (i = (OFFSET_CHECKSUM+1); i < dataEndex; i++)
-        sum += (UINT16)ntohs(ptr[i]);
+        sum += GetWord16(i);
     
     // 4) Carry as needed
     while (0 != (sum >> 16))

@@ -53,6 +53,10 @@ static FILE* DebugLog(bool set = false, FILE* value = stderr)
     return debug_log;
 }  // end DebugLog()
 
+FILE* GetDebugLog()
+{
+    return DebugLog();
+}  // end GetDebugLog()
 
 // TBD - "wrap" these assert options and "debug_pipe" in the same way
 static ProtoAssertFunction* assert_function = NULL;
@@ -69,12 +73,12 @@ void SetDebugLevel(unsigned int level)
     FILE* debugLog = DebugLog();
     if (0 != level)
     {
-        if (!debugLevel && ((stderr == debugLog) || (stdout == debugLog))) 
+        if ((0 == debugLevel) && ((stderr == debugLog) || (stdout == debugLog))) 
             OpenDebugWindow();
     }
     else
     {
-        if (debugLevel && ((stderr == debugLog) || (debugLog == stdout))) 
+        if ((0 != debugLevel) && ((stderr == debugLog) || (debugLog == stdout))) 
             CloseDebugWindow();
     }
 #endif // WIN32
@@ -741,22 +745,22 @@ void OpenDebugWindow()
 		// redirect unbuffered STDIN to the console
 		hStd = GetStdHandle(STD_INPUT_HANDLE);
 		fdStd = _open_osfhandle((intptr_t)hStd, _O_TEXT);
-		_dup2(fdStd, fileno(stdin));
-		SetStdHandle(STD_INPUT_HANDLE, (HANDLE)_get_osfhandle(fileno(stdin)));
+		_dup2(fdStd, _fileno(stdin));
+		SetStdHandle(STD_INPUT_HANDLE, (HANDLE)_get_osfhandle(_fileno(stdin)));
 		_close(fdStd);
 
 		// redirect unbuffered STDOUT to the console
 		hStd = GetStdHandle(STD_OUTPUT_HANDLE);
 		fdStd = _open_osfhandle((intptr_t)hStd, _O_TEXT);
-		_dup2(fdStd, fileno(stdout));
-		SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(fileno(stdout)));
+		_dup2(fdStd, _fileno(stdout));
+		SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(_fileno(stdout)));
 		_close(fdStd);
 
 		// redirect unbuffered STDERR to the console
 		hStd = GetStdHandle(STD_ERROR_HANDLE);
 		fdStd = _open_osfhandle((intptr_t)hStd, _O_TEXT);
-		_dup2(fdStd, fileno(stderr));
-		SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(fileno(stderr)));
+		_dup2(fdStd, _fileno(stderr));
+		SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(_fileno(stderr)));
 		_close(fdStd);
 
 		// Set Con Attributes
@@ -846,15 +850,18 @@ void PopupDebugWindow()
 
 void CloseDebugWindow()
 {
-    if (console_reference_count > 0) console_reference_count--;
-    if (0 == console_reference_count) 
-    {
+	if (console_reference_count > 0)
+	{
+		console_reference_count--;
+		if (0 == console_reference_count)
+		{
 #ifdef _WIN32_WCE
-        debug_window.Destroy();
+			debug_window.Destroy();
 #else
-        FreeConsole();
+			FreeConsole();
 #endif // if/else _WIN32_CE
-    }
+		}
+	}
 }
 #endif // WIN32
 
