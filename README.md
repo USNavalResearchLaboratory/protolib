@@ -1,5 +1,7 @@
        Protean Protocol Prototyping Library (PROTOLIB)
 
+![CMake build](https://github.com/USNavalResearchLaboratory/protolib/workflows/CMake%20build/badge.svg)
+
 OVERVIEW
  
 Protolib is not so much a library as it is a toolkit.  The goal of the Protolib
