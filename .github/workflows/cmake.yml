@@ -1,4 +1,4 @@
-name: CMake Build Matrix
+name: CMake build
 
 on: [push, pull_request]
 
