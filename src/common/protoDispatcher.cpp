@@ -2709,7 +2709,7 @@ LRESULT CALLBACK ProtoDispatcher::MessageHandler(HWND hwnd, UINT message, WPARAM
         {
             CREATESTRUCT *info = (CREATESTRUCT *) lParam;
             ProtoDispatcher* dp = (ProtoDispatcher*)info->lpCreateParams;
-            SetWindowLongPtr(hwnd, GWLP_USERDATA, (DWORD)dp);
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)dp);
             return 0;
         }    
         case WM_DESTROY:

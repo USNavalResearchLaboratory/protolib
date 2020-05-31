@@ -387,7 +387,7 @@ LRESULT CALLBACK ProtoDebugWindow::MessageHandler(HWND hwnd, UINT message, WPARA
         {
             CREATESTRUCT *info = (CREATESTRUCT*)lParam;
             ProtoDebugWindow* dbg = (ProtoDebugWindow*)info->lpCreateParams;
-            SetWindowLongPtr(hwnd, GWLP_USERDATA, (DWORD)dbg);
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)dbg);
             RECT rect;
             GetClientRect(hwnd, &rect);
             SetScrollRange(hwnd, SB_VERT, 0, 0, FALSE);
