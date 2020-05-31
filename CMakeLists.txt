@@ -1,14 +1,15 @@
 cmake_minimum_required(VERSION 3.1)
 
 # set the project name
-project(protolib)
+project(protokit)
 
 set(COMMON src/common)
 
-option(BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
-option(BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
-option(BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
-option(ENABLE_WX "Enables building with WX Widgets" OFF)
+option(PROTOKIT_BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
+option(PROTOKIT_BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMENTED**." OFF)
+option(PROTOKIT_BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
+option(PROTOKIT_ENABLE_DEBUG "Include debugging messages/logging **NOT IMPLEMENTED**." OFF)
+option(PROTOKIT_ENABLE_WX "Enables building with WX Widgets" OFF)
 
 # Availability checks
 include(CheckCXXSymbolExists)
@@ -19,7 +20,7 @@ include(CheckLibraryExists)
 
 check_include_files( pcap.h HAVE_PCAP_H)
 if(HAVE_PCAP_H)
-	list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
+	#list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
 endif()
 
 check_include_files( sys/timerfd.h HAVE_TIMERFD_H) #USE
@@ -78,12 +79,12 @@ find_package(Threads REQUIRED)
 find_package(LibXml2)
 if(LibXml2_FOUND)
 	include_directories(${LIBXML2_INCLUDE_DIR})
-	list(APPEND PLATFORM_LIBS libxml2)
+	list(APPEND PLATFORM_LIBS ${LIBXML2_LIBRARIES})
 	list(APPEND PUBLIC_HEADER_FILES include/protoXml.h)
 	list(APPEND COMMON_SOURCE_FILES ${COMMON}/protoXml.cpp)
 endif()
 
-if(ENABLE_WX)
+if(PROTOKIT_ENABLE_WX)
         find_package(wxWidgets REQUIRED COMPONENTS core base)
 	if(wxWidgets_FOUND)
 		include(${wxWidgets_USE_FILE})
@@ -167,6 +168,7 @@ list(APPEND COMMON_SOURCE_FILES
           ${COMMON}/protoPkt.cpp 
 		  ${COMMON}/protoPktARP.cpp 
 		  ${COMMON}/protoPktETH.cpp 
+		  ${COMMON}/protoPktIGMP.cpp 
 		  ${COMMON}/protoPktIP.cpp 
 		  ${COMMON}/protoPktRTP.cpp 
 		  ${COMMON}/protoQueue.cpp 
@@ -202,9 +204,9 @@ elseif(UNIX)
 		list(APPEND PLATFORM_DEFINITIONS LINUX )
 		list(APPEND PLATFORM_LIBS dl rt)
 		list(APPEND PLATFORM_SOURCE_FILES 	src/linux/linuxCap.cpp 
-										src/linux/linuxNet.cpp 
-										src/linux/linuxRouteMgr.cpp
-										src/unix/zebraRouteMgr.cpp)
+										    src/linux/linuxNet.cpp 
+										    src/linux/linuxRouteMgr.cpp
+										    src/unix/zebraRouteMgr.cpp)
 		
 		check_library_exists(netfilter_queue pktb_alloc "" HAVE_NETFILTER_QUEUE)
 		if(HAVE_NETFILTER_QUEUE)
@@ -218,10 +220,10 @@ elseif(UNIX)
 											src/bsd/bsdRouteMgr.cpp
 											src/bsd/bsdNet.cpp
 											src/unix/bpfCap.cpp)
-        SET(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
-        SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
-        SET(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
-        SET(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+            SET(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
+            SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
+            SET(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+            SET(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
 	endif()
 endif()
 
@@ -229,6 +231,7 @@ include(GNUInstallDirs)
 
 # Setup target
 add_library(protokit ${PLATFORM_SOURCE_FILES} ${COMMON_SOURCE_FILES} ${PUBLIC_HEADER_FILES})
+add_library(protokit::protokit ALIAS protokit)
 target_link_libraries(protokit PRIVATE ${PLATFORM_LIBS})
 target_compile_definitions(protokit PUBLIC ${PLATFORM_DEFINITIONS})
 target_compile_options(protokit PUBLIC ${PLATFORM_FLAGS})
@@ -236,21 +239,27 @@ target_include_directories(protokit PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(protokit PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 
 # Install target
-install( TARGETS protokit EXPORT protolibTargets
-		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+install( TARGETS protokit EXPORT protokitTargets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} )
 
-install( EXPORT protolibTargets
-	FILE protolibTargets.cmake
-	NAMESPACE protolib::
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protolib
+install( EXPORT protokitTargets
+	FILE protokitConfig.cmake
+	NAMESPACE protokit::
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protokit
 )
 
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/protolib)
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-if(BUILD_EXAMPLES)
+export(EXPORT protokitTargets
+    FILE ${CMAKE_CURRENT_BINARY_DIR}/protokitTargets.cmake
+	NAMESPACE protokit::)
+	
+export(PACKAGE protokit)
+
+if(PROTOKIT_BUILD_EXAMPLES)
 	# Setup examples
 	list(APPEND examples 
 	base64Example
@@ -281,7 +290,8 @@ if(BUILD_EXAMPLES)
 
 	foreach(example ${examples})
 		add_executable(${example} examples/${example}.cpp)
-		target_link_libraries(${example} PRIVATE protolib)
+		target_link_libraries(${example} PRIVATE protokit)
+		include_directories(${CMAKE_SOURCE_DIR}/include)
 	endforeach()
 endif()
 

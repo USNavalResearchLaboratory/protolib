@@ -53,6 +53,10 @@ static FILE* DebugLog(bool set = false, FILE* value = stderr)
     return debug_log;
 }  // end DebugLog()
 
+FILE* GetDebugLog()
+{
+    return DebugLog();
+}  // end GetDebugLog()
 
 // TBD - "wrap" these assert options and "debug_pipe" in the same way
 static ProtoAssertFunction* assert_function = NULL;

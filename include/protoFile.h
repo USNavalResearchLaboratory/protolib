@@ -150,7 +150,7 @@ class ProtoFile : public ProtoChannel
         };  // end class ProtoFile::Path
         
         private:
-        class Directory;  // forward declaration for the DirectoryIterator
+            class Directory;  // forward declaration for the DirectoryIterator
     
     public:
         class DirectoryIterator

@@ -603,7 +603,6 @@ ProtoFile::Offset ProtoFile::GetSize() const
 ProtoFile::DirectoryIterator::DirectoryIterator()
     : current(NULL)
 {
-
 }
 
 ProtoFile::DirectoryIterator::~DirectoryIterator()
@@ -614,14 +613,34 @@ ProtoFile::DirectoryIterator::~DirectoryIterator()
 bool ProtoFile::DirectoryIterator::Open(const char *thePath)
 {
     if (NULL != current) Close();
+    if (NULL == thePath)
+    {
+        PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() error: NULL path?!\n");
+        return false;
+    }
+    
+    if (NORMAL == GetType(thePath))
+    {
+        // This is a non-directory file path so create a "Directory" item 
+        // to cache the path
+        if (NULL == (current = new Directory(thePath)))
+        {
+            PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() new Directory error: %s\n", GetErrorString());
+            return false;
+        }
+        current->dptr = NULL;
+        path_len = (int)strlen(current->Path());
+        path_len = MIN(PATH_MAX, path_len);
+        return true;
+    }
 #ifdef WIN32
 #ifdef _WIN32_WCE
-    if (thePath && !ProtoFile::Exists(thePath))
+    if (!ProtoFile::Exists(thePath))
 #else
-    if (thePath && _access(thePath, 0))
+    if (_access(thePath, 0))
 #endif // if/else _WIN32_WCE
 #else
-    if (thePath && access(thePath, X_OK))
+    if (access(thePath, X_OK))
 #endif // if/else WIN32
     {
         PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() error: can't access directory: %s\n", thePath);
@@ -800,6 +819,19 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
 {   
     //TRACE("enter ProtoFile::DirectoryIterator::GetNextPath() current:%p files:%d dirs:%d ...\n", current, includeFiles, includeDirs);
     if (NULL == current) return false;
+    if (NULL == current->dptr)
+    {
+        bool result = includeFiles;
+        if (result)
+        {
+            strncpy(fileName, current->path, PATH_MAX);
+            size_t len = strlen(fileName);
+            if (PROTO_PATH_DELIMITER == fileName[len-1])
+                fileName[len-1] = '\0';
+        }
+        current = NULL;
+        return result;
+    }
     struct dirent *dp;
     while (NULL != (dp = readdir(current->dptr)))
     {
