@@ -628,7 +628,11 @@ bool ProtoFile::DirectoryIterator::Open(const char *thePath)
             PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() new Directory error: %s\n", GetErrorString());
             return false;
         }
+#ifdef WIN32
+        current->hSearch = INVALID_HANDLE_VALUE;
+#else
         current->dptr = NULL;
+#endif  // if/else WIN32
         path_len = (int)strlen(current->Path());
         path_len = MIN(PATH_MAX, path_len);
         return true;
@@ -693,11 +697,25 @@ bool ProtoFile::DirectoryIterator::GetPath(char* pathBuffer) const
 bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles, bool includeDirs)
 {
 	if (!current) return false;
+    if (INVALID_HANDLE_VALUE == current->hSearch)
+    {
+        bool result = includeFiles;
+        if (result)
+        {
+            strncpy(fileName, current->path, PATH_MAX);
+            size_t len = strlen(fileName);
+            if (PROTO_PATH_DELIMITER == fileName[len - 1])
+                fileName[len - 1] = '\0';
+        }
+        current = NULL;
+        return result;
+    }
+
 	bool success = true;
 	while(success)
 	{
 		WIN32_FIND_DATA findData;
-		if (current->hSearch == (HANDLE)-1)
+		if (current->hSearch == INVALID_HANDLE_VALUE)
 		{
 			// Construct search string
 			current->GetFullName(fileName);
@@ -705,10 +723,10 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
 #ifdef _UNICODE
             wchar_t wideBuffer[MAX_PATH];
             mbstowcs(wideBuffer, fileName, MAX_PATH);
-            if ((HANDLE)-1 == 
+            if (INVALID_HANDLE_VALUE ==
 			    (current->hSearch = FindFirstFile(wideBuffer, &findData)))
 #else
-			if ((HANDLE)-1 == 
+			if (INVALID_HANDLE_VALUE ==
 			    (current->hSearch = FindFirstFile(fileName, &findData)))
 #endif // if/else _UNICODE
 			    success = false;
@@ -915,7 +933,7 @@ ProtoFile::Directory::Directory(const char* thePath,
                                 Directory*  theParent)
     : parent(theParent),
 #ifdef WIN32
-    hSearch((HANDLE)-1)
+    hSearch(INVALID_HANDLE_VALUE)
 #else
     dptr(NULL)
 #endif // if/else WIN32 
@@ -983,10 +1001,10 @@ bool ProtoFile::Directory::Open()
 void ProtoFile::Directory::Close()
 {
 #ifdef WIN32
-    if (hSearch != (HANDLE)-1) 
+    if (hSearch != INVALID_HANDLE_VALUE)
 	{
 		FindClose(hSearch);
-		hSearch = (HANDLE)-1;
+		hSearch = INVALID_HANDLE_VALUE;
 	}
 #else
     if (NULL != dptr)

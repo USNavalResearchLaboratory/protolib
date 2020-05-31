@@ -20,6 +20,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DE94F096-A09B-44B6-8EFE-C7BF1F65C4C9}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -216,6 +217,7 @@
     <ClCompile Include="..\..\src\common\protoDebug.cpp" />
     <ClCompile Include="..\..\src\common\protoDispatcher.cpp" />
     <ClCompile Include="..\..\src\common\protoEvent.cpp" />
+    <ClCompile Include="..\..\src\common\protoFile.cpp" />
     <ClCompile Include="..\..\src\common\protoGraph.cpp" />
     <ClCompile Include="..\..\src\common\protoLFSR.cpp" />
     <ClCompile Include="..\..\src\common\protoList.cpp" />
@@ -243,7 +245,6 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\manetGraph.h" />
     <ClInclude Include="..\..\include\manetMsg.h" />
-    <ClInclude Include="..\..\include\ns3ProtoSimAgent.h" />
     <ClInclude Include="..\..\include\protoAddress.h" />
     <ClInclude Include="..\..\include\protoApp.h" />
     <ClInclude Include="..\..\include\protoBitmask.h" />

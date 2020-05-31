@@ -284,14 +284,12 @@ DWORD ProtoDebugWindow::Run()
     cl.hbrBackground = NULL;
     cl.lpszMenuName = NULL;
 
-    const LPCTSTR myName = _T("ProtoDebugWindow"); // default name
+    
     TCHAR moduleName[256];
     DWORD nameLen = GetModuleFileName(GetModuleHandle(NULL), moduleName, 256);
     if (0 != nameLen)
-    {
-        _tcsncat(moduleName, _T(" Debug"), 256 - nameLen);
-        myName = moduleName;
-    }
+		_tcsncat(moduleName, _T(" Debug"), 256 - nameLen);
+	const LPCTSTR myName = (0 != nameLen) ? moduleName : _T("ProtoDebugWindow"); // default name
 
     cl.lpszClassName = myName;
 
