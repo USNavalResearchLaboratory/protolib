@@ -2389,8 +2389,6 @@ bool ProtoSocket::SetUnicastTTL(unsigned char ttl)
 
 bool ProtoSocket::SetTOS(UINT8 theTOS)
 { 
-    TRACE("enter ProtoSocket::SetTOS() ...\n");
-    
     if (!IsOpen())
     {
         tos = theTOS;

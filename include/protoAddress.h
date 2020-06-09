@@ -355,7 +355,8 @@ class ProtoAddressList
         ProtoTree           addr_tree;
 };  // end class ProtoAddressList
 
-extern const ProtoAddress PROTO_ADDR_NONE;  // invalid ProtoAddress (useful as a default)
+extern const ProtoAddress PROTO_ADDR_NONE;      // invalid ProtoAddress (useful as a default)
+extern const ProtoAddress PROTO_ADDR_BROADCAST; // Ethernet broadcast address
 
 #endif // _PROTO_ADDRESS
 

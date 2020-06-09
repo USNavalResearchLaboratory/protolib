@@ -34,6 +34,8 @@
 
 const ProtoAddress PROTO_ADDR_NONE;
 
+const ProtoAddress PROTO_ADDR_BROADCAST("ff:ff:ff:ff:ff:ff");
+
 ProtoAddress::ProtoAddress()
  : type(INVALID), length(0)
 {
@@ -44,7 +46,6 @@ ProtoAddress::ProtoAddress(const ProtoAddress& theAddr)
 {
     *this = theAddr;
 }
-
 
 ProtoAddress::ProtoAddress(const char* theAddr)
 {

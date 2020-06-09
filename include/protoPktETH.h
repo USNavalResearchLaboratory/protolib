@@ -78,7 +78,7 @@ class ProtoPktETH : public ProtoPkt
         enum 
         {
             ADDR_LEN = 6
-        };  
+        }; 
         
         bool InitFromBuffer(unsigned int    frameLength,
                             void*           bufferPtr = NULL,
