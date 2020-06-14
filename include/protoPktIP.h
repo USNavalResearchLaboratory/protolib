@@ -42,6 +42,8 @@ class ProtoPktIP : public ProtoPkt
             {return ((ProtoPkt::GetLength() > OFFSET_VERSION) ? 
                         (GetUINT8(OFFSET_VERSION) >> 4) : 0);}
         
+        unsigned int GetHeaderLength();
+        
         void SetVersion(UINT8 version)
         {
             UINT8& byte = AccessUINT8(OFFSET_VERSION);
@@ -412,6 +414,9 @@ class ProtoPktUMP : public ProtoPktIPv4::Option
         }
         ~ProtoPktUMP() {}
         
+        static unsigned int GetOptionLength()
+            {return 8;}
+        
         // Use these to build an option
         bool InitIntoBuffer(void*        bufferPtr = NULL, 
                             unsigned int numBytes = 0, 
@@ -741,6 +746,8 @@ class ProtoPktIPv6 : public ProtoPktIP
            trafficClass |= (*ptr & 0xf0) >> 4;
            return trafficClass;
         }
+        static unsigned int GetHeaderLength()
+            {return BASE_HDR_LENGTH;}
         UINT32 GetFlowLabel() const
             {return (GetWord32(OFFSET_LABEL) & 0x03ff);}
         Protocol GetNextHeader() const
@@ -770,15 +777,15 @@ class ProtoPktIPv6 : public ProtoPktIP
     private:
         enum
         {
-            OFFSET_CLASS_MSN    = OFFSET_VERSION,     // 1/2 byte traffic class, most sig nybble
-            OFFSET_CLASS_LSN    = OFFSET_CLASS_MSN+1, // 1/2 byte traffic class, least sig nybble
-            OFFSET_LABEL        = OFFSET_CLASS_LSN/4, // 24-bit flow label at word offset 0
-            OFFSET_LENGTH       = (OFFSET_LABEL+1)*2, // 2 payload length bytes
-            OFFSET_NEXT_HDR     = (OFFSET_LENGTH+1)*2, // 1 byte next header type
-            OFFSET_HOP_LIMIT    = OFFSET_NEXT_HDR+1,   // 1 byte hop limit value
-            OFFSET_SRC_ADDR     = (OFFSET_HOP_LIMIT+1)/4,  // 16 bytes of IPv6 address
-            OFFSET_DST_ADDR     = OFFSET_SRC_ADDR+4,
-            BASE_HDR_LENGTH     = (OFFSET_DST_ADDR+4)*4   // 40 bytes
+            OFFSET_CLASS_MSN    = OFFSET_VERSION,        // 1/2 byte traffic class, most sig nybble             
+            OFFSET_CLASS_LSN    = OFFSET_CLASS_MSN+1,    // 1/2 byte traffic class, least sig nybble            
+            OFFSET_LABEL        = OFFSET_CLASS_LSN/4,    // 24-bit flow label at word offset 0, UINT32 offset   
+            OFFSET_LENGTH       = (OFFSET_LABEL+1)*2,    // 2 payload length bytes, UINT16 offset               
+            OFFSET_NEXT_HDR     = (OFFSET_LENGTH+1)*2,   // 1 byte next header type,  UINT8 offset              
+            OFFSET_HOP_LIMIT    = OFFSET_NEXT_HDR+1,     // 1 byte hop limit value, UINT8 offset                
+            OFFSET_SRC_ADDR     = (OFFSET_HOP_LIMIT+1)/4,// 16 bytes of IPv6 address, UINT32 offset             
+            OFFSET_DST_ADDR     = OFFSET_SRC_ADDR+4,     // 16 bytes of IPv6 address, UINT32 offset                                       
+            BASE_HDR_LENGTH     = (OFFSET_DST_ADDR+4)*4  // 40 bytes total, UINT8 offset                              
         };
             
         Extension   ext_temp;
@@ -1154,6 +1161,8 @@ class ProtoPktUDP : public ProtoPkt
                             unsigned int numBytes   = 0, 
                             bool freeOnDestruct     = false);
         bool InitFromPacket(ProtoPktIP& pkt);
+        static unsigned int GetHeaderLength()
+            {return (OFFSET_PAYLOAD*4);}
         UINT16 GetSrcPort() const
             {return GetWord16(OFFSET_SRC);}
         UINT16 GetDstPort() const
@@ -1197,10 +1206,10 @@ class ProtoPktUDP : public ProtoPkt
     private:
         enum
         {
-            OFFSET_SRC      = 0,                 // source port number (UINT16 offset)
-            OFFSET_DST      = OFFSET_SRC + 1,    // destination port number (UINT16 offset)
-            OFFSET_LENGTH   = OFFSET_DST + 1,    // UDP datagram length (bytes) (UINT16 offset)
-            OFFSET_CHECKSUM = OFFSET_LENGTH + 1,        //  (UINT16 offset)
+            OFFSET_SRC      = 0,                        // source port number (UINT16 offset)
+            OFFSET_DST      = OFFSET_SRC + 1,           // destination port number (UINT16 offset)
+            OFFSET_LENGTH   = OFFSET_DST + 1,           // UDP datagram length (bytes) (UINT16 offset)
+            OFFSET_CHECKSUM = OFFSET_LENGTH + 1,        // (UINT16 offset)
             OFFSET_PAYLOAD  = (OFFSET_CHECKSUM + 1)/2   // (UINT32 offset0
         };
 };  // end class ProtoPktUDP

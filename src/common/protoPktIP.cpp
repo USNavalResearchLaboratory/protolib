@@ -19,6 +19,25 @@ ProtoPktIP::~ProtoPktIP()
 {
 }
 
+unsigned int ProtoPktIP::GetHeaderLength()
+{
+    switch (GetVersion())
+    {
+        case 4:
+        {
+            ProtoPktIPv4 ip4Pkt(*this);
+            return ip4Pkt.GetHeaderLength();
+        }
+        case 6:
+        {
+            // IPv6 has fixed-length header always
+            return ProtoPktIPv6::GetHeaderLength();
+        }
+        default:
+            return 0;
+    }
+}  // end ProtoPktIP::GetHeaderLength()
+
 bool ProtoPktIP::GetDstAddr(ProtoAddress& dst) 
 {   
     switch (GetVersion())

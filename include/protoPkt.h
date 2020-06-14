@@ -86,7 +86,7 @@ class ProtoPkt
         void* AccessBuffer(unsigned int offset)
             {return (char*)buffer_ptr + offset;}
         
-        // These methods get/set fields by byte offsets
+        // These methods get/set fields by _byte_ offsets
         UINT8 GetUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
         UINT8& AccessUINT8(unsigned int byteOffset) const
@@ -103,7 +103,7 @@ class ProtoPkt
         void SetUINT32(unsigned int byteOffset, UINT32 value)
             {SetUINT32(AccessBuffer(byteOffset), value);}
         
-        // These methods get/set fields by word offsets
+        // These methods get/set fields by _word_ offsets
         UINT16 GetWord16(unsigned int wordOffset) const
             {return GetUINT16((UINT16*)buffer_ptr + wordOffset);}
         void SetWord16(unsigned int wordOffset, UINT16 value) 
