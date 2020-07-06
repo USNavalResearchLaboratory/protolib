@@ -55,7 +55,7 @@ class ProtoTime
             {Zeroize();}
 		bool IsValid() const
 		{
-			return ((tval.tv_sec >= 0) || (tval.tv_usec >= 0));
+			return ((tval.tv_sec > 0) || (tval.tv_usec > 0));
 		}       
         
         const struct timeval& GetTimeVal() const
@@ -64,12 +64,9 @@ class ProtoTime
             {return tval;}
         
         void operator+=(const ProtoTime& t);
-        void operator+=(double seconds)
-        {
-            ProtoTime t(seconds);
-            *this += t;
-        }
-        void operator-=(double seconds);
+        void operator+=(double seconds);
+        void operator-=(double seconds)
+            {return operator+=(-seconds);}
         bool operator==(const ProtoTime& t) const
         {
             return ((sec() == t.sec()) &&

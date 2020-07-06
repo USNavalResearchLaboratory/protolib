@@ -46,35 +46,44 @@ void ProtoTime::operator+=(const ProtoTime& t)
     }
 }  // end ProtoTime::operator+=() 
 
-/* (COMMENTED OUT BECAUSE NOT SURE IF CORRECT AND DON'T THINK IT'S USED)
-void ProtoTime::operator-=(double sec)
+void ProtoTime::operator+=(double value)
 {
-    unsigned long secInt = (unsigned long)sec;
-    if ((unsigned long)tval.tv_sec < secInt)
+    if (value >= 0.0)
     {
-        tval.tv_sec = tval.tv_usec = 0;
-    }
-    else if ((unsigned long)tval.tv_sec == secInt)
-    {
-        tval.tv_sec = 0;
-        unsigned long usecInt = (unsigned long)(1.0e+06*(sec - (double)secInt) + 05);
-        if ((unsigned long)tval.tv_usec < usecInt)
-            tval.tv_usec = 0;
-        else
-            tval.tv_usec -= usecInt;
+        time_t sec = (time_t)value;
+        suseconds_t usec = (suseconds_t)(1.0e+06*(value - (double)sec) + 0.5);
+        tval.tv_sec += sec;
+        tval.tv_usec += usec;
+        if (tval.tv_usec  >= 1000000)
+        {
+            tval.tv_sec += 1;
+            tval.tv_usec -= 1000000;
+        }
     }
     else
-    {
-        unsigned long usecInt = (unsigned long)(1.0e+06*(sec - (double)secInt) + 05);
-        if ((unsigned long)tval.tv_usec < usecInt)
+    {   
+        value = -value;
+        time_t sec = (time_t)value;
+        if (tval.tv_sec >= sec)
         {
-            tval.tv_sec--;  // borrow
-            tval.tv_usec += 1000000 - usecInt;
+            tval.tv_sec -= sec;
+            suseconds_t usec = (suseconds_t)(1.0e+06*(value - (double)sec) + 0.5);
+            if (tval.tv_usec >= usec)
+            {
+                tval.tv_usec -= usec;
+                return;
+            }
+            else if (tval.tv_sec > 0)
+            {
+                tval.tv_sec -= 1;
+                tval.tv_usec = usec - tval.tv_usec;
+                return;
+            }
         }
-        tval.tv_sec -= secInt;
+        tval.tv_sec = 0;
+        tval.tv_usec = 0;
     }
-}  // end ProtoTime::operator-=()
-*/
+}  // end ProtoTime::operator+=() 
 
 double ProtoTime::GetOffsetValue() const
 {
