@@ -308,10 +308,8 @@ bool ZmqExample::ProcessCommands(int argc, const char*const* argv)
         {
             case CMD_INVALID:
             {
-#ifndef SIMULATE
                 PLOG(PL_ERROR, "zmqExample::ProcessCommands() Invalid command:%s\n", 
                         argv[i]);
-#endif // SIMULATE
                 return false;
             }
             case CMD_NOARG:
