@@ -63,7 +63,7 @@ bool ProtoZmq::Socket::Open(int socketType, void* zmqSocket, void* zmqContext)
 	output_ready = true;
 #endif  // WIN32
     state = IDLE;
-    return true;
+    return UpdateNotification();
     
 }  // emd ProtoZmq::Socket::Open()
 
@@ -107,6 +107,7 @@ bool ProtoZmq::Socket::Bind(const char* endpoint)
         return false;
     }
     state = CONNECTED;  // ZMQ sockets are immediately "connected" since ZMQ state routines will be used
+    RetrieveDescriptor();  // just in case
     return UpdateNotification();
 }  // end ProtoZmq::Socket::Bind()
 
@@ -123,6 +124,7 @@ bool ProtoZmq::Socket::Connect(const char* endpoint)
         return false;
     }
     state = CONNECTED;  // ZMQ sockets are immediately "connected" since ZMQ state routines will be used
+    RetrieveDescriptor();  // just in case
     return UpdateNotification();
 }  // end ProtoZmq::Socket::Connect()
 
