@@ -340,7 +340,6 @@ graphXMLExample:    $(GRAPHXML_OBJ) libprotokit.a
 GR_SRC = $(EXAMPLES)/graphRider.cpp $(MANET)/manetGraph.cpp  \
           $(COMMON)/protoGraph.cpp $(COMMON)/protoSpace.cpp
 GR_OBJ = $(GR_SRC:.cpp=.o)
-
 gr:    $(GR_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(GR_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin
@@ -348,7 +347,6 @@ gr:    $(GR_OBJ) libprotokit.a
                 
 MSG_SRC = $(EXAMPLES)/msgExample.cpp $(EXAMPLES)/testFuncs.cpp $(MANET)/manetMsg.cpp 
 MSG_OBJ = $(MSG_SRC:.cpp=.o)
-
 msgExample:    $(MSG_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(MSG_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin
@@ -357,7 +355,6 @@ msgExample:    $(MSG_OBJ) libprotokit.a
     
 FILE_SRC = $(EXAMPLES)/fileTest.cpp
 FILE_OBJ = $(FILE_SRC:.cpp=.o)
-
 fileTest:    $(FILE_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(FILE_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin
@@ -365,15 +362,20 @@ fileTest:    $(FILE_OBJ) libprotokit.a
     
 JSON_SRC = $(EXAMPLES)/jsonExample.cpp 
 JSON_OBJ = $(JSON_SRC:.cpp=.o)
-
 jsonExample:    $(JSON_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(JSON_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
 
+ZMQ_SRC = $(EXAMPLES)/zmqExample.cpp $(COMMON)/protoZMQ.cpp 
+ZMQ_OBJ = $(ZMQ_SRC:.cpp=.o)
+zmqExample:    $(ZMQ_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(ZMQ_SRC) $(LDFLAGS) $(LIBS) libprotokit.a -lzmq
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
 STREE_SRC = $(EXAMPLES)/sortedTreeExample.cpp
 STREE_OBJ = $(STREE_SRC:.cpp=.o)
-
 stree:    $(STREE_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(STREE_SRC) $(LDFLAGS) $(LIBS) libprotokit.a
 	mkdir -p ../bin

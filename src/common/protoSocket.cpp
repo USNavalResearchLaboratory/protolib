@@ -430,7 +430,7 @@ bool ProtoSocket::Open(UINT16               thePort,
     if (INVALID_HANDLE == handle)
     {
         PLOG(PL_ERROR, "ProtoSocket::Open() WSASocket() error: %s\n", GetErrorString());
-	ProtoAddress::Win32Cleanup();	
+	    ProtoAddress::Win32Cleanup();	
         return false;
     }
     if (NULL == (input_event_handle = WSACreateEvent()))
@@ -606,8 +606,19 @@ bool ProtoSocket::UpdateNotification()
                             break;  
                     }  // end switch(state)
                     break; 
+                case ZMQ:
+                    switch (state)
+                    {
+                        case CONNECTED:
+                            if (notify_input)
+                                notifyFlags = NOTIFY_INPUT;
+                            break;
+                        default:
+                            break;        
+                    }
+                    break;
 	            default:
-                    PLOG(PL_ERROR,"ProtoSocket::UpdateNotification Error: Unsupported protocol.\n");
+                    PLOG(PL_ERROR,"ProtoSocket::UpdateNotification Error: Unsupported protocol: %d.\n", protocol);
 	                break;
             }  // end switch(protocol)
         }  // end if(listener)
@@ -721,6 +732,7 @@ void ProtoSocket::OnNotify(NotifyFlag theFlag)
     ASSERT(INVALID_EVENT != event);
     if (listener) listener->on_event(*this, event);
 }  // end ProtoSocket::OnNotify()
+
 bool ProtoSocket::Bind(UINT16 thePort, const ProtoAddress* localAddress)
 {
     if (IsBound()) Close();
@@ -923,12 +935,12 @@ void ProtoSocket::Close()
 #ifdef WIN32
             if (SOCKET_ERROR == closesocket(handle))
                 PLOG(PL_WARN, "ProtoSocket::Close() warning: closesocket() error: %s\n", GetErrorString());
-	    ProtoAddress::Win32Cleanup();
+	        ProtoAddress::Win32Cleanup();
             input_ready = output_ready = false;  
 #else
             close(handle);
 #endif // if/else WIN32/UNIX
-	    handle = INVALID_HANDLE;
+	        handle = INVALID_HANDLE;
         }
         port = -1;
     }

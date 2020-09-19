@@ -55,7 +55,7 @@ class ProtoSocket : public ProtoNotify
 				,SIM
 #endif // SIMULATE
 		};
-		enum Protocol {INVALID_PROTOCOL, UDP, TCP, RAW};  
+		enum Protocol {INVALID_PROTOCOL, UDP, TCP, RAW, ZMQ};  
 		enum State {CLOSED, IDLE, CONNECTING, LISTENING, CONNECTED}; 
 
 		enum EcnStatus
