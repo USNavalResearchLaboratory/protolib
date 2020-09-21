@@ -67,7 +67,9 @@ class ProtoEvent : ProtoNotify
             return result ? (doUpdate ? UpdateNotification() : true) : false;
         }
         void OnNotify();
-        bool HasListener() 
+        bool HasNotifier() const
+            {return (NULL != notifier);}
+        bool HasListener() const
             {return (NULL != listener);}
         bool UpdateNotification();
     

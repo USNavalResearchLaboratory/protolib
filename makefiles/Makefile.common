@@ -367,7 +367,7 @@ jsonExample:    $(JSON_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
 
-ZMQ_SRC = $(EXAMPLES)/zmqExample.cpp $(COMMON)/protoZMQ.cpp 
+ZMQ_SRC = $(EXAMPLES)/zmqExample.cpp $(COMMON)/protoZMQ.cpp $(COMMON)/protoThread.cpp
 ZMQ_OBJ = $(ZMQ_SRC:.cpp=.o)
 zmqExample:    $(ZMQ_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(ZMQ_SRC) $(LDFLAGS) $(LIBS) libprotokit.a -lzmq

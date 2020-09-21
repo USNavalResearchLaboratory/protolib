@@ -32,14 +32,11 @@ class ZmqExample : public ProtoApp
         void Usage();
         
         bool OnTxTimeout(ProtoTimer& theTimer);
-        void OnPubEvent(ProtoSocket&       theSocket, 
-                       ProtoSocket::Event theEvent);
-        void OnSubEvent(ProtoSocket&       theSocket, 
-                       ProtoSocket::Event theEvent);
+        void OnSocketEvent(ProtoEvent& theEvent);
         
         ProtoTimer          tx_timer;
-        ProtoZmq::Socket    sub_socket;
-        ProtoZmq::Socket    pub_socket;
+        ProtoZmq::Socket    zmq_socket;
+        //int                 socket_type;  // ZMQ_PUB, ZMQ_SUB, ZMQ_RADIO, ZMQ_DISH, etc
         
         char*        msg_buffer;
         unsigned int msg_len;
@@ -60,10 +57,8 @@ ZmqExample::ZmqExample()
     tx_timer.SetListener(this, &ZmqExample::OnTxTimeout);
     tx_timer.SetInterval(1.0);
     tx_timer.SetRepeat(-1);
-    sub_socket.SetNotifier(&GetSocketNotifier());
-    sub_socket.SetListener(this, &ZmqExample::OnSubEvent);
-    pub_socket.SetNotifier(&GetSocketNotifier());
-    pub_socket.SetListener(this, &ZmqExample::OnPubEvent);
+    zmq_socket.SetNotifier(&dispatcher);
+    zmq_socket.SetListener(this, &ZmqExample::OnSocketEvent);
 }
 
 ZmqExample::~ZmqExample()
@@ -72,10 +67,12 @@ ZmqExample::~ZmqExample()
 
 const char* const ZmqExample::CMD_LIST[] =
 {
-    "+publish",     // Publish 'send' messages with given ZMQ transport spec
-    "+subscribe",  // Subscribe with given ZMQ transport spec
+    "+publish",     // Publish 'send' messages using ZMQ_PUB socket
+    "+subscribe",   // Subscribe with ZMQ_SUB socket
+    "+radio",       // Publish 'send' messages with given ZMQ_RADIO socket
+    "+dish",        // Receive with given ZMQ_DISH socket
     "+repeat",     // repeat message multiple times
-    "+send",       // Send UDP packets to destination host/port
+    "+send",       // Send given string as message
     NULL
 };
     
@@ -104,8 +101,8 @@ bool ZmqExample::OnStartup(int argc, const char*const* argv)
 void ZmqExample::OnShutdown()
 {
     if (tx_timer.IsActive()) tx_timer.Deactivate();
-    if (sub_socket.IsOpen()) sub_socket.Close();
-    if (pub_socket.IsOpen()) pub_socket.Close();
+    if (zmq_socket.IsOpen()) zmq_socket.Close();
+    if (zmq_socket.IsOpen()) zmq_socket.Close();
     PLOG(PL_ERROR, "zmqExample: Done.\n");
 }  // end ZmqExample::OnShutdown()
 
@@ -121,37 +118,73 @@ bool ZmqExample::OnCommand(const char* cmd, const char* val)
     }
     else if (!strncmp("publish", cmd, len))
     {
-        if (pub_socket.IsOpen()) pub_socket.Close();
-        if (!pub_socket.Open(ZMQ_PUB))
+        if (zmq_socket.IsOpen()) zmq_socket.Close();
+        if (!zmq_socket.Open(ZMQ_PUB))
         {
-            PLOG(PL_ERROR, "ZmqExample::OnCommand() pub_socket.Open() error\n");
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Open() error\n");
             return false;   
         }        
-        if (!pub_socket.Bind(val))
+        if (!zmq_socket.Bind(val))
         {
-            PLOG(PL_ERROR, "ZmqExample::OnCommand() pub_socket.Bind() error\n");
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Bind() error\n");
             return false;   
         } 
         TRACE("zmqExample: publishing to %s ...\n", val);
     }
     else if (!strncmp("subscribe", cmd, len))
     {
-        if (sub_socket.IsOpen()) sub_socket.Close();
-        if (!sub_socket.Open(ZMQ_SUB))
+        if (zmq_socket.IsOpen()) zmq_socket.Close();
+        if (!zmq_socket.Open(ZMQ_SUB))
         {
-            PLOG(PL_ERROR, "ZmqExample::OnCommand() sub_socket.Open() error\n");
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Open() error\n");
             return false;   
         }        
-        if (!sub_socket.Connect(val))
+        if (!zmq_socket.Connect(val))
         {
-            PLOG(PL_ERROR, "ZmqExample::OnCommand() sub_socket.Connect() error\n");
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Connect() error\n");
             return false;   
         } 
         // subscribe to all messages
-        if (0 != zmq_setsockopt(sub_socket.GetSocket(), ZMQ_SUBSCRIBE, NULL, 0))
+        if (!zmq_socket.Subscribe(NULL))
         {
             PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_setsockopt(ZMQ_SUBSCRIBE) error\n");
+            //return false;   
+        }
+        TRACE("zmqExample: subscribed to %s ...\n", val);
+    }
+    else if (!strncmp("radio", cmd, len))
+    {
+        if (zmq_socket.IsOpen()) zmq_socket.Close();
+        if (!zmq_socket.Open(ZMQ_RADIO))
+        {
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Open() error\n");
             return false;   
+        }        
+        if (!zmq_socket.Connect(val))
+        {
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Bind() error\n");
+            return false;   
+        } 
+        TRACE("zmqExample: publishing to %s ...\n", val);
+    }
+    else if (!strncmp("dish", cmd, len))
+    {
+        if (zmq_socket.IsOpen()) zmq_socket.Close();
+        if (!zmq_socket.Open(ZMQ_DISH))
+        {
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Open() error\n");
+            return false;   
+        }        
+        if (!zmq_socket.Bind(val))
+        {
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_socket.Connect() error\n");
+            return false;   
+        } 
+        // subscribe to all messages
+        if (!zmq_socket.Join(""))  // "" joins "group-less" group
+        {
+            PLOG(PL_ERROR, "ZmqExample::OnCommand() zmq_join() error: %s\n", zmq_strerror(zmq_errno()));
+            return false;  
         }
         TRACE("zmqExample: subscribed to %s ...\n", val);
     }
@@ -162,14 +195,14 @@ bool ZmqExample::OnCommand(const char* cmd, const char* val)
     else if (!strncmp("send", cmd, len))
     {
         if (msg_buffer) delete[] msg_buffer;
-        msg_len = strlen(val) + 1;
-        if (!(msg_buffer = new char[msg_len]))
+        msg_len = strlen(val);
+        if (!(msg_buffer = new char[msg_len + 8]))
         {
             PLOG(PL_ERROR, "zmqExample: new msg_buffer error: %s\n", GetErrorString());
             msg_len = 0;
             return false;   
         }
-        memcpy(msg_buffer, val, msg_len);
+        strcpy(msg_buffer, val);
         msg_index = 0;
         msg_repeat_count = msg_repeat;
         if (tx_timer.IsActive()) tx_timer.Deactivate();
@@ -186,85 +219,53 @@ bool ZmqExample::OnCommand(const char* cmd, const char* val)
     
 bool ZmqExample::OnTxTimeout(ProtoTimer& /*theTimer*/)
 {
-    TRACE("ZmqExample::OnTxTimeout() ...\n");
+    TRACE("zmqExample::OnTxTimeout() ...\n");
+    // Add an index to end of msg_buffer to make it easier to track
+    sprintf(msg_buffer + msg_len, " %u", (unsigned int)msg_index++);
+    unsigned int numBytes = strlen(msg_buffer) + 1;
+    TRACE("sending %u bytes: %s ...\n", numBytes, msg_buffer);
+    zmq_socket.Send(msg_buffer, numBytes);
+    msg_buffer[msg_len] = '\0';
+    msg_index %= 1024;  // limit the index so the string doesn't ever get too long
     return true;
 }  // end ZmqExample::OnSendTimeout()
 
-void ZmqExample::OnSubEvent(ProtoSocket&       theSocket, 
-                            ProtoSocket::Event theEvent)
+void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
 {
-    switch (theEvent)
+    //TRACE("zmqExample: zmq_socket EVENT..\n");
+    int events;
+    size_t len = sizeof(int);
+    // Loop here to receive all available messages
+    do 
     {
-        case ProtoSocket::RECV:
+        if (0 != zmq_getsockopt(zmq_socket.GetSocket(), ZMQ_EVENTS, &events, &len))
         {
-            TRACE("zmqExample: sub_socket EVENT..\n");
-            int events;
-            size_t len = sizeof(int);
-            do 
-            {
-                if (0 != zmq_getsockopt(sub_socket.GetSocket(), ZMQ_EVENTS, &events, &len))
-                {
-                    PLOG(PL_ERROR, "ZmqExample::OnSubEvent() zmq_getsockopt() error: %s\n", GetErrorString());
-                    break;
-                }
-                if (0 != (ZMQ_POLLIN & events))
-                {
-                    TRACE("   ZMQ_POLLIN: ");
-
-
-                    char buffer[2048];
-                    buffer[2047] = '\0';
-                    unsigned int numBytes = 2047;
-                    if (sub_socket.Recv(buffer, numBytes))
-                    {
-                        buffer[numBytes] = '\0';
-                        TRACE("received %u bytes: %s\n", numBytes, buffer);
-                    }
-                    else
-                    {
-                        TRACE("receive error?\n");
-                    }    
-                }
-                if (0 != (ZMQ_POLLOUT & events))
-                    TRACE("   ZMQ_POLLOUT\n");
-            } while (0 != events);
+            PLOG(PL_ERROR, "ZmqExample::OnSubEvent() zmq_getsockopt() error: %s\n", GetErrorString());
             break;
         }
-        default:
-            TRACE("ZmqExample::OnSubEvent(%d) unhandled event type\n", theEvent);
-            break;
-        
-    }  // end switch(theEvent)
-}  // end ZmqExample::OnSubEvent()
-
-void ZmqExample::OnPubEvent(ProtoSocket&       theSocket, 
-                            ProtoSocket::Event theEvent)
-{
-    switch (theEvent)
-    {
-        case ProtoSocket::RECV:
+        if (0 != (ZMQ_POLLIN & events))
         {
-            TRACE("zmqExample: pub_socket EVENT..\n");
-            int events;
-            size_t len = sizeof(int);
-            if (0 != zmq_getsockopt(pub_socket.GetSocket(), ZMQ_EVENTS, &events, &len))
+            char buffer[2048];
+            buffer[2047] = '\0';
+            unsigned int numBytes = 2047;
+            if (zmq_socket.Recv(buffer, numBytes))
             {
-                PLOG(PL_ERROR, "ZmqExample::OnPubEvent() zmq_getsockopt() error: %s\n", GetErrorString());
-                break;
+                buffer[numBytes] = '\0';
+                TRACE("received %u bytes: %s\n", numBytes, buffer);
             }
-            if (0 != (ZMQ_POLLIN & events))
-                TRACE("   ZMQ_POLLIN\n");
-            
-            if (0 != (ZMQ_POLLOUT & events))
-                TRACE("   ZMQ_POLLOUT\n");
-            break;
+            else
+            {
+                TRACE("receive error?\n");
+            }    
         }
-        default:
-            TRACE("ZmqExample::OnPubEvent(%d) unhandled event type\n", theEvent);
-            break;
-        
-    }  // end switch(theEvent)
-}  // end ZmqExample::OnPubEvent()
+
+    } while (0 != (ZMQ_POLLIN & events));        
+    if ((0 != (ZMQ_POLLOUT & zmq_socket.GetPollerFlags())) &&
+        (0 != (ZMQ_POLLOUT & events)))
+    {
+        TRACE("   ZMQ_POLLOUT\n");
+    }
+}  // end ZmqExample::OnSubEvent()
 
 
 ZmqExample::CmdType ZmqExample::GetCmdType(const char* cmd)
