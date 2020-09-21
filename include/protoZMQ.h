@@ -73,6 +73,8 @@ class ProtoZmq
                 bool UsingExternalContext() const
                     {return ext_ctx;}
                 
+                // If a non-NULL pollerThread is used, you should disassociate your sockets from the pollerThread
+                // before deleting it! (The "default" NULL pollerThread takes care of itself)
                 bool SetNotifier(ProtoEvent::Notifier* theNotifier, class PollerThread* pollerThread = NULL);
                 
                 template <class listenerType>
