@@ -52,8 +52,15 @@ class ProtoZmq
                 bool StartOutputNotification();
                 bool StopOutputNotification();
                 
-                int GetPollerFlags() const
-                    {return poller_flags;}
+                int GetPollFlags() const
+                    {return poll_flags;}
+                
+                int GetPollStatus() const
+                    {return poll_status;}
+                bool IsInputReady() const
+                    {return (0 != ((ZMQ_POLLIN & poll_status)));}
+                bool IsOutputReady() const
+                    {return (0 != ((ZMQ_POLLOUT & poll_status)));}
                 
                 void* GetContext()
                     {return zmq_ctx;}
@@ -72,10 +79,13 @@ class ProtoZmq
                 bool SetListener(listenerType* theListener, void(listenerType::*eventHandler)(ProtoEvent&))
                     {return ProtoEvent::SetListener(theListener, eventHandler);}
                 
+            private:
+                friend class PollerThread;
                 void SetEvent()
                     {ProtoEvent::Set();}
-                
-            private:
+                void SetPollStatus(int status)
+                    {poll_status = status;}
+            
                 bool UpdateNotification();
             
                 static PollerThread* default_poller_thread; 
@@ -86,9 +96,10 @@ class ProtoZmq
                 bool                ext_ctx;
                 void*               zmq_sock;
                 bool                ext_sock; // true if zmq_sock was supplied externally
-                int                 poller_flags;
+                int                 poll_flags;
+                int                 poll_status;
                 
-                class PollerThread* poller_thread;
+                PollerThread*       poller_thread;
                 bool                poller_active;
                 
         };  // end ProtoZmq::Socket

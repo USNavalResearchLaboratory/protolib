@@ -216,7 +216,7 @@ bool ZmqExample::OnCommand(const char* cmd, const char* val)
     }
     return true;
 }  // end ZmqExample::OnCommand()
-    
+
 bool ZmqExample::OnTxTimeout(ProtoTimer& /*theTimer*/)
 {
     TRACE("zmqExample::OnTxTimeout() ...\n");
@@ -256,14 +256,17 @@ void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
             else
             {
                 TRACE("receive error?\n");
-            }    
+            }
         }
-
     } while (0 != (ZMQ_POLLIN & events));        
-    if ((0 != (ZMQ_POLLOUT & zmq_socket.GetPollerFlags())) &&
+    if ((0 != (ZMQ_POLLOUT & zmq_socket.GetPollFlags())) &&
         (0 != (ZMQ_POLLOUT & events)))
     {
         TRACE("   ZMQ_POLLOUT\n");
+    }
+    if (0 != (ZMQ_POLLERR & events))
+    {
+        TRACE("   ZMQ_POLLERR\n");
     }
 }  // end ZmqExample::OnSubEvent()
 
@@ -308,11 +311,9 @@ bool ZmqExample::ProcessCommands(int argc, const char*const* argv)
         switch (GetCmdType(argv[i]))
         {
             case CMD_INVALID:
-            {
                 PLOG(PL_ERROR, "zmqExample::ProcessCommands() Invalid command:%s\n", 
                         argv[i]);
                 return false;
-            }
             case CMD_NOARG:
                 if (!OnCommand(argv[i], NULL))
                 {

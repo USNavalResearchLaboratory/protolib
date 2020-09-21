@@ -12,7 +12,7 @@ ProtoZmq::PollerThread* ProtoZmq::Socket::default_poller_thread = NULL;
 ProtoMutex  ProtoZmq::Socket::default_poller_mutex;
 
 ProtoZmq::Socket::Socket()
-  : state(CLOSED), zmq_ctx(NULL), zmq_sock(NULL), poller_flags(ZMQ_POLLIN)
+  : state(CLOSED), zmq_ctx(NULL), zmq_sock(NULL), poll_flags(ZMQ_POLLIN)
 {
 }
 
@@ -60,6 +60,8 @@ bool ProtoZmq::Socket::Open(int socketType, void* zmqSocket, void* zmqContext)
 
 void ProtoZmq::Socket::Close()
 {
+    state = CLOSED;
+    UpdateNotification();
     if (ProtoEvent::IsOpen()) 
         ProtoEvent::Close();
     if (NULL != zmq_sock)
@@ -76,18 +78,18 @@ void ProtoZmq::Socket::Close()
         zmq_ctx = NULL;
         ext_ctx = false;
     }
-    state = CLOSED;
+    
 }  // end ProtoZmq::Socket::Close()
 
 bool ProtoZmq::Socket::StartInputNotification()
 {
-    if (0 == (ZMQ_POLLIN & poller_flags))
+    if (0 == (ZMQ_POLLIN & poll_flags))
     {
-        poller_flags |= ZMQ_POLLIN;
+        poll_flags |= ZMQ_POLLIN;
         if (!UpdateNotification())
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StartInputNotification() error: unable to update notifications\n");
-            poller_flags &= ~ZMQ_POLLIN;
+            poll_flags &= ~ZMQ_POLLIN;
             return false;
         }
     }
@@ -96,13 +98,13 @@ bool ProtoZmq::Socket::StartInputNotification()
 
 bool ProtoZmq::Socket::StopInputNotification()
 {
-    if (0 != (ZMQ_POLLIN & poller_flags))
+    if (0 != (ZMQ_POLLIN & poll_flags))
     {
-        poller_flags &= ~ZMQ_POLLIN;
+        poll_flags &= ~ZMQ_POLLIN;
         if (!UpdateNotification())
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StopInputNotification() error: unable to update notifications\n");
-            poller_flags |= ~ZMQ_POLLIN;
+            poll_flags |= ~ZMQ_POLLIN;
             return false;
         }
     }
@@ -111,13 +113,13 @@ bool ProtoZmq::Socket::StopInputNotification()
 
 bool ProtoZmq::Socket::StartOutputNotification()
 {
-    if (0 == (ZMQ_POLLOUT & poller_flags))
+    if (0 == (ZMQ_POLLOUT & poll_flags))
     {
-        poller_flags |= ZMQ_POLLOUT;
+        poll_flags |= ZMQ_POLLOUT;
         if (!UpdateNotification())
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StartOutputNotification() error: unable to update notifications\n");
-            poller_flags &= ~ZMQ_POLLOUT;
+            poll_flags &= ~ZMQ_POLLOUT;
             return false;
         }
     }
@@ -126,13 +128,13 @@ bool ProtoZmq::Socket::StartOutputNotification()
 
 bool ProtoZmq::Socket::StopOutputNotification()
 {
-    if (0 != (ZMQ_POLLOUT & poller_flags))
+    if (0 != (ZMQ_POLLOUT & poll_flags))
     {
-        poller_flags &= ~ZMQ_POLLOUT;
+        poll_flags &= ~ZMQ_POLLOUT;
         if (!UpdateNotification())
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StopOutputNotification() error: unable to update notifications\n");
-            poller_flags |= ~ZMQ_POLLOUT;
+            poll_flags |= ~ZMQ_POLLOUT;
             return false;
         }
     }
@@ -182,6 +184,7 @@ bool ProtoZmq::Socket::SetNotifier(ProtoEvent::Notifier* theNotifier, PollerThre
             poller_thread->RemoveSocket(*this);
             poller_active = false;
         }
+        poller_thread = NULL;
     }
     ProtoEvent::SetNotifier(theNotifier);
     return UpdateNotification();  // will install socket to poller_thread as needed
@@ -196,7 +199,7 @@ bool ProtoZmq::Socket::UpdateNotification()
             ASSERT(NULL != poller_thread); 
             if (poller_active)
             {
-                if (0 != poller_flags)
+                if (0 != poll_flags)
                 {
                     if (!poller_thread->ModSocket(*this))
                     {
@@ -314,6 +317,8 @@ bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
 {
     // TBD - support both blocking and non-blocking operation as well as multi-part messages
     int result = zmq_send(zmq_sock, buffer, numBytes, ZMQ_DONTWAIT);
+    if (poller_active && (0 != (ZMQ_POLLOUT & poll_flags)))
+        UpdateNotification();  // resets poll_flags and PollerThread notification
     if (result < 0)
     {
         switch (zmq_errno())
@@ -339,6 +344,8 @@ bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
 bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
 {
     int result = zmq_recv(zmq_sock, buffer, numBytes, ZMQ_DONTWAIT);
+    if (poller_active && (0 != (ZMQ_POLLIN & poll_flags)))
+        UpdateNotification();  // resets poll_flags and PollerThread notification
     if (result < 0)
     {
         switch (zmq_errno())
@@ -369,7 +376,23 @@ ProtoZmq::PollerThread::PollerThread()
 
 ProtoZmq::PollerThread::~PollerThread()
 {
+    // This code guarantees safe destruction of the default poller thread
+    bool isDefault = (this == ProtoZmq::Socket::default_poller_thread);
+    if (isDefault)
+    {
+        ProtoZmq::Socket::default_poller_mutex.Lock();
+        if (NULL == ProtoZmq::Socket::default_poller_thread)
+        {
+            ProtoZmq::Socket::default_poller_mutex.Unlock();
+            return;  // another thread already cleaned it up.
+        }
+    }
     Close();
+    if (isDefault) 
+    {
+        ProtoZmq::Socket::default_poller_thread = NULL;
+        ProtoZmq::Socket::default_poller_mutex.Unlock();
+    }
 }
 
 bool ProtoZmq::PollerThread::Open(void* zmqContext, bool retainLock)
@@ -462,6 +485,10 @@ void ProtoZmq::PollerThread::Close()
     suspend_mutex.Lock();
     ClosePrivate();
     suspend_mutex.Unlock();
+    if (this == ProtoZmq::Socket::default_poller_thread)
+    {
+        delete ProtoZmq::Socket::default_poller_thread;  // its destructor NULLs default_poller_thread pointer
+    }
 }  // end ProtoZmq::PollerThread::Close()
 
 
@@ -470,9 +497,14 @@ void ProtoZmq::PollerThread::ClosePrivate()
     if (poller_running)
     {
         poller_running = false;
-        Signal();  // sends message to break out of zmq_poller->poll()
-        StopThread();   // sets exit_code and closes thread operation
-        signal_mutex.Unlock();
+        if (Signal()) // sends message to break out of zmq_poller->poll()
+        {
+            suspend_mutex.Unlock();  // allows thread to exit
+            StopThread();   // sets exit_code and closes thread operation
+            suspend_mutex.Lock();
+            signal_mutex.Unlock();
+        }
+        // else someone else already stopped it
     }
     // TBD - remove all sockets from poller
     
@@ -508,6 +540,7 @@ int ProtoZmq::PollerThread::RunThread()
         signal_mutex.Unlock();
         // <-- this is where a the loop waits after PollerThread::Signal() is called
         suspend_mutex.Lock();
+        if (!poller_running) break;
         if (result < 0)
         {
             switch (zmq_errno())
@@ -547,6 +580,11 @@ int ProtoZmq::PollerThread::RunThread()
                 continue;
             }
             Socket* zmqSocket = reinterpret_cast<Socket*>(item->user_data);
+            // Filter events so we don't get redundant polling notifications.
+            // (Will be reset by Socket::Recv() and/or Socket::Send() methods when invoked)
+            zmqSocket->SetPollStatus(item->events);
+            int tempFlags = zmqSocket->GetPollFlags() & ~item->events;
+            zmq_poller_modify(zmq_poller, item->socket, tempFlags | ZMQ_POLLERR);
             zmqSocket->SetEvent();
         }   
     } 
@@ -564,7 +602,13 @@ bool ProtoZmq::PollerThread::AddSocket(Socket& zmqSocket)
         return false;
     }
     // At this point, we have an open, running poller thread and we need to signal it and add the socket
-    Signal();
+    if (!Signal())
+    {
+        // Another thread shut the poller down?  (This should happen after the Open(), though)
+        PLOG(PL_ERROR, "ProtoZmq::PollerThread::AddSocket() error: unable to signal thread!\n");
+        suspend_mutex.Unlock();
+        return false;
+    }   
     if (!AddSocketPrivate(zmqSocket))
     {
         PLOG(PL_ERROR, "ProtoZmq::PollerThread::AddSocket() error: unable to add socket to poller!\n");
@@ -581,8 +625,14 @@ bool ProtoZmq::PollerThread::ModSocket(Socket& zmqSocket)
 {
     suspend_mutex.Lock();
     ASSERT (NULL != zmq_poller);
-    Signal();
-    if (-1 == zmq_poller_modify(zmq_poller, zmqSocket.GetSocket(), zmqSocket.GetPollerFlags() | ZMQ_POLLERR))
+    if (!Signal())
+    {
+        // Another thread shut the poller down?
+        PLOG(PL_ERROR, " ProtoZmq::PollerThread::ModSocket() error: unable to signal poller thread!\n");
+        suspend_mutex.Unlock();
+        return false;
+    }
+    if (-1 == zmq_poller_modify(zmq_poller, zmqSocket.GetSocket(), zmqSocket.GetPollFlags() | ZMQ_POLLERR))
     {
         PLOG(PL_ERROR, " ProtoZmq::PollerThread::ModSocket() zmq_poller_modify() error: %s\n", zmq_strerror(zmq_errno()));
         Unsignal();
@@ -610,7 +660,7 @@ bool ProtoZmq::PollerThread::AddSocketPrivate(Socket& zmqSocket)
         event_array = tempArray;                        // point to new array
         event_array_length = length;                    // save new length
     }
-    if (-1 == zmq_poller_add(zmq_poller, zmqSocket.GetSocket(), &zmqSocket, zmqSocket.GetPollerFlags() | ZMQ_POLLERR))
+    if (-1 == zmq_poller_add(zmq_poller, zmqSocket.GetSocket(), &zmqSocket, zmqSocket.GetPollFlags() | ZMQ_POLLERR))
     {
         PLOG(PL_ERROR, " ProtoZmq::PollerThread::AddSocketPrivate() zmq_poller_add() error: %s\n", zmq_strerror(zmq_errno()));
         return false;
@@ -628,7 +678,13 @@ bool ProtoZmq::PollerThread::RemoveSocket(Socket& zmqSocket)
         suspend_mutex.Unlock();
         return true;
     }
-    Signal();
+    if (!Signal())
+    {
+        // Another thread shut the poller down?
+        PLOG(PL_ERROR, " ProtoZmq::PollerThread::ModSocket() error: unable to signal poller thread!\n");
+        suspend_mutex.Unlock();
+        return false;
+    }
     if (-1 == zmq_poller_remove(zmq_poller, zmqSocket.GetSocket()))
     {
         PLOG(PL_ERROR, " ProtoZmq::PollerThread::RemoveSocket() zmq_poller_remove() error: %s\n", zmq_strerror(zmq_errno()));
@@ -646,7 +702,8 @@ bool ProtoZmq::PollerThread::RemoveSocket(Socket& zmqSocket)
 
 bool ProtoZmq::PollerThread::Signal()
 {
-    // suspends thread in known state outside of zmq_poller->poll() call
+    // IMPORTANT - suspend_mutex MUST be locked before callin this!!!
+    // stops thread in known state outside of zmq_poller->poll() call
     if (IsStarted() && !IsMyself())
     {
         char dummy = 0;
@@ -658,11 +715,16 @@ bool ProtoZmq::PollerThread::Signal()
             if (!break_client.Send(&dummy, one))
             {
                 PLOG(PL_ERROR, "ProtoDispatcher::Signal() error: SetBreak() failed!\n");
-                suspend_mutex.Unlock();
                 return false;
             }
         } while (0 == one);
         signal_mutex.Lock();        
+    }
+    if (!poller_running)
+    {
+        // Somebody else closed the poller before we grabbed the signal_mutex
+        signal_mutex.Unlock();   
+        return false;
     }
     return true;
 }  // end ProtoZmq::PollerThread::Signal()
