@@ -236,8 +236,12 @@ void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
     int events;
     size_t len = sizeof(int);
     // Loop here to receive all available messages
+    unsigned int numBytes;
     do 
     {
+        // NOTE: instead of using zmq_getsockopt(), one can safely just call
+        // zmq_socket.Recv() in a loop until it returns 'false' or 0 == numBytes
+        // since Recv() is non-blocking.
         if (0 != zmq_getsockopt(zmq_socket.GetSocket(), ZMQ_EVENTS, &events, &len))
         {
             PLOG(PL_ERROR, "ZmqExample::OnSubEvent() zmq_getsockopt() error: %s\n", GetErrorString());
@@ -247,7 +251,7 @@ void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
         {
             char buffer[2048];
             buffer[2047] = '\0';
-            unsigned int numBytes = 2047;
+            numBytes = 2047;
             if (zmq_socket.Recv(buffer, numBytes))
             {
                 buffer[numBytes] = '\0';
@@ -262,7 +266,7 @@ void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
     if ((0 != (ZMQ_POLLOUT & zmq_socket.GetPollFlags())) &&
         (0 != (ZMQ_POLLOUT & events)))
     {
-        TRACE("   ZMQ_POLLOUT\n");
+        TRACE("   ZMQ_POLLOUT\n");  // only will occur if ProtoZmq::Socket::StartOutputNotification() was called
     }
     if (0 != (ZMQ_POLLERR & events))
     {
