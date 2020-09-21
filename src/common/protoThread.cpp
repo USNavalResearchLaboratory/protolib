@@ -47,8 +47,6 @@ void ProtoMutex::Unlock()
 #endif
 }  // end ProtoMutex::Unlock()
 
-
-
 ProtoThread::ProtoThread()
  : thread_id((ThreadId)NULL), external_thread(false),
    thread_running(false), exit_code(0)

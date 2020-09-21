@@ -7,7 +7,6 @@
 #include <unistd.h>  // for getpid()
 #endif
 
-
 // Static member initializations
 ProtoZmq::PollerThread* ProtoZmq::Socket::default_poller_thread = NULL;
 ProtoMutex  ProtoZmq::Socket::default_poller_mutex;

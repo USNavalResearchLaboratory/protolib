@@ -75,14 +75,13 @@ class ProtoThread
         static void DoThreadExit(ExitStatus exitStatus) 
             {ExitThread(exitStatus);}      
 #else
-    typedef void* ExitStatus;        
-     ExitStatus GetExitStatus()  // pthread uses a _pointer_ to the status value location
-         {return &exit_status;}   
-     static void* DoThreadStart(void* arg);
-     static void DoThreadExit(ExitStatus exitStatus)
-         {pthread_exit(exitStatus);}
-#endif  // if/else WIN32              
-            
+        typedef void* ExitStatus;        
+         ExitStatus GetExitStatus()  // pthread uses a _pointer_ to the status value location
+             {return &exit_status;}   
+         static void* DoThreadStart(void* arg);
+         static void DoThreadExit(ExitStatus exitStatus)
+             {pthread_exit(exitStatus);}
+#endif  // if/else WIN32    
             
         ThreadId    thread_id;
         bool        external_thread;
@@ -91,6 +90,5 @@ class ProtoThread
         int         exit_status;
             
 };  // end class ProtoThread
-
 
 #endif // !_PROTO_THREAD

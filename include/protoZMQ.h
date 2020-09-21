@@ -135,7 +135,6 @@ class ProtoZmq
                 
         }; // end class ProtoZmq::PollerThread
     
-    
 };  // end class ProtoZmq
 
 
