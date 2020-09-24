@@ -368,6 +368,26 @@ bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
     return true;
 }  // end ProtoZmq::Socket::Recv()
 
+bool ProtoZmq::Socket::RecvMsg(zmq_msg_t* zmqMsg)
+{
+    int result = zmq_msg_recv(zmqMsg, zmq_sock, ZMQ_DONTWAIT);
+    if (poller_active && (0 != (ZMQ_POLLIN & poll_flags)))
+        UpdateNotification();  // resets poll_flags and PollerThread notification
+    if (result < 0)
+    {
+        switch (zmq_errno())
+        {
+            case EAGAIN:
+            case EINTR:   // do we need to have a loop here to retry on EINTR?
+                break;
+            default:
+                PLOG(PL_ERROR, "ProtoZmq::Socket::RecvMsg() zmq_recv() error: %s\n", GetErrorString());
+                return false;    
+        }
+    }
+    return true;
+}  // end ProtoZmq::Socket::Recv()
+
 ProtoZmq::PollerThread::PollerThread()
   : zmq_ctx(NULL), ext_ctx(false), zmq_poller(NULL), event_array(NULL), 
     event_array_length(0), socket_count(0)
