@@ -116,7 +116,7 @@ ProtoPkt::SetUINT32Bits(unsigned int byteOffset,unsigned int bitOffset,UINT32 va
         SetUINT16Bits(byteOffset,bitOffset,(UINT16)value,bitLength);
     } else {
         SetUINT16Bits(byteOffset,bitOffset,(UINT16)(value>>(bitLength-16)),16);
-        UINT8 mask = 0xff >> (32-bitLength);
+        UINT16 mask = 0xffff >> (32-bitLength);
         SetUINT16Bits(byteOffset+2,bitOffset,(UINT16)(value) & mask,bitLength-16);
     }
 }
