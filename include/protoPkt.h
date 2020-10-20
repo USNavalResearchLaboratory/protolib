@@ -108,7 +108,7 @@ class ProtoPkt
         UINT32 GetUINT32Bits(unsigned int byteOffset, unsigned int bitOffset, unsigned int bitLength = 32) const;
         void SetUINT32(unsigned int byteOffset, UINT32 value)
             {SetUINT32(AccessBuffer(byteOffset), value);}
-        void SetUINT32Bits(unsigned int byteOffset, unsigned int bitOffset, UINT32 value, unsigned int bitLength);
+        void SetUINT32Bits(unsigned int byteOffset, unsigned int bitOffset, UINT32 value, unsigned int bitLength = 32);
         
         // These methods get/set fields by _word_ offsets
         UINT16 GetWord16(unsigned int wordOffset) const

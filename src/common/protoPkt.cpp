@@ -83,8 +83,8 @@ ProtoPkt::GetUINT16Bits(unsigned int byteOffset, unsigned int bitOffset, unsigne
     if(bitLength<=8){
         return (UINT16)GetUINT8Bits(byteOffset,bitOffset,bitLength);
     } else {
-        return (((UINT16)GetUINT8Bits(byteOffset,bitOffset,8)) << 8) |
-                (((UINT16)GetUINT8Bits(byteOffset+1,bitOffset,bitLength-8)) << (16-bitLength));
+        return (((UINT16)GetUINT8Bits(byteOffset,bitOffset,8)) << (bitLength-8)) |
+                ((UINT16)GetUINT8Bits(byteOffset+1,bitOffset,bitLength-8));
     }
 }
 void
@@ -105,8 +105,8 @@ ProtoPkt::GetUINT32Bits(unsigned int byteOffset, unsigned int bitOffset, unsigne
     {
         return (UINT32)GetUINT16Bits(byteOffset,bitOffset,bitLength);
     } else {
-        return (((UINT32)GetUINT16Bits(byteOffset,bitOffset,16)) << 16) |
-                (((UINT32)GetUINT16Bits(byteOffset+2,bitOffset,bitLength-16)) << (32-bitLength));
+        return (((UINT32)GetUINT16Bits(byteOffset,bitOffset,16)) << (bitLength-16)) |
+                ((UINT32)GetUINT16Bits(byteOffset+2,bitOffset,bitLength-16));
     }
 }
 void
