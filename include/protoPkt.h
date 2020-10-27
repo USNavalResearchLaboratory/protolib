@@ -89,19 +89,26 @@ class ProtoPkt
         // These methods get/set fields by _byte_ offsets
         UINT8 GetUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
+        UINT8 GetUINT8Bits(unsigned int byteOffset, unsigned int bitOffset, unsigned int bitLength = 8) const;
         UINT8& AccessUINT8(unsigned int byteOffset) const
             {return ((UINT8*)buffer_ptr)[byteOffset];}
         void SetUINT8(unsigned int byteOffset, UINT8 value)
-            {((UINT8*)buffer_ptr)[byteOffset] = value;}  
+            {((UINT8*)buffer_ptr)[byteOffset] = value;}
+        void SetUINT8Bits(unsigned int byteOffset, unsigned int bitOffset, UINT8 value, unsigned int bitLength = 8);
         
         UINT16 GetUINT16(unsigned int byteOffset) const
             {return GetUINT16(GetBuffer(byteOffset));}
+        UINT16 GetUINT16Bits(unsigned int byteOffset, unsigned int bitOffset, unsigned int bitLength = 16) const;
         void SetUINT16(unsigned int byteOffset, UINT16 value)
             {SetUINT16(AccessBuffer(byteOffset), value);}
+        void SetUINT16Bits(unsigned int byteOffset, unsigned int bitsOffset, UINT16 value, unsigned int bitLength = 16);
+        
         UINT32 GetUINT32(unsigned int byteOffset) const
             {return GetUINT32(GetBuffer(byteOffset));}
+        UINT32 GetUINT32Bits(unsigned int byteOffset, unsigned int bitOffset, unsigned int bitLength = 32) const;
         void SetUINT32(unsigned int byteOffset, UINT32 value)
             {SetUINT32(AccessBuffer(byteOffset), value);}
+        void SetUINT32Bits(unsigned int byteOffset, unsigned int bitOffset, UINT32 value, unsigned int bitLength = 32);
         
         // These methods get/set fields by _word_ offsets
         UINT16 GetWord16(unsigned int wordOffset) const
