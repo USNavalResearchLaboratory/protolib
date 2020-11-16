@@ -78,7 +78,19 @@ inline void ProtoSystemTime(struct timeval& theTime)
 
 #else  // !SIMULATE
 
-#ifdef WIN32
+#if defined(WIN32) && ((__cplusplus >= 201103L) || (_MSC_VER >= 1900))
+
+#include <chrono>
+inline void ProtoSystemTime(struct timeval& theTime)
+{
+    std::chrono::microseconds epochTime = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+        );
+    theTime.tv_sec = (long)(epochTime.count() / 1000000);
+    theTime.tv_usec = (long)(epochTime.count() % 1000000);
+}
+
+#elif defined(WIN32)
 
 // NOTE: On _some_ WIN32 systems, it _may_ be beneficial to enable
 //       the "USE_PERFORMANCE_COUNTER" macro.  It is done for WinCE
