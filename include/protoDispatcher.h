@@ -93,6 +93,12 @@
 
 #endif // if/else WIN32/UNIX
 
+#ifndef WIN32
+// This solves a conflict with pcap.h 
+#ifdef SOCKET
+#undef SOCKET    
+#endif
+#endif // !WIN32
 
 /**
  * @class ProtoDispatcher

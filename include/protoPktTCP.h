@@ -145,5 +145,4 @@ class ProtoPktTCP : public ProtoPkt
        }
 };  // end class ProtoPktTCP
 
-
 #endif // _PROTO_PKT_TCP

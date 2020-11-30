@@ -9,8 +9,7 @@
 /*
  * @class ZmqExample
  *
- * @brief This example program illustrates/tests the use of the ProtoPipe class
- * for local domain interprocess communications
+ * @brief This example program illustrates/tests the use of the ProtoZmq::Socket class
  */
 class ZmqExample : public ProtoApp
 {
@@ -43,8 +42,7 @@ class ZmqExample : public ProtoApp
         unsigned int msg_index;
         int          msg_repeat;
         int          msg_repeat_count;
-            
-            
+                      
 };  // end class ZmqExample
 
 // Instantiate our application instance 
@@ -228,7 +226,7 @@ bool ZmqExample::OnTxTimeout(ProtoTimer& /*theTimer*/)
     msg_buffer[msg_len] = '\0';
     msg_index %= 1024;  // limit the index so the string doesn't ever get too long
     return true;
-}  // end ZmqExample::OnSendTimeout()
+}  // end ZmqExample::OnTxTimeout()
 
 void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
 {
@@ -272,7 +270,7 @@ void ZmqExample::OnSocketEvent(ProtoEvent& /*theEvent*/)
     {
         TRACE("   ZMQ_POLLERR\n");
     }
-}  // end ZmqExample::OnSubEvent()
+}  // end ZmqExample::OnSocketEvent()
 
 
 ZmqExample::CmdType ZmqExample::GetCmdType(const char* cmd)
