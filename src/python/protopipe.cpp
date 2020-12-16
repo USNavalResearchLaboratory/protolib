@@ -7,6 +7,7 @@
 
 extern "C" {
 
+
     typedef struct {
         PyObject_HEAD
         ProtoPipe *thisptr;
@@ -18,7 +19,7 @@ extern "C" {
             self->thisptr->Close();
 
         delete self->thisptr;
-        self->ob_type->tp_free((PyObject*)self);
+        Py_TYPE(self)->tp_free((PyObject*)self);
     }
 
     static PyObject* Pipe_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
@@ -70,7 +71,12 @@ extern "C" {
     }
 
     static PyObject* Pipe_GetName(Pipe *self) {
-        PyObject *rv = PyString_FromString(self->thisptr->GetName());
+
+#if PY_MAJOR_VERSION >= 3
+        PyObject *rv = PyUnicode_FromString(self->thisptr->GetName()); //Human readable?
+#else
+        PyObject *rv = PyString_FromString(self->thisptr->GetName()); //Human readable?
+#endif
 
         if (rv == NULL)
             PyErr_SetString(ProtoError, "Could not get Pipe name.");
@@ -93,7 +99,7 @@ extern "C" {
         Py_RETURN_NONE;
     }
 
-    static PyObject* Pipe_Listen(Pipe *self, PyObject *args) 
+    static PyObject* Pipe_Listen(Pipe *self, PyObject *args)
     {
         const char *name;
         if (!PyArg_ParseTuple(args, "s", &name))
@@ -109,12 +115,12 @@ extern "C" {
     // Thisc currently only allows a single connection to be accepted
     // TBD - provide option to accept multiple connections
     static PyObject* Pipe_Accept(Pipe *self, PyObject *args) {
-        
+
         if (!self->thisptr->Accept())
         {
-            PyErr_SetString(ProtoError, "ProtoPipe::Accept() error");   
+            PyErr_SetString(ProtoError, "ProtoPipe::Accept() error");
             return NULL;
-        }    
+        }
         //PyErr_SetString(PyExc_NotImplementedError, "");
         //return NULL;
         Py_RETURN_NONE;
@@ -160,7 +166,11 @@ extern "C" {
             return NULL;
         }
 
-        PyObject *rv = PyString_FromStringAndSize(buffer, size);
+#if PY_MAJOR_VERSION >= 3
+        PyObject *rv = PyBytes_FromStringAndSize(buffer, size); //Human readable?
+#else
+        PyObject *rv = PyString_FromStringAndSize(buffer, size); //Human readable?
+#endif
         delete[] buffer;
         return rv;
     }
@@ -192,8 +202,7 @@ extern "C" {
     };
 
     static PyTypeObject PipeType = {
-        PyObject_HEAD_INIT(NULL)
-        0,                         /*ob_size*/
+        PyVarObject_HEAD_INIT(NULL,0) /*ob_size*/
         "protokit.Pipe",           /*tp_name*/
         sizeof(Pipe),              /*tp_basicsize*/
         0,                         /*tp_itemsize*/

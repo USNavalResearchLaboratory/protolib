@@ -22,9 +22,13 @@ system = platform.system().lower()
 
 sys_macros = [('HAVE_ASSERT',None), ('HAVE_IPV6',None), ('PROTO_DEBUG', None)]
 sys_libs = ['protokit']
+extra_link_args = []
 
 if system in ('linux', 'darwin', 'freebsd'):
     sys_macros.append(('UNIX',None))
+    if(system in 'darwin'):
+      extra_link_args.append("-mmacosx-version-min=10.9")
+      extra_link_args.append("-stdlib=libc++")
 elif system in ('windows'):
     sys_macros.append(('WIN32',None))
 else:
@@ -40,4 +44,5 @@ setup(name='protokit',
                                include_dirs = ['./include'],
                                define_macros = sys_macros,
                                library_dirs = ['./lib', './build'], 
-                               libraries = sys_libs)])
+                               libraries = sys_libs,
+                               extra_link_args = extra_link_args)])
