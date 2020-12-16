@@ -7,6 +7,7 @@
 
 extern "C" {
 
+
     typedef struct {
         PyObject_HEAD
         ProtoPipe *thisptr;
