@@ -29,9 +29,6 @@ static PyMethodDef protokit_methods[] = {{NULL}};
     };
 #endif  // end PY_MAJOR_VERSION >= 3
 
-// #ifndef PyMODINIT_FUNC   //declarations for DLL import/export 
-// #define PyMODINIT_FUNC void
-// #endif
 
 static PyObject *
 moduleinit(void)
