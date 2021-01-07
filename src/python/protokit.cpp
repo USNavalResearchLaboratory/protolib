@@ -29,10 +29,14 @@ static PyMethodDef protokit_methods[] = {{NULL}};
     };
 #endif  // end PY_MAJOR_VERSION >= 3
 
+
 static PyObject *
 moduleinit(void)
 {
     PyObject *m;
+
+    if (PyType_Ready(&PipeType) < 0)
+            return m;
 
 #if PY_MAJOR_VERSION >= 3
     m = PyModule_Create(&moduledef);
