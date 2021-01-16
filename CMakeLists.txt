@@ -11,7 +11,7 @@ option(PROTOKIT_BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMEN
 option(PROTOKIT_BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_DEBUG "Include debugging messages/logging **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_WX "Enables building with WX Widgets" OFF)
-option(PROTOKIT_ENABLE_INSTALL "Enables install target" ON)
+option(PROTOKIT_ENABLE_INSTALL "Enables install target" OFF)
 
 # Availability checks
 include(CheckCXXSymbolExists)
@@ -232,11 +232,8 @@ endif()
 include(GNUInstallDirs)
 
 # Setup target
-if(MSVC)
-	SET(PROTOKIT_LIBRARY_TYPE STATIC)
-endif()
 
-add_library(protokit ${PROTOKIT_LIBRARY_TYPE} ${PLATFORM_SOURCE_FILES} ${COMMON_SOURCE_FILES} ${PUBLIC_HEADER_FILES})
+add_library(protokit STATIC ${PLATFORM_SOURCE_FILES} ${COMMON_SOURCE_FILES} ${PUBLIC_HEADER_FILES})
 add_library(protokit::protokit ALIAS protokit)
 target_link_libraries(protokit PRIVATE ${PLATFORM_LIBS})
 target_compile_definitions(protokit PUBLIC ${PLATFORM_DEFINITIONS})
