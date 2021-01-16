@@ -11,7 +11,7 @@ option(PROTOKIT_BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMEN
 option(PROTOKIT_BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_DEBUG "Include debugging messages/logging **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_WX "Enables building with WX Widgets" OFF)
-option(PROTOKIT_ENABLE_INSTALL "Enables install target" ON)
+option(PROTOKIT_ENABLE_INSTALL "Enables install target" OFF)
 
 # Availability checks
 include(CheckCXXSymbolExists)
