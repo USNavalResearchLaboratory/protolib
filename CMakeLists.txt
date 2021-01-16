@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.1)
+cmake_policy(SET CMP0077 NEW)
 
 # set the project name
 project(protokit)
@@ -10,6 +11,7 @@ option(PROTOKIT_BUILD_PYTHON "Enables building of python bindings **NOT IMPLEMEN
 option(PROTOKIT_BUILD_JAVA "Enables building of jave bindings **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_DEBUG "Include debugging messages/logging **NOT IMPLEMENTED**." OFF)
 option(PROTOKIT_ENABLE_WX "Enables building with WX Widgets" OFF)
+option(PROTOKIT_ENABLE_INSTALL "Enables install target" ON)
 
 # Availability checks
 include(CheckCXXSymbolExists)
@@ -243,25 +245,27 @@ target_include_directories(protokit PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(protokit PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 
 # Install target
-install( TARGETS protokit EXPORT protokitTargets
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} )
+if(${PROTOKIT_ENABLE_INSTALL})
+	install( TARGETS protokit EXPORT protokitTargets
+			RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+			ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+			LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+			INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} )
 
-install( EXPORT protokitTargets
-	FILE protokitConfig.cmake
-	NAMESPACE protokit::
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protokit
-)
+	install( EXPORT protokitTargets
+		FILE protokitConfig.cmake
+		NAMESPACE protokit::
+		DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/protokit
+	)
 
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+	install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-export(EXPORT protokitTargets
-    FILE ${CMAKE_CURRENT_BINARY_DIR}/protokitTargets.cmake
-	NAMESPACE protokit::)
-	
-export(PACKAGE protokit)
+	export(EXPORT protokitTargets
+		FILE ${CMAKE_CURRENT_BINARY_DIR}/protokitTargets.cmake
+		NAMESPACE protokit::)
+		
+	export(PACKAGE protokit)
+endif()
 
 if(PROTOKIT_BUILD_EXAMPLES)
 	# Setup examples
