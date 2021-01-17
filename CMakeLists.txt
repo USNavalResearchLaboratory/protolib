@@ -25,14 +25,21 @@ if(HAVE_PCAP_H)
 	#list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
 endif()
 
-check_include_files( sys/timerfd.h HAVE_TIMERFD_H) #USE
+check_include_files( sys/timerfd.h HAVE_TIMERFD_H)
 if(HAVE_TIMERFD_H)
 	list(APPEND PLATFORM_DEFINITIONS USE_TIMERFD)
 endif()
 
-check_include_files( sys/select.h HAVE_SELECT_H) #USE
-if(HAVE_SELECT_H)
+check_include_files( sys/select.h HAVE_SELECT_H)
+check_include_files( sys/epoll.h HAVE_EPOLL_H)
+if(HAVE_EPOLL_H)
+	list(APPEND PLATFORM_DEFINITIONS USE_EPOLL)
+	message(STATUS "Using epoll")
+elseif(HAVE_SELECT_H)
 	list(APPEND PLATFORM_DEFINITIONS USE_SELECT)
+	message(STATUS "Using select")
+else()
+	message(STATUS "Using neither epoll or select")
 endif()
 
 check_cxx_symbol_exists( sched_setscheduler "sched.h" HAVE_SCHED_SETSCHEDULER )
