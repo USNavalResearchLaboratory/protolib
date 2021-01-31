@@ -4,6 +4,7 @@ cmake_policy(SET CMP0077 NEW)
 # set the project name
 project(protokit)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(COMMON src/common)
 
 option(PROTOKIT_BUILD_EXAMPLES "Enables building of the examples in /examples." OFF)
