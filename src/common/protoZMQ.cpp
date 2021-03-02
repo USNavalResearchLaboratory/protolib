@@ -375,7 +375,7 @@ bool ProtoZmq::Socket::SendToGroup(char* buffer, unsigned int& numBytes,const ch
         numBytes = result;
     }
     return true;
-}  // end ProtoZmq::Socket::Send()
+}  // end ProtoZmq::Socket::SendToGroup()
 
 bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
 {
