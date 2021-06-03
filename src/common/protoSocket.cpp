@@ -2817,12 +2817,12 @@ bool ProtoSocket::SetFlowLabel(UINT32 label)
     if (label && !flow_label)
     {
        int on = 1;
-       result = setsockopt(handle, SOL_IPV6, IPV6_FLOWINFO_SEND, (void*)&on, sizeof(on));
+       result = setsockopt(handle, SOL_IPV6, IPV6_FLOWINFO_SEND, (char*)&on, sizeof(on));
     }
     else if (!label && flow_label)
     {
         int off = 0;
-        result = setsockopt(handle, SOL_IPV6, IPV6_FLOWINFO_SEND, (void*)&off, sizeof(off));
+        result = setsockopt(handle, SOL_IPV6, IPV6_FLOWINFO_SEND, (char*)&off, sizeof(off));
     }
 #endif  // SOL_IPV6
     if (0 == result)

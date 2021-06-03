@@ -45,6 +45,7 @@ class ProtoZmq
        
                 // TBD - support multi-part messages, etc
                 bool Send(char* buffer, unsigned int& numBytes);
+                bool SendToGroup(char* buffer, unsigned int& numBytes,const char* group);
                 bool Recv(char* buffer, unsigned int& numBytes);
                 bool RecvMsg(zmq_msg_t* zmqMsg);
                 bool StartInputNotification();

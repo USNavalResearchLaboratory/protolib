@@ -341,6 +341,42 @@ bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
     return true;
 }  // end ProtoZmq::Socket::Send()
 
+
+bool ProtoZmq::Socket::SendToGroup(char* buffer, unsigned int& numBytes,const char* group)
+{
+    // TBD - support both blocking and non-blocking operation as well as multi-part messages
+    zmq_msg_t msg;
+    int result = zmq_msg_init_size (&msg, numBytes);
+    assert (result == 0);
+    memcpy (zmq_msg_data (&msg),buffer,numBytes);
+    zmq_msg_set_group(&msg,group);
+    /* Send the message to the socket */
+    result = zmq_msg_send (&msg, zmq_sock, ZMQ_DONTWAIT); 
+
+    if (poller_active && (0 != (ZMQ_POLLOUT & poll_flags)))
+        UpdateNotification();  // resets poll_flags and PollerThread notification
+    if (result < 0)
+    {
+        switch (zmq_errno())
+        {
+            case EAGAIN:
+            case EINTR:   // do we need to have a loop here to retry on EINTR?
+                numBytes = 0;
+                break;
+            default:
+                PLOG(PL_ERROR, "ProtoZmq::Socket::SendToGroup() zmq_msg_send() error: %s\n", GetErrorString());
+                numBytes = 0;
+                return false;    
+        }
+    }
+    else
+    {
+        // TBD - do we need to handle 0 == result differently
+        numBytes = result;
+    }
+    return true;
+}  // end ProtoZmq::Socket::SendToGroup()
+
 bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
 {
     int result = zmq_recv(zmq_sock, buffer, numBytes, ZMQ_DONTWAIT);
