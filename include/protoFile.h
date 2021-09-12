@@ -199,6 +199,8 @@ class ProtoFile : public ProtoChannel
                             last_time = big_time;
                             list_iterator.Reset();
                         }    
+                        void SetUpdatesOnly(bool enable)
+                            {updates_only = enable;}
                         bool AppendPath(const char* thePath);
                         // TBD - replace all the "char*" args with Path reference args instead
                         // (and the "time_t initTime" should be a ProtoTime instead ...)
