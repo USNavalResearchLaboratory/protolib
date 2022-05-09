@@ -211,7 +211,7 @@ class ProtoFile : public ProtoChannel
                             {return GetNextPath(path, false, true);}
                         
                         const Path* GetCurrentPathItem() const
-                            {return list_iterator.PeekPrevItem();}                        
+                            {return list_iterator.PeekPrevItem();}   
                         
                     private:
                         Iterator            list_iterator;
