@@ -992,7 +992,7 @@ bool ProtoSlidingMask::UnsetBits(UINT32 index, UINT32 count)
         {
             startPos = firstPos;
         }
-        // Unset bits from firstPos to lastPos   
+        // Unset bits from firstPos to lastPos
         count = lastPos - startPos + 1;
         UINT32 maskIndex = startPos >> 3;
         UINT32 bitIndex = startPos & 0x07;
@@ -1053,11 +1053,11 @@ bool ProtoSlidingMask::Test(UINT32 index) const
             if (pos >= num_bits) pos -= num_bits;
             if (end < start)
             {
-                if ((pos > end) && (pos < start)) return false;   
+                if ((pos > end) && (pos < start)) return false;
             }
             else
             {
-                if ((pos < start) || (pos > end)) return false;   
+                if ((pos < start) || (pos > end)) return false;
             }
             // Test the corresponding bit
             if (0 != (mask[(pos >> 3)] & (0x80 >> (pos & 0x07))))
@@ -1245,7 +1245,7 @@ bool ProtoSlidingMask::GetPrevSet(UINT32& index) const
                         pos = num_bits - (start - pos);
                     index = offset + pos;
                     if (range_mask) index &= range_mask;
-                    return true;  
+                    return true;
                 }
             }
         }
@@ -1416,7 +1416,7 @@ bool ProtoSlidingMask::XCopy(const ProtoSlidingMask& b)
         }
         else
         {
-            return Copy(b);   
+            return Copy(b);
         } 
     }
     else
@@ -1441,7 +1441,7 @@ bool ProtoSlidingMask::Multiply(const ProtoSlidingMask& b)
             {
                 if (Test(index) && !b.Test(index)) Unset(index);
                 index++;     
-                if (range_mask) index &= range_mask; 
+                if (range_mask) index &= range_mask;
             }
         } 
     }
@@ -1473,7 +1473,7 @@ bool ProtoSlidingMask::Xor(const ProtoSlidingMask& b)
         {
             if (b.Test(index)) Invert(index);
             index++;   
-            if (range_mask) index &= range_mask;   
+            if (range_mask) index &= range_mask;
         }
     }
     return true;
@@ -1488,7 +1488,7 @@ void ProtoSlidingMask::Display(FILE* stream)
         if (0x07 == (i & 0x07)) fprintf(stream, " ");
         if (0x3f == (i & 0x3f)) fprintf(stream, "\n");
         index++;   
-        if (range_mask) index &= range_mask;  
+        if (range_mask) index &= range_mask;
     }
 }  // end ProtoSlidingMask::Display()
 
@@ -1504,7 +1504,7 @@ void ProtoSlidingMask::Debug(UINT32 theCount)
         if (0x07 == (i & 0x07)) PLOG(PL_ERROR, " ");
         if (0x3f == (i & 0x3f)) PLOG(PL_ERROR, "\n   ");
         index++;   
-        if (range_mask) index &= range_mask;  
+        if (range_mask) index &= range_mask;
     }
     if (0x3f != (i & 0x3f)) PLOG(PL_ERROR, "\n");
 }  // end ProtoSlidingMask::Debug()
