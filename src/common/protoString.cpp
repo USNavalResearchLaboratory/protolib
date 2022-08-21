@@ -128,6 +128,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
                     itemLen--;
                 }
             }
+            // TBD - save "prev_len" only allocate a new "prev_item" when longer string is needed.
             if (NULL != prev_item) delete[] prev_item;
             if (NULL == (prev_item = new char[itemLen+1]))
             {
@@ -273,7 +274,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         const char* ptr;
         if (isspace(token))
         {
-            // Advance start of whitespace
+            // Advance to start of white space
             ptr = next_ptr;
             while (NULL != ptr)
             {
@@ -307,7 +308,7 @@ const char* const ProtoTokenator::GetNextItem(bool detach)
         prev_item[itemLen] = '\0';
         if (strip_whitespace || isspace(token))
         {
-            // advance to end of white space
+            // Advance to end of white space
             while (NULL != ptr)
             {
                 if ('\0' == *ptr)

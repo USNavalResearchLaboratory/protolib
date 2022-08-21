@@ -78,11 +78,11 @@ void ProtoZmq::Socket::Close()
         zmq_ctx = NULL;
         ext_ctx = false;
     }
-    
 }  // end ProtoZmq::Socket::Close()
 
 bool ProtoZmq::Socket::StartInputNotification()
 {
+    poller_mutex.Lock();
     if (0 == (ZMQ_POLLIN & poll_flags))
     {
         poll_flags |= ZMQ_POLLIN;
@@ -90,14 +90,17 @@ bool ProtoZmq::Socket::StartInputNotification()
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StartInputNotification() error: unable to update notifications\n");
             poll_flags &= ~ZMQ_POLLIN;
+            poller_mutex.Unlock();
             return false;
         }
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::StartInputNotification()
 
 bool ProtoZmq::Socket::StopInputNotification()
 {
+    poller_mutex.Lock();
     if (0 != (ZMQ_POLLIN & poll_flags))
     {
         poll_flags &= ~ZMQ_POLLIN;
@@ -105,14 +108,17 @@ bool ProtoZmq::Socket::StopInputNotification()
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StopInputNotification() error: unable to update notifications\n");
             poll_flags |= ~ZMQ_POLLIN;
+        poller_mutex.Unlock();
             return false;
         }
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::StartInputNotification()
 
 bool ProtoZmq::Socket::StartOutputNotification()
 {
+    poller_mutex.Lock();
     if (0 == (ZMQ_POLLOUT & poll_flags))
     {
         poll_flags |= ZMQ_POLLOUT;
@@ -120,14 +126,17 @@ bool ProtoZmq::Socket::StartOutputNotification()
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StartOutputNotification() error: unable to update notifications\n");
             poll_flags &= ~ZMQ_POLLOUT;
+            poller_mutex.Unlock();
             return false;
         }
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::StopInputNotification()
 
 bool ProtoZmq::Socket::StopOutputNotification()
 {
+    poller_mutex.Lock();
     if (0 != (ZMQ_POLLOUT & poll_flags))
     {
         poll_flags &= ~ZMQ_POLLOUT;
@@ -135,18 +144,24 @@ bool ProtoZmq::Socket::StopOutputNotification()
         {
             PLOG(PL_ERROR, "ProtoZmq::Socket::StopOutputNotification() error: unable to update notifications\n");
             poll_flags |= ~ZMQ_POLLOUT;
+            poller_mutex.Unlock();
             return false;
         }
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::StopOutputNotification()
 
 bool ProtoZmq::Socket::SetNotifier(ProtoEvent::Notifier* theNotifier, PollerThread* pollerThread)
 {
+    poller_mutex.Lock();
     if (NULL != theNotifier)
     {
-        if (theNotifier == GetNotifier()) return true;  // already set
-        
+        if (theNotifier == GetNotifier()) 
+        {
+            poller_mutex.Unlock();
+            return true;  // already set
+        }
         if (HasNotifier())
         {
             if ((NULL != poller_thread) && poller_active)
@@ -166,6 +181,7 @@ bool ProtoZmq::Socket::SetNotifier(ProtoEvent::Notifier* theNotifier, PollerThre
                 {
                     PLOG(PL_ERROR, "ProtoZmq::Socket::SetNotifier() new default_poller_thread error: %s\n", GetErrorString());
                     default_poller_mutex.Unlock();
+                    poller_mutex.Unlock();
                     return false;
                 }
             }
@@ -186,7 +202,8 @@ bool ProtoZmq::Socket::SetNotifier(ProtoEvent::Notifier* theNotifier, PollerThre
         }
         poller_thread = NULL;
     }
-    ProtoEvent::SetNotifier(theNotifier);
+    ProtoEvent::SetNotifier(theNotifier);    
+    poller_mutex.Unlock();
     return UpdateNotification();  // will install socket to poller_thread as needed
 }  // end ProtoZmq::Socket::SetNotifier()
 
@@ -235,14 +252,17 @@ bool ProtoZmq::Socket::UpdateNotification()
 
 bool ProtoZmq::Socket::Bind(const char* endpoint)
 {
+    poller_mutex.Lock();
     if (!IsOpen())
     {
         PLOG(PL_ERROR, "ProtoZmq::Socket::Bind() error: socket not open!\n");
+        poller_mutex.Unlock();
         return false;
     }
     if (0 != zmq_bind(zmq_sock, endpoint))
     {
         PLOG(PL_ERROR, "ProtoZmq::Socket::Bind() zmq_bind() error: %s\n", GetErrorString());
+        poller_mutex.Unlock();
         return false;
     }
     state = CONNECTED;  // ZMQ sockets are immediately "connected" since ZMQ state routines will be used
@@ -250,21 +270,26 @@ bool ProtoZmq::Socket::Bind(const char* endpoint)
     {
         PLOG(PL_ERROR, "ProtoZmq::Socket::Bind() error: unable to update notification status\n");
         Close();
+        poller_mutex.Unlock();
         return false;
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::Bind()
 
 bool ProtoZmq::Socket::Connect(const char* endpoint)
 {
+    poller_mutex.Lock();
     if (!IsOpen())
     {
         PLOG(PL_ERROR, "ProtoZmq::Socket::Connect() error: socket not open!\n");
+        poller_mutex.Unlock();
         return false;
     }
     if (0 != zmq_connect(zmq_sock, endpoint))
     {
         PLOG(PL_ERROR, "ProtoZmq::Socket::Connect() zmq_bind() error: %s\n", GetErrorString());
+        poller_mutex.Unlock();
         return false;
     }
     state = CONNECTED;  // ZMQ sockets are immediately "connected" since ZMQ state routines will be used
@@ -272,8 +297,10 @@ bool ProtoZmq::Socket::Connect(const char* endpoint)
     {
         PLOG(PL_ERROR, "ProtoZmq::Socket::Connect() error: unable to update notification status\n");
         Close();
+        poller_mutex.Unlock();
         return false;
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::Connect()
 
@@ -316,6 +343,7 @@ bool ProtoZmq::Socket::Join(const char* group)
 bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
 {
     // TBD - support both blocking and non-blocking operation as well as multi-part messages
+    poller_mutex.Lock();
     int result = zmq_send(zmq_sock, buffer, numBytes, ZMQ_DONTWAIT);
     if (poller_active && (0 != (ZMQ_POLLOUT & poll_flags)))
         UpdateNotification();  // resets poll_flags and PollerThread notification
@@ -330,6 +358,7 @@ bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
             default:
                 PLOG(PL_ERROR, "ProtoZmq::Socket::Send() zmq_send() error: %s\n", GetErrorString());
                 numBytes = 0;
+                poller_mutex.Unlock();
                 return false;    
         }
     }
@@ -338,6 +367,7 @@ bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
         // TBD - do we need to handle 0 == result differently
         numBytes = result;
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::Send()
 
@@ -345,6 +375,7 @@ bool ProtoZmq::Socket::Send(char* buffer, unsigned int& numBytes)
 bool ProtoZmq::Socket::SendToGroup(char* buffer, unsigned int& numBytes,const char* group)
 {
     // TBD - support both blocking and non-blocking operation as well as multi-part messages
+    poller_mutex.Lock();
     zmq_msg_t msg;
     int result = zmq_msg_init_size (&msg, numBytes);
     assert (result == 0);
@@ -352,7 +383,6 @@ bool ProtoZmq::Socket::SendToGroup(char* buffer, unsigned int& numBytes,const ch
     zmq_msg_set_group(&msg,group);
     /* Send the message to the socket */
     result = zmq_msg_send (&msg, zmq_sock, ZMQ_DONTWAIT); 
-
     if (poller_active && (0 != (ZMQ_POLLOUT & poll_flags)))
         UpdateNotification();  // resets poll_flags and PollerThread notification
     if (result < 0)
@@ -366,7 +396,8 @@ bool ProtoZmq::Socket::SendToGroup(char* buffer, unsigned int& numBytes,const ch
             default:
                 PLOG(PL_ERROR, "ProtoZmq::Socket::SendToGroup() zmq_msg_send() error: %s\n", GetErrorString());
                 numBytes = 0;
-                return false;    
+                return false;   
+                poller_mutex.Unlock(); 
         }
     }
     else
@@ -374,11 +405,13 @@ bool ProtoZmq::Socket::SendToGroup(char* buffer, unsigned int& numBytes,const ch
         // TBD - do we need to handle 0 == result differently
         numBytes = result;
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::SendToGroup()
 
 bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
-{
+{   
+    poller_mutex.Lock();
     int result = zmq_recv(zmq_sock, buffer, numBytes, ZMQ_DONTWAIT);
     if (poller_active && (0 != (ZMQ_POLLIN & poll_flags)))
         UpdateNotification();  // resets poll_flags and PollerThread notification
@@ -393,6 +426,7 @@ bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
             default:
                 PLOG(PL_ERROR, "ProtoZmq::Socket::Recv() zmq_recv() error: %s\n", GetErrorString());
                 numBytes = 0;
+                poller_mutex.Unlock();
                 return false;    
         }
     }
@@ -401,11 +435,13 @@ bool ProtoZmq::Socket::Recv(char* buffer, unsigned int& numBytes)
         // TBD - do we need to handle 0 == result differently
         numBytes = result;
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::Recv()
 
 bool ProtoZmq::Socket::RecvMsg(zmq_msg_t* zmqMsg)
 {
+    poller_mutex.Lock();
     int result = zmq_msg_recv(zmqMsg, zmq_sock, ZMQ_DONTWAIT);
     if (poller_active && (0 != (ZMQ_POLLIN & poll_flags)))
         UpdateNotification();  // resets poll_flags and PollerThread notification
@@ -418,9 +454,11 @@ bool ProtoZmq::Socket::RecvMsg(zmq_msg_t* zmqMsg)
                 break;
             default:
                 PLOG(PL_ERROR, "ProtoZmq::Socket::RecvMsg() zmq_recv() error: %s\n", GetErrorString());
+                poller_mutex.Unlock();
                 return false;    
         }
     }
+    poller_mutex.Unlock();
     return true;
 }  // end ProtoZmq::Socket::Recv()
 
@@ -636,12 +674,14 @@ int ProtoZmq::PollerThread::RunThread()
                 continue;
             }
             Socket* zmqSocket = reinterpret_cast<Socket*>(item->user_data);
+            zmqSocket->poller_mutex.Lock();
             // Filter events so we don't get redundant polling notifications.
             // (Will be reset by Socket::Recv() and/or Socket::Send() methods when invoked)
             zmqSocket->SetPollStatus(item->events);
             int tempFlags = zmqSocket->GetPollFlags() & ~item->events;
             zmq_poller_modify(zmq_poller, item->socket, tempFlags | ZMQ_POLLERR);
             zmqSocket->SetEvent();
+            zmqSocket->poller_mutex.Unlock();
         }   
     } 
     suspend_mutex.Unlock();

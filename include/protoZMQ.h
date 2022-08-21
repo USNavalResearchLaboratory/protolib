@@ -103,6 +103,7 @@ class ProtoZmq
                 int                 poll_status;
                 
                 PollerThread*       poller_thread;
+                ProtoMutex          poller_mutex;
                 bool                poller_active;
                 
         };  // end ProtoZmq::Socket

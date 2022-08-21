@@ -6,8 +6,8 @@
 #    (Where to find X11 libraries, etc)
 #
 
-SYSTEM_INCLUDES = -I/System/Library/Frameworks/JavaVM.framework/Versions/1.5.0/Headers
-SYSTEM_LDFLAGS =
+SYSTEM_INCLUDES = -I/System/Library/Frameworks/JavaVM.framework/Versions/1.5.0/Headers -I/opt/local/include
+SYSTEM_LDFLAGS = -L/opt/local/lib
 SYSTEM_LIBS =  -lresolv
 
 # 2) System specific capabilities
@@ -50,12 +50,12 @@ SYSTEM_SRC_EX = ../src/unix/bpfCap.cpp ../src/bsd/bsdDetour.cpp \
 SYSTEM = macosx
 CC = g++
 #SYSTEM_CFLAGS = -Wall -Wcast-align -fPIC
-SYSTEM_CFLAGS = -Wall -Wcast-align -fPIC -arch x86_64
+SYSTEM_CFLAGS = -Wall -Wcast-align -fPIC
 SYSTEM_SOFLAGS = -dynamiclib 
 SYSTEM_SOEXT = dylib
 
 # The "-arch" flags make a universal 32/64-bit lib
-SYSTEM_JNIFLAGS = -arch x86_64 -arch i386 -bundle 
+SYSTEM_JNIFLAGS = -arch x86_64 -arch i386 -arch arm64 -bundle 
 SYSTEM_JNIEXT = jnilib
 SYSTEM_FRAMEWORK = -framework JavaVM
 
