@@ -104,6 +104,7 @@ if(LIBPCAP_FOUND)
 	list(APPEND PLATFORM_SOURCE_FILES ${COMMON}/pcapCap.cpp)
 	set(PROTOLIB_REQUIRES_PRIVATE "${PROTOLIB_REQUIRES_PRIVATE} libpcap")
 endif()
+list(APPEND PLATFORM_LIBS Threads::Threads)
 
 # Note: cannot append, need to use PARENT_SCOPE
 set(REQUIRES_PRIVATE "${REQUIRES_PRIVATE} ${PROTOLIB_REQUIRES_PRIVATE}" PARENT_SCOPE)
@@ -218,7 +219,6 @@ if(MSVC)
 	list(APPEND PLATFORM_FLAGS /EHsc)
 elseif(UNIX)
 	list(APPEND PLATFORM_DEFINITIONS UNIX _FILE_OFFSET_BITS=64)
-	list(APPEND PLATFORM_LIBS pthread)
 	list(APPEND PLATFORM_SOURCE_FILES 	src/unix/unixNet.cpp 
 										src/unix/unixSerial.cpp 
 										src/unix/unixVif.cpp
