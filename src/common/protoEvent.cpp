@@ -169,7 +169,7 @@ void ProtoEvent::Close()
         notifier->UpdateEventNotification(*this, NOTIFY_NONE);
 #ifdef WIN32
     CloseHandle(event_handle);
-    event_handle = NULL;
+    event_handle = INVALID_HANDLE_VALUE;
 #else  // UNIX
 #if defined(USE_EVENTFD) || defined(USE_KEVENT)
     close(event_fd);
