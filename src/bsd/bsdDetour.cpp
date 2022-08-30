@@ -344,7 +344,11 @@ bool BsdDetour::Open(int                 hookFlags,
     }
     
     // Open a divert socket ...
+#ifdef PF_DIVERT
+    if ((descriptor = socket(PF_DIVERT, SOCK_RAW, 0)) < 0)
+#else
     if ((descriptor = socket(PF_INET, SOCK_RAW, IPPROTO_DIVERT)) < 0)
+#endif
     {
         PLOG(PL_ERROR, "BsdDetour::Open() socket() error: %s\n", GetErrorString());
         Close();
