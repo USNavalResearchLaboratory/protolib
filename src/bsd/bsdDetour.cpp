@@ -323,20 +323,6 @@ bool BsdDetour::Open(int                 hookFlags,
         PLOG(PL_ERROR, "BsdDetour::Open() error: inconsistent src/dst filter addr families\n");
         return false;
     }
-    else if (ProtoAddress::IPv4 == srcFilterAddr.GetType())
-        
-    {
-        domain = AF_INET;
-    }
-    else if (ProtoAddress::IPv6 == srcFilterAddr.GetType())
-    {
-        domain = AF_INET6;
-    }
-    else
-    {
-        PLOG(PL_ERROR, "BsdDetour::Open() error: unspecified filter addr family\n");
-        return false;
-    }
     
     // Setup ipfw rule(s) ...
     // Save parameters for firewall rule removal
@@ -358,7 +344,11 @@ bool BsdDetour::Open(int                 hookFlags,
     }
     
     // Open a divert socket ...
-    if ((descriptor = socket(domain, SOCK_RAW, IPPROTO_DIVERT)) < 0)
+#ifdef PF_DIVERT
+    if ((descriptor = socket(PF_DIVERT, SOCK_RAW, 0)) < 0)
+#else
+    if ((descriptor = socket(PF_INET, SOCK_RAW, IPPROTO_DIVERT)) < 0)
+#endif
     {
         PLOG(PL_ERROR, "BsdDetour::Open() socket() error: %s\n", GetErrorString());
         Close();
