@@ -352,6 +352,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\src\common\protoEvent.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\common\protoFile.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\src\common\protoGraph.cpp"
 				>
 			</File>
@@ -413,6 +421,10 @@
 			</File>
 			<File
 				RelativePath="..\..\src\common\protoSpace.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\common\protoString.cpp"
 				>
 			</File>
 			<File
