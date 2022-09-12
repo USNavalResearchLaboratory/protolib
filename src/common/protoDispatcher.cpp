@@ -47,6 +47,7 @@
 #include <process.h>  // for _beginthreadex() and _endthreadex()
 #endif // _WIN32_WCE
 const ProtoDispatcher::Descriptor ProtoDispatcher::INVALID_DESCRIPTOR = INVALID_HANDLE_VALUE;
+const ProtoDispatcher::WaitStatus ProtoDispatcher::WAIT_ERROR = WAIT_FAILED;
 #else
 #include <unistd.h>
 #include <sys/time.h>
@@ -58,6 +59,7 @@ const ProtoDispatcher::Descriptor ProtoDispatcher::INVALID_DESCRIPTOR = INVALID_
 #include <sys/resource.h>
 #endif // HAVE_SCHED
 const ProtoDispatcher::Descriptor ProtoDispatcher::INVALID_DESCRIPTOR = -1;
+const ProtoDispatcher::WaitStatus ProtoDispatcher::WAIT_ERROR = 1;
 #endif  // if/else WIN32/UNIX
 
 
@@ -110,7 +112,7 @@ ProtoDispatcher::GenericStream::GenericStream(Descriptor theDescriptor)
 }
             
 ProtoDispatcher::ProtoDispatcher()
-    : run(false), wait_status(-1), exit_code(0), timer_delay(-1), precise_timing(false),
+    : run(false), wait_status(WAIT_ERROR), exit_code(0), timer_delay(-1), precise_timing(false),
       thread_id((ThreadId)(NULL)), external_thread(false), priority_boost(false), 
       thread_started(false), thread_signaled(false), thread_master((ThreadId)(NULL)), 
       suspend_count(0), signal_count(0), controller(NULL), 
@@ -898,7 +900,7 @@ bool ProtoDispatcher::BoostPriority()
 int ProtoDispatcher::Run(bool oneShot)
 {
     exit_code = 0;
-    wait_status = -1;  
+    wait_status = WAIT_ERROR;  
     if (priority_boost) BoostPriority();
     
 #ifdef USE_TIMERFD  // LINUX-only
@@ -1035,7 +1037,7 @@ void ProtoDispatcher::Stop(int exitCode)
     run = false;
 #ifdef WIN32
     if (msg_window)
-        PostMessage(msg_window, WM_DESTROY, NULL, NULL);
+        PostMessage(msg_window, WM_DESTROY, 0, 0);
 #endif // WIN32
     UnsignalThread();
     DestroyThread();
@@ -1816,7 +1818,7 @@ void ProtoDispatcher::Wait()
 
     // Note if (NULL == timeoutPtr), then the timer_fd has been set up with the proper timeout value
     // (otherwise we convert "timerDelay" to milliseconds)
-  	wait_status = epoll_wait(epoll_fd, epoll_event_array, EPOLL_ARRAY_SIZE, (NULL != timeoutPtr) ? (int)(timerDelay*1000.0) : -1);
+    wait_status = epoll_wait(epoll_fd, epoll_event_array, EPOLL_ARRAY_SIZE, (NULL != timeoutPtr) ? (int)(timerDelay*1000.0) : -1);
      
 #elif defined(USE_KQUEUE)
     if (-1 == kevent_queue)
@@ -1826,7 +1828,7 @@ void ProtoDispatcher::Wait()
         {
             PLOG(PL_ERROR, "ProtoDispatcher::Wait() kqueue() error: %s\n", GetErrorString());
             // TBD - should we set "run" to false here???
-            wait_status = -1;
+            wait_status = WAIT_ERROR;
             return;
         }
     }
@@ -1947,7 +1949,7 @@ void ProtoDispatcher::Dispatch()
 #elif defined(USE_EPOLL)   
     switch(wait_status)
     {
-        case -1:
+        case WAIT_ERROR:
             if (EINTR != errno)
                 PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() epoll_wait() error: %s\n", GetErrorString());
             break;
@@ -2082,7 +2084,7 @@ void ProtoDispatcher::Dispatch()
     // Here the "wait_status" is the return value from the kevent() call
     switch (wait_status)
     {
-        case -1:
+        case WAIT_ERROR:
             if (EINTR != errno)
                 PLOG(PL_ERROR, "ProtoDispatcher::Dispatch() kevent() error: %s\n", GetErrorString());
             //OnSystemTimeout();
@@ -2529,7 +2531,7 @@ void ProtoDispatcher::Dispatch()
 { 
     switch (wait_status)
     {
-        case -1:            // error status
+        case WAIT_ERROR:            // error status
         {
             char errorString[256];
             errorString[255] = '\0';

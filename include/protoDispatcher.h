@@ -454,7 +454,8 @@ class ProtoDispatcher : public ProtoTimerMgr,
 			{return &exit_status;}
         static void DoThreadExit(ExitStatus exitStatus) {pthread_exit(exitStatus);}
 #endif // if/else WIN32/UNIX
-                
+        static const WaitStatus WAIT_ERROR;
+        
         bool IsMyself() {return (GetCurrentThread() == thread_id);}
         void DestroyThread();
         
