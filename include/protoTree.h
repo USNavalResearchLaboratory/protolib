@@ -709,17 +709,16 @@ class ExampleItem : public ProtoSortedTree::Item
             {return (char*)&item_key;}
         unsigned int GetKeysize() const
             {return (sizeof(double) << 3);}
-        double  item_key;
-};  // end class ExampleItem
-
-class ExampleTree : public ProtoSortedTreeTemplate<ExampleItem>
-{
-    private:
         // These configure the key interpretation to properly sort "double" type key values
         virtual bool UseSignBit() const {return true;}
         virtual bool UseComplement2() const {return false;}
-        virtual ProtoTree::Endian GetEndian() const {return ProtoTree::GetNativeEndian();}
-};
+        virtual ProtoTree::Endian GetEndian() const {return ProtoTree::GetNativeEndian();}    
+            
+        double  item_key;
+};  // end class ExampleItem
+
+class ExampleTree : public ProtoSortedTreeTemplate<ExampleItem> {};
+
 */
         
 #endif // PROTO_TREE

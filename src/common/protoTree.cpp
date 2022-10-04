@@ -215,13 +215,13 @@ bool ProtoTree::ItemsAreEqual(const Item& item1, const Item& item2)
         ASSERT(0);
         return false;
     }
-    return KeysAreEqual(item1.GetKey(), item2.GetKey(), keysize, keyEndian);   
+    return KeysAreEqual(item1.GetKey(), item2.GetKey(), keysize, keyEndian);
 }  // end ProtoTree::ItemsAreEqual()
 
 bool ProtoTree::ItemIsEqual(const Item& item, const char* key, unsigned int keysize)
 {
     if (item.GetKeysize() != keysize) return false;
-    return KeysAreEqual(item.GetKey(), key, keysize, item.GetEndian());   
+    return KeysAreEqual(item.GetKey(), key, keysize, item.GetEndian());
 }  // end ProtoTree::ItemIsEqual()
 
 bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian)
@@ -239,7 +239,7 @@ bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, E
     }
     else
     {
-        return false; 
+        return false;
     }
 }  // end ProtoTree::Bit()
         
@@ -1409,7 +1409,7 @@ bool ProtoSortedTree::Insert(Item& item)
     unsigned int keysize = item.GetKeysize();
     ProtoTree::Endian keyEndian = item.GetEndian();
     Item* match = Find(key, keysize);
-    
+   
     if (NULL == match)
     {
         // Insert the item into our "item_tree"
@@ -1587,10 +1587,11 @@ bool ProtoSortedTree::Insert(Item& item)
             }
             else
             {
+                // TBD - replace this code with itemt_list.InsertAfter(item, *match)
                 // Insert the item just after the close "match" from "item_tree"
                 Item* next = static_cast<Item*>(item_list.GetNextItem(*match));
                 if (NULL != next)
-                    item_list.Insert(item, *next);
+                    item_list.Insert(item, *next); // inserts between "match" and "next"
                 else
                     item_list.Append(item);
             }  // end if/else (useSignBit)
@@ -1599,7 +1600,7 @@ bool ProtoSortedTree::Insert(Item& item)
     else if (match != &item)
     {
         if (unique_items_only) return false;
-        // Insert the item just before the exact "match" from "item_tree"
+        // Insert the item just _before_ the exact "match" from "item_tree"
         item_list.Insert(item, *match);
         item.left = NULL;  // denotes item is _not_ in tree (in linked list only)
         bool useSignBit = item.UseSignBit();

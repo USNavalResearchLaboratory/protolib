@@ -31,7 +31,7 @@ TARGETS = libprotokit.a libprotokit
 allExamples: arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample \
 jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample \
 protoCapExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample \
-threadExample timerTest ting vifExample vifLan protoExample eventExample tokenatorExample unitTests
+threadExample timerTest ting treeTest vifExample vifLan protoExample eventExample tokenatorExample unitTests
 
 KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase64.cpp \
           $(COMMON)/protoBitmask.cpp $(COMMON)/protoCap.cpp $(COMMON)/protoChannel.cpp \
@@ -169,6 +169,15 @@ timerTest:    $(TIMER_TEST_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(TIMER_TEST_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a   
 	mkdir -p ../bin
 	cp $@ ../bin/$@  
+   
+   
+TREE_TEST_SRC = $(EXAMPLES)/treeTest.cpp
+TREE_TEST_OBJ = $(TREE_TEST_SRC:.cpp=.o)
+
+treeTest:    $(TREE_TEST_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(TREE_TEST_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a   
+	mkdir -p ../bin
+	cp $@ ../bin/$@     
     
 TIMER_SCALE_SRC = $(EXAMPLES)/timerScaling.cpp
 TIMER_SCALE_OBJ = $(TIMER_SCALE_SRC:.cpp=.o)

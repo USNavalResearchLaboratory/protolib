@@ -453,11 +453,11 @@ class ProtoTimerMgr
         }
        
         // Member variables
-        bool            update_pending;       
-        bool            timeout_scheduled;                     
-        ProtoTime       scheduled_timeout;                                   
-        ProtoTimer      pulse_timer;  // one second pulse timer    
-        ProtoTime       pulse_mark;       
+        bool            update_pending;
+        bool            timeout_scheduled;
+        ProtoTime       scheduled_timeout;
+        ProtoTimer      pulse_timer;  // one second pulse timer
+        ProtoTime       pulse_mark;
 
 #ifdef _SORTED_TIMERS   
         unsigned int    timer_list_count;
@@ -465,11 +465,11 @@ class ProtoTimerMgr
         ProtoTimerTable timer_table;
         ProtoTimerTable long_timer_table;
 #else                                 
-        ProtoTimer*     long_head;                                 
-        ProtoTimer*     long_tail;                                 
-        ProtoTimer*     short_head;                                
-        ProtoTimer*     short_tail; 
-#endif // if/else _SORTED_TIMERS        
+        ProtoTimer*     long_head;
+        ProtoTimer*     long_tail;
+        ProtoTimer*     short_head;
+        ProtoTimer*     short_tail;
+#endif // if/else _SORTED_TIMERS
         ProtoTimer*     invoked_timer;  // timer whose listener is being invoked
 };  // end class ProtoTimerMgr
 

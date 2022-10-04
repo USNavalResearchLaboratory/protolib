@@ -134,6 +134,7 @@ class ProtoTime
                 // uses this for managing timeouts.
                 static time_t htont(time_t t)
                 {
+#if BYTE_ORDER == LITTLE_ENDIAN
                     if (8 == sizeof(time_t))
                     {
                         UINT32* t1 = (UINT32*)&t;
@@ -146,10 +147,14 @@ class ProtoTime
                     else // if (4 = sizeof(time_t))
                     {
                         return ((time_t)htonl((UINT32)t));
-                    }  
+                    }
+#else
+                    return t;  // no reordering needed
+#endif // if/else LITTLE_ENDIAN / BIG_ENDIAN
                 }  // end ProtoTime::Key::htont()
                 static suseconds_t htontu(suseconds_t t)
                 {
+#if BYTE_ORDER == LITTLE_ENDIAN
                     if (8 == sizeof(suseconds_t))
                     {
                         UINT32* t1 = (UINT32*)&t;
@@ -162,7 +167,10 @@ class ProtoTime
                     else // if (4 = sizeof(suseconds_t))
                     {
                         return ((suseconds_t)htonl((UINT32)t));
-                    }  
+                    } 
+#else
+                    return t;  // no reordering needed
+#endif // if/else LITTLE_ENDIAN / BIG_ENDIAN
                 }  // end htontu()
 
                 struct timeval key;  // network byte ordered version 
