@@ -56,11 +56,10 @@ class ProtoTokenator
         
         void SetNullDelimiter() // with "stripWhitespace" enabled, this enables
             {token = '\0';}     // simple leading/trailing stripping
-            
         
         // If this is called, caller is responsible to delete
         // the memory allocated for the previous item returned.
-        // (This enables deferred, 'detach' decision)
+        // (This enables deferred 'detach' decision)
         char* DetachPreviousItem()
         {
             char* item = (char*)prev_item;
