@@ -41,11 +41,15 @@ makefiles/threadExample
 makefiles/timerTest
 makefiles/ting
 makefiles/tokenatorExample
+makefiles/treeTest
 makefiles/unitTests
 makefiles/vifExample
 makefiles/vifLan
 makefiles/win32/Release
 makefiles/win32/Debug
+
+# Python generated files
+protokit.egg-info
 
 # OS generated files #
 .DS_Store
