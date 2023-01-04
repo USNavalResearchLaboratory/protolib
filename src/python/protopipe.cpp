@@ -1,6 +1,7 @@
 
 // Python binding code for ProtoPipe class
 
+#define PY_SSIZE_T_CLEAN
 #include "protopy.h"
 #include "protoPipe.h"
 #include <protoSocket.h>
@@ -134,12 +135,13 @@ extern "C" {
 
     static PyObject* Pipe_Send(Pipe *self, PyObject *args) {
         const char *buffer;
-        unsigned int size;
+        Py_ssize_t size;
 
         if (!PyArg_ParseTuple(args, "s#", &buffer, &size))
             return NULL;
+        unsigned int size_u=size;
 
-        if (!self->thisptr->Send(buffer, size)) {
+        if (!self->thisptr->Send(buffer, size_u)) {
             PyErr_SetString(ProtoError, "Could not send buffer.");
             return NULL;
         }
@@ -148,17 +150,18 @@ extern "C" {
 
     static PyObject* Pipe_Recv(Pipe *self, PyObject *args) {
         char *buffer;
-        unsigned int size;
+        Py_ssize_t size;
         bool result = false;
 
         if (!PyArg_ParseTuple(args, "I", &size))
             return NULL;
+        unsigned int size_u=size;
 
         buffer = new char[size];
 
         // Release the GIL since this can block...
         Py_BEGIN_ALLOW_THREADS
-        result = self->thisptr->Recv(buffer, size);
+        result = self->thisptr->Recv(buffer, size_u);
         Py_END_ALLOW_THREADS
 
         if (!result) {

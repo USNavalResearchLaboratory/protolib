@@ -5,6 +5,7 @@
 
  // IMPORTANT NOTE:  This code is not _yet_ compatible with Python3
 
+#define PY_SSIZE_T_CLEAN
 #include "protopy.h"
 
 // We include the other .cpp files directly

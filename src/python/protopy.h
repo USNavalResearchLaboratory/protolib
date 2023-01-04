@@ -1,6 +1,7 @@
 #ifndef _PROTO_PYTHON
 #define _PROTO_PYTHON
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 //#include <cstring>
 
