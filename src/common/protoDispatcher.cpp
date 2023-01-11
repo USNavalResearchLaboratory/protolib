@@ -59,7 +59,7 @@ const ProtoDispatcher::WaitStatus ProtoDispatcher::WAIT_ERROR = WAIT_FAILED;
 #include <sys/resource.h>
 #endif // HAVE_SCHED
 const ProtoDispatcher::Descriptor ProtoDispatcher::INVALID_DESCRIPTOR = -1;
-const ProtoDispatcher::WaitStatus ProtoDispatcher::WAIT_ERROR = 1;
+const ProtoDispatcher::WaitStatus ProtoDispatcher::WAIT_ERROR = -1;
 #endif  // if/else WIN32/UNIX
 
 
