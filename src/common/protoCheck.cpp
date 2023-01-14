@@ -164,7 +164,7 @@ class ProtoChecker
             }
             else
             {
-                sprintf(text, "couldn't find item %p to delete %s %d", ptr, file, line);
+                snprintf(text, 512, "couldn't find item %p to delete %s %d", ptr, file, line);
                 perror(text);
             }
             if (cache_lock)
@@ -253,7 +253,7 @@ void ProtoChecker::LogAllocations(FILE* filePtr)
             if (result < 0)
             {
                 char buffer[1024];
-                sprintf(buffer, "ProtoCheck: %s %lu bytes for ptr %p from %s:%d",
+                snprintf(buffer, 1024, "ProtoCheck: %s %lu bytes for ptr %p from %s:%d",
                         action, (unsigned long)item.GetSize(), ptr, file, line); 
                 perror(buffer); 
             }  

@@ -363,7 +363,7 @@ bool BsdNetMonitor::GetNextEvent(Event& theEvent)
                 // Do we already know this interface?
                 char ifName[IFNAMSIZ+1];
                 ifName[IFNAMSIZ] = '\0';
-                sprintf(ifName, "%s%d", dat->if_name, dat->if_unit);
+                snprintf(ifName, IFNAMSIZ+1, "%s%d", dat->if_name, dat->if_unit);
                 theEvent.SetInterfaceName(ifName);
                 Interface* iface =iface_list.FindString(ifName);
                 // Fetch the system index in case it's not consistent
@@ -458,7 +458,7 @@ bool BsdNetMonitor::GetNextEvent(Event& theEvent)
                 
                 char ifName[IFNAMSIZ+1];
                 ifName[IFNAMSIZ] = '\0';
-                sprintf(ifName, "%s%d", dat->link_data.if_name, dat->link_data.if_unit);
+                snprintf(ifName, IFNAMSIZ+1, "%s%d", dat->link_data.if_name, dat->link_data.if_unit);
                 theEvent.SetInterfaceName(ifName);
                 unsigned int ifIndex = ProtoNet::GetInterfaceIndex(ifName);
                 if (0 == ifIndex)
@@ -497,7 +497,7 @@ bool BsdNetMonitor::GetNextEvent(Event& theEvent)
                 
                 char ifName[IFNAMSIZ+1];
                 ifName[IFNAMSIZ] = '\0';
-                sprintf(ifName, "%s%d", dat->link_data.if_name, dat->link_data.if_unit);
+                snprintf(ifName, IFNAMSIZ+1, "%s%d", dat->link_data.if_name, dat->link_data.if_unit);
                 theEvent.SetInterfaceName(ifName);
                 unsigned int ifIndex = ProtoNet::GetInterfaceIndex(ifName);
                 if (0 == ifIndex)

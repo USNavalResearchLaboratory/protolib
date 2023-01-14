@@ -2,7 +2,7 @@
 
 #include <string.h>  // for strerror()
 #include <stdio.h>   // for rename()
-#include <time.h>  // for difftime()
+#include <time.h>    // for difftime()
 #ifdef HAVE_FLOCK
 #include <sys/file.h> // for flock()
 #endif
@@ -14,7 +14,7 @@
 #include <io.h>
 #endif // !_WIN32_WCE
 #else
-#include <unistd.h> 
+#include <unistd.h>
 #endif // if/else WIN32
 
 #ifndef _WIN32_WCE
@@ -28,7 +28,7 @@ ProtoFile::ProtoFile()
     : file_ptr(NULL)
 #else
 #endif // if/else _WIN32_WCE
-{    
+{
 }
 
 ProtoFile::~ProtoFile()
@@ -40,7 +40,7 @@ ProtoFile::~ProtoFile()
 bool ProtoFile::Open(const char* thePath, int theFlags)
 {
     bool returnvalue=false;
-    ASSERT(!IsOpen());	
+    ASSERT(!IsOpen());
     if (theFlags & O_CREAT)
     {
         // Create sub-directories as needed.
@@ -48,7 +48,7 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
         tempPath[PATH_MAX] = '\0';
         strncpy(tempPath, thePath, PATH_MAX);
         char* ptr = strrchr(tempPath, PROTO_PATH_DELIMITER);
-        if (NULL != ptr) 
+        if (NULL != ptr)
         {
             *ptr = '\0';
             ptr = NULL;
@@ -93,14 +93,14 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
             {
                 PLOG(PL_FATAL, "ProtoFile::Open() mkdir(%s) error: %s\n",
                         tempPath, GetErrorString());
-                return false;  
+                return false;
             }
             if (ptr) *ptr++ = PROTO_PATH_DELIMITER;
         }
-    }    	
+    }
 #ifdef WIN32
     // Make sure we're in binary mode (important for WIN32)
-	theFlags |= O_BINARY;
+    theFlags |= O_BINARY;
 #ifdef _WIN32_WCE
     if (theFlags & O_RDONLY)
         file_ptr = fopen(thePath, "rb");
@@ -109,23 +109,23 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
     if (NULL != file_ptr)
 #else
     // Allow sharing of read-only files but not of files being written
-	if (theFlags & O_RDONLY)
-		descriptor = _sopen(thePath, theFlags, _SH_DENYNO);
+    if (theFlags & O_RDONLY)
+        descriptor = _sopen(thePath, theFlags, _SH_DENYNO);
     else
-		descriptor = _open(thePath, theFlags, 0640);
-	input_handle = (HANDLE)_get_osfhandle(descriptor);
-	input_event_handle = output_handle = output_event_handle = input_handle;
+        descriptor = _open(thePath, theFlags, 0640);
+    input_handle = (HANDLE)_get_osfhandle(descriptor);
+    input_event_handle = output_handle = output_event_handle = input_handle;
     if(descriptor >= 0)
 #endif // if/else _WIN32_WCE
     {
         offset = 0;
-		flags = theFlags;
+        flags = theFlags;
         returnvalue = true;  // no error
     }
     else
-    {       
+    {
         PLOG(PL_FATAL, "Error opening file \"%s\": %s\n", thePath, GetErrorString());
-		flags = 0;
+        flags = 0;
         return false;
     }
 #else  // WIN32 not defined
@@ -135,17 +135,17 @@ bool ProtoFile::Open(const char* thePath, int theFlags)
         returnvalue = true;  // no error
     }
     else
-    {    
-        PLOG(PL_FATAL, "protoFile: Error opening file \"%s\": %s\n", 
+    {
+        PLOG(PL_FATAL, "protoFile: Error opening file \"%s\": %s\n",
                              thePath, GetErrorString());
         return false;
     }
 #endif // if/else WIN32/UNIX
     if (returnvalue)
     {
-        return ProtoChannel::Open();  
+        return ProtoChannel::Open();
     }
-	return returnvalue;
+    return returnvalue;
 }  // end ProtoFile::Open()
 
 void ProtoFile::Close()
@@ -213,14 +213,14 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
     if (!strcmp(oldName, newName)) return true;  // no change required
     // Make sure the new file name isn't an existing "busy" file
     // (This also builds sub-directories as needed)
-    if (ProtoFile::IsLocked(newName)) 
+    if (ProtoFile::IsLocked(newName))
     {
         PLOG(PL_FATAL, "ProtoFile::Rename() error: file is locked\n");
-        return false;    
+        return false;
     }
 #ifdef WIN32
     // In Win32, the new file can't already exist
-	if (ProtoFile::Exists(newName)) 
+    if (ProtoFile::Exists(newName))
     {
 #ifdef _WIN32_WCE
 #ifdef _UNICODE
@@ -246,13 +246,13 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
     }
 #endif  // WIN32
     // In Win32, the old file can't be open and Linux/Unix performs better if close/reopened, too
-	int oldFlags = 0;
-	if (IsOpen())
-	{
-		oldFlags = flags;
-		oldFlags &= ~(O_CREAT | O_TRUNC);  // unset these
-		Close();
-	}  
+    int oldFlags = 0;
+    if (IsOpen())
+    {
+        oldFlags = flags;
+        oldFlags &= ~(O_CREAT | O_TRUNC);  // unset these
+        Close();
+    }
     // Create sub-directories as needed.
     char tempPath[PATH_MAX+1];
     tempPath[PATH_MAX] = '\0';
@@ -300,10 +300,10 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
         {
             PLOG(PL_FATAL, "ProtoFile::Rename() mkdir(%s) error: %s\n",
                     tempPath, GetErrorString());
-            return false;  
+            return false;
         }
         if (ptr) *ptr++ = PROTO_PATH_DELIMITER;
-    }  
+    }
 #ifdef _WIN32_WCE
 #ifdef _UNICODE
     wchar_t wideOldName[MAX_PATH];
@@ -319,9 +319,9 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
 #else
     if (rename(oldName, newName))
     {
-        PLOG(PL_ERROR, "ProtoFile::Rename() rename() error: %s\n", GetErrorString());	
+        PLOG(PL_ERROR, "ProtoFile::Rename() rename() error: %s\n", GetErrorString());
 #endif // if/else _WIN32_WCE / WIN32|UNIX
-        if (oldFlags) 
+        if (oldFlags)
         {
             if (!Open(oldName, oldFlags))
                 PLOG(PL_ERROR, "ProtoFile::Rename() error re-opening file w/ old name\n");
@@ -331,7 +331,7 @@ bool ProtoFile::Rename(const char* oldName, const char* newName)
     else
     {
         // (TBD) Is the file offset OK doing this???
-        if (oldFlags) 
+        if (oldFlags)
         {
             if (!Open(newName, oldFlags))
                 PLOG(PL_ERROR, "ProtoFile::Rename() error opening file w/ new name\n");
@@ -360,19 +360,19 @@ bool ProtoFile::Read(char* buffer, unsigned int& numBytes)
             numBytes = 0;
             switch (errno)
             {
-                case EINTR: 
+                case EINTR:
                     continue;
                 case EAGAIN:
                     numBytes = 0;
                     return true; // nothing more to read for the moment
                 default:
-                  break; 
+                  break;
             }
 #endif // !_WIN32_WCE
             PLOG(PL_ERROR, "ProtoFile::Read() error: %s\n", GetErrorString());
             return false;
-        } 
-        else 
+        }
+        else
         {
             numBytes = (unsigned int)result;
             return true;
@@ -418,7 +418,7 @@ bool ProtoFile::ReadPrivate(char* buffer, unsigned int& numBytes)
             buffer += ncopy;
             want -= ncopy;
         }
-        else 
+        else
         {
             // Nothing more available (EOF or EAGAIN)
             numBytes -= want;
@@ -446,7 +446,7 @@ bool ProtoFile::Readline(char*         buffer,
                 if (count > 0)
                 {
                     *ptr = '\0';
-                    bufferSize = count + 1; 
+                    bufferSize = count + 1;
                     return true;
                 }
                 else
@@ -455,8 +455,8 @@ bool ProtoFile::Readline(char*         buffer,
                     return false;
                 }
             }
-            else 
-            { 
+            else
+            {
                 // Check to see if its end of line char
                 if (('\n' == *ptr) || ('\r' == *ptr))
                 {
@@ -468,8 +468,8 @@ bool ProtoFile::Readline(char*         buffer,
                 ptr++;
             }
         }
-        else 
-        { 
+        else
+        {
             PLOG(PL_ERROR,"ProtoFile::Readline() error: ReadPrivate() failure\n");
             return false;
         }
@@ -557,7 +557,7 @@ bool ProtoFile::Pad(Offset theOffset)
             return false;
         }
     }
-    return true; 
+    return true;
 }  // end ProtoFile::Pad()
 
 ProtoFile::Offset ProtoFile::GetSize() const
@@ -577,7 +577,7 @@ ProtoFile::Offset ProtoFile::GetSize() const
     if (result)
     {
         PLOG(PL_FATAL, "Error getting file size: %s\n", GetErrorString());
-        return 0;   
+        return 0;
     }
     else
     {
@@ -610,10 +610,10 @@ bool ProtoFile::DirectoryIterator::Open(const char *thePath)
         PLOG(PL_ERROR, "ProtoFile::DirectoryIterator::Open() error: NULL path?!\n");
         return false;
     }
-    
+
     if (NORMAL == GetType(thePath))
     {
-        // This is a non-directory file path so create a "Directory" item 
+        // This is a non-directory file path so create a "Directory" item
         // to cache the path
         if (NULL == (current = new Directory(thePath)))
         {
@@ -688,7 +688,7 @@ bool ProtoFile::DirectoryIterator::GetPath(char* pathBuffer) const
 #ifdef WIN32
 bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles, bool includeDirs)
 {
-	if (!current) return false;
+    if (!current) return false;
     if (INVALID_HANDLE_VALUE == current->hSearch)
     {
         bool result = includeFiles;
@@ -703,130 +703,130 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
         return result;
     }
 
-	bool success = true;
-	while(success)
-	{
-		WIN32_FIND_DATA findData;
-		if (current->hSearch == INVALID_HANDLE_VALUE)
-		{
-			// Construct search string
-			current->GetFullName(fileName);
-			strcat(fileName, "\\*");
+    bool success = true;
+    while(success)
+    {
+        WIN32_FIND_DATA findData;
+        if (current->hSearch == INVALID_HANDLE_VALUE)
+        {
+            // Construct search string
+            current->GetFullName(fileName);
+            strcat(fileName, "\\*");
 #ifdef _UNICODE
             wchar_t wideBuffer[MAX_PATH];
             mbstowcs(wideBuffer, fileName, MAX_PATH);
             if (INVALID_HANDLE_VALUE ==
-			    (current->hSearch = FindFirstFile(wideBuffer, &findData)))
+                (current->hSearch = FindFirstFile(wideBuffer, &findData)))
 #else
-			if (INVALID_HANDLE_VALUE ==
-			    (current->hSearch = FindFirstFile(fileName, &findData)))
+            if (INVALID_HANDLE_VALUE ==
+                (current->hSearch = FindFirstFile(fileName, &findData)))
 #endif // if/else _UNICODE
-			    success = false;
-			else
-				success = true;
-		}
-		else
-		{
-			success = (0 != FindNextFile(current->hSearch, &findData));
-		}
+                success = false;
+            else
+                success = true;
+        }
+        else
+        {
+            success = (0 != FindNextFile(current->hSearch, &findData));
+        }
 
-		// Do we have a candidate file?
-		if (success)
-		{
+        // Do we have a candidate file?
+        if (success)
+        {
 #ifdef _UNICODE
             char cFileName[MAX_PATH];
             wcstombs(cFileName, findData.cFileName, MAX_PATH);
             char* ptr = strrchr(cFileName, PROTO_PATH_DELIMITER);
 #else
-			char* ptr = strrchr(findData.cFileName, PROTO_PATH_DELIMITER);
+            char* ptr = strrchr(findData.cFileName, PROTO_PATH_DELIMITER);
 #endif // if/else _UNICODE
-			if (ptr)
-				ptr += 1;
-			else
+            if (ptr)
+                ptr += 1;
+            else
 #ifdef _UNICODE
                 ptr = cFileName;
 #else
-				ptr = findData.cFileName;
+                ptr = findData.cFileName;
 #endif // if/else _UNICODE
 
-			// Skip "." and ".." directories
-			if (ptr[0] == '.')
-			{
-				if ((1 == strlen(ptr)) ||
-					((ptr[1] == '.') && (2 == strlen(ptr))))
-				{
-					continue;
-				}
-			}
-			current->GetFullName(fileName);
-			strcat(fileName, ptr);
-			ProtoFile::Type type = ProtoFile::GetType(fileName);
-			if (includeFiles && (ProtoFile::NORMAL == type))
-			{
+            // Skip "." and ".." directories
+            if (ptr[0] == '.')
+            {
+                if ((1 == strlen(ptr)) ||
+                    ((ptr[1] == '.') && (2 == strlen(ptr))))
+                {
+                    continue;
+                }
+            }
+            current->GetFullName(fileName);
+            strcat(fileName, ptr);
+            ProtoFile::Type type = ProtoFile::GetType(fileName);
+            if (includeFiles && (ProtoFile::NORMAL == type))
+            {
                 // I don't think this commented code is needed anymore
                 //size_t nameLen = strlen(fileName);
                 //nameLen = MIN(PATH_MAX, nameLen);
-				//nameLen -= path_len;
-				//memmove(fileName, fileName+path_len, nameLen);
-				//if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
-				return true;
-			}
-			else if (ProtoFile::DIRECTORY == type)
-			{
-				Directory *dir = new Directory(ptr, current);
-				if ((NULL != dir) && dir->Open())
-				{
-					// Push sub-directory onto stack and search it
-					current = dir;
+                //nameLen -= path_len;
+                //memmove(fileName, fileName+path_len, nameLen);
+                //if (nameLen < PATH_MAX) fileName[nameLen] = '\0';
+                return true;
+            }
+            else if (ProtoFile::DIRECTORY == type)
+            {
+                Directory *dir = new Directory(ptr, current);
+                if ((NULL != dir) && dir->Open())
+                {
+                    // Push sub-directory onto stack and search it
+                    current = dir;
                     if (includeDirs)
                     {
                         // TBD - should we remove trailing PATH_DELIMITER?
                         current->GetFullName(fileName);
                         return true;
-                    }  
-					return GetNextPath(fileName, includeFiles, includeDirs);
-				}
-				else
-				{
-					// Couldn't open try next one
+                    }
+                    return GetNextPath(fileName, includeFiles, includeDirs);
+                }
+                else
+                {
+                    // Couldn't open try next one
                     if (NULL != dir)
                     {
                         // if "includeDirs", return path, even if we can't open it
-					    if (includeDirs)
+                        if (includeDirs)
                             dir->GetFullName(fileName);
                         delete dir;
                         if (includeDirs)
                             return true;
                     }
-				}
-			}
-			else
-			{
-				// ProtoFile::INVALID file, try next one
-			}
-		}  // end if(success)
-	}  // end while(success)
+                }
+            }
+            else
+            {
+                // ProtoFile::INVALID file, try next one
+            }
+        }  // end if(success)
+    }  // end while(success)
 
-	// if parent, popup a level and continue search
-	if (current->parent)
-	{
-		current->Close();
-		Directory *dir = current;
-		current = current->parent;
-		delete dir;
-		return GetNextPath(fileName, includeFiles, includeDirs);
-	}
-	else
-	{
-		current->Close();
-		delete current;
-		current = NULL;
-		return false;
-	}	
+    // if parent, popup a level and continue search
+    if (current->parent)
+    {
+        current->Close();
+        Directory *dir = current;
+        current = current->parent;
+        delete dir;
+        return GetNextPath(fileName, includeFiles, includeDirs);
+    }
+    else
+    {
+        current->Close();
+        delete current;
+        current = NULL;
+        return false;
+    }
 }  // end ProtoFile::DirectoryIterator::GetNextPath()  (WIN32)
 #else
 bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles, bool includeDirs)
-{   
+{
     //TRACE("enter ProtoFile::DirectoryIterator::GetNextPath() current:%p files:%d dirs:%d ...\n", current, includeFiles, includeDirs);
     if (NULL == current) return false;
     if (NULL == current->dptr)
@@ -857,12 +857,12 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
         current->GetFullName(fileName);
         strcat(fileName, dp->d_name);
         //TRACE("Getting type for %s ... ", fileName);
-        ProtoFile::Type type = ProtoFile::GetType(fileName);        
+        ProtoFile::Type type = ProtoFile::GetType(fileName);
         if (includeFiles && (ProtoFile::NORMAL == type))
         {
             //TRACE("NORMAL type\n");
             return true;
-        } 
+        }
         else if (ProtoFile::DIRECTORY == type)
         {
             //TRACE("DIRECTORY type\n");
@@ -880,16 +880,16 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
             }
             else
             {
-				// Couldn't open try next one
+                // Couldn't open try next one
                 if (NULL != dir)
                 {
-					if (includeDirs)
+                    if (includeDirs)
                         dir->GetFullName(fileName);
                     delete dir;
                     if (includeDirs)
                         return true;
                 }
-			}
+            }
         }
         else
         {
@@ -897,7 +897,7 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
             // ProtoFile::INVALID, try next one
         }
     }  // end while(readdir())
-   
+
     // Pop up a level and recursively continue or finish if done
     if (current->parent)
     {
@@ -916,19 +916,19 @@ bool ProtoFile::DirectoryIterator::GetNextPath(char* fileName, bool includeFiles
         delete current;
         current = NULL;
         return false;  // no more files remain
-    }      
+    }
 }  // end ProtoFile::DirectoryIterator::GetNextPath() (UNIX)
 
 #endif // if/else WIN32
 
-ProtoFile::Directory::Directory(const char* thePath, 
+ProtoFile::Directory::Directory(const char* thePath,
                                 Directory*  theParent)
     : parent(theParent),
 #ifdef WIN32
     hSearch(INVALID_HANDLE_VALUE)
 #else
     dptr(NULL)
-#endif // if/else WIN32 
+#endif // if/else WIN32
 {
     strncpy(path, thePath, PATH_MAX);
     path[PATH_MAX] = '\0';
@@ -947,10 +947,10 @@ ProtoFile::Directory::~Directory()
 
 bool ProtoFile::Directory::Open()
 {
-    Close();  // in case it's already open   
+    Close();  // in case it's already open
     char fullName[PATH_MAX+1];
     fullName[PATH_MAX] = '\0';
-    GetFullName(fullName);  
+    GetFullName(fullName);
     // Get rid of trailing PROTO_PATH_DELIMITER
     size_t len = MIN(PATH_MAX, strlen(fullName));
     if (PROTO_PATH_DELIMITER == fullName[len-1]) fullName[len-1] = '\0';
@@ -962,16 +962,16 @@ bool ProtoFile::Directory::Open()
 #else
     DWORD attr = GetFileAttributes(fullName);
 #endif // if/else _UNICODE
-	if (0xFFFFFFFF == attr)   
+    if (0xFFFFFFFF == attr)
     {
         PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: %s\n", fullName, GetErrorString());
         return false;
     }
-	else if (0 != (attr & FILE_ATTRIBUTE_DIRECTORY))
+    else if (0 != (attr & FILE_ATTRIBUTE_DIRECTORY))
     {
-		return true;
+        return true;
     }
-	else   
+    else
     {
         PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: not a directory\n", fullName);
         return false;
@@ -981,23 +981,23 @@ bool ProtoFile::Directory::Open()
     {
         return true;
     }
-    else    
+    else
     {
         PLOG(PL_ERROR, "ProtoFile::Directory::Open(%s) error: %s\n", fullName, GetErrorString());
         return false;
     }
 #endif // if/else WIN32
-    
+
 } // end ProtoFile::Directory::Open()
 
 void ProtoFile::Directory::Close()
 {
 #ifdef WIN32
     if (hSearch != INVALID_HANDLE_VALUE)
-	{
-		FindClose(hSearch);
-		hSearch = INVALID_HANDLE_VALUE;
-	}
+    {
+        FindClose(hSearch);
+        hSearch = INVALID_HANDLE_VALUE;
+    }
 #else
     if (NULL != dptr)
     {
@@ -1033,19 +1033,19 @@ ProtoFile::Type ProtoFile::GetType(const char* path)
 #else
     DWORD attr = GetFileAttributes(path);
 #endif // if/else _UNICODE
-	if (0xFFFFFFFF == attr)
-		return INVALID;  // error
-	else if (attr & FILE_ATTRIBUTE_DIRECTORY)
-		return DIRECTORY;
-	else
-		return NORMAL;
+    if (0xFFFFFFFF == attr)
+        return INVALID;  // error
+    else if (attr & FILE_ATTRIBUTE_DIRECTORY)
+        return DIRECTORY;
+    else
+        return NORMAL;
 #else
-    struct stat file_info;  
-    if (stat(path, &file_info)) 
+    struct stat file_info;
+    if (stat(path, &file_info))
         return INVALID;  // stat() error
     else if ((S_ISDIR(file_info.st_mode)))
         return DIRECTORY;
-    else 
+    else
         return NORMAL;
 #endif // if/else WIN32
 }  // end ProtoFile::GetType()
@@ -1062,9 +1062,9 @@ ProtoFile::Offset ProtoFile::GetSize(const char* path)
     if (INVALID_HANDLE_VALUE != FindFirstFile(path, &findData))
 #endif // if/else _UNICODE
     {
-		Offset fileSize = findData.nFileSizeLow;
-		if (sizeof(Offset) > 4)
-			fileSize |= ((Offset)findData.nFileSizeHigh) << (8*sizeof(DWORD));
+        Offset fileSize = findData.nFileSizeLow;
+        if (sizeof(Offset) > 4)
+            fileSize |= ((Offset)findData.nFileSizeHigh) << (8*sizeof(DWORD));
         return fileSize;
     }
     else
@@ -1079,11 +1079,11 @@ ProtoFile::Offset ProtoFile::GetSize(const char* path)
 #else
     struct stat info;
     int result = stat(path, &info);
-#endif // if/else WIN32    
+#endif // if/else WIN32
     if (result)
     {
         //DMSG(0, "Error getting file size: %s\n", GetErrorString());
-        return 0;   
+        return 0;
     }
     else
     {
@@ -1128,37 +1128,37 @@ time_t ProtoFile::GetUpdateTime(const char* path)
     struct _stati64 info;               // instead of "struct _stat"
     int result = _stati64(path, &info); // instead of "_stat()"
 #else
-    struct stat info; 
+    struct stat info;
     int result = stat(path, &info);
-#endif // if/else WIN32   
-    if (result) 
+#endif // if/else WIN32
+    if (result)
     {
         return (time_t)0;  // stat() error
     }
-    else 
+    else
     {
 #ifdef WIN32
         // Hack because Win2K and Win98 seem to work differently
-		//__time64_t updateTime = MAX(info.st_ctime, info.st_atime);
+        //__time64_t updateTime = MAX(info.st_ctime, info.st_atime);
         time_t updateTime = MAX(info.st_ctime, info.st_atime);
-		updateTime = MAX(updateTime, info.st_mtime);
-		return ((time_t)updateTime);
+        updateTime = MAX(updateTime, info.st_mtime);
+        return ((time_t)updateTime);
 #else
-        return info.st_ctime; 
+        return info.st_ctime;
 #endif // if/else WIN32
-    } 
+    }
 #endif // if/else _WIN32_WCE
 }  // end ProtoFile::GetUpdateTime()
 
 bool ProtoFile::IsLocked(const char* path)
 {
     // If file doesn't exist, it's not locked
-    if (!Exists(path)) return false;      
+    if (!Exists(path)) return false;
     ProtoFile testFile;
 #ifdef WIN32
     if(!testFile.Open(path, O_WRONLY | O_CREAT))
 #else
-    if(!testFile.Open(path, O_WRONLY | O_CREAT))    
+    if(!testFile.Open(path, O_WRONLY | O_CREAT))
 #endif // if/else WIN32
     {
         return true;
@@ -1267,7 +1267,7 @@ bool ProtoFile::PathList::PathIterator::GetNextPath(char* path, bool includeFile
         {
             case DIRECTORY:
                 if (!dir_iterator.Open(nextPath->GetPath()))
-                    PLOG(PL_ERROR, "ProtoFile::PathList::PathIterator::GetNextPath() error: unable to open directory: %s\n", 
+                    PLOG(PL_ERROR, "ProtoFile::PathList::PathIterator::GetNextPath() error: unable to open directory: %s\n",
                                    nextPath->GetPath());
                 if (includeDirs)
                     validPath = true;  // even return paths for directories we can't open
@@ -1295,4 +1295,4 @@ bool ProtoFile::PathList::PathIterator::GetNextPath(char* path, bool includeFile
     }
     return false;
 }  // end ProtoFile::PathList::PathIterator::GetNextPath()
-        
+

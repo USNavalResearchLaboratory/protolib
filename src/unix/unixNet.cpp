@@ -932,11 +932,11 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
-            sprintf(cmd, "/sbin/ifconfig %s %s/%u alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
+            snprintf(cmd, 1024, "/sbin/ifconfig %s %s/%u alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
             break;
 #ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
-            sprintf(cmd, "/sbin/ifconfig %s inet6 %s/%u alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
+            snprintf(cmd, 1024, "/sbin/ifconfig %s inet6 %s/%u alias", ifaceName, ifaceAddr.GetHostString(), maskLen);
             break;
 #endif // HAVE_IPV6
         default:
@@ -1005,11 +1005,11 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
-            sprintf(cmd, "/sbin/ifconfig %s %s -alias", ifaceName, ifaceAddr.GetHostString());
+            snprintf(cmd, 1024, "/sbin/ifconfig %s %s -alias", ifaceName, ifaceAddr.GetHostString());
             break;
 #ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
-            sprintf(cmd, "/sbin/ifconfig %s inet6 %s -alias", ifaceName, ifaceAddr.GetHostString());
+            snprintf(cmd, 1024, "/sbin/ifconfig %s inet6 %s -alias", ifaceName, ifaceAddr.GetHostString());
             break;
 #endif // HAVE_IPV6
         default:

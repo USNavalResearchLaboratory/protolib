@@ -377,9 +377,9 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
                 if (len < buflen)
                 {
                     if (i < 1)
-                        len += sprintf(buffer+len, "%02x", ((unsigned char*)&addr)[i]);
+                        len += snprintf(buffer+len, buflen-len, "%02x", ((unsigned char*)&addr)[i]);
                     else
-                        len += sprintf(buffer+len, ":%02x", ((unsigned char*)&addr)[i]);
+                        len += snprintf(buffer+len, buflen-len, ":%02x", ((unsigned char*)&addr)[i]);
                 }
                 else
                 {

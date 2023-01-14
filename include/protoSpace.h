@@ -141,7 +141,7 @@ class ProtoSpace
                 double*                      orig;
                 double                       bbox_radius;
                 double                       x_factor;
-                // The iterations define an expanding
+                // The iterations define an expanding 
                 // bounding n-dimensional sub-space.
                 ProtoSortedTree::Iterator**  pos_it;
                 ProtoSortedTree::Iterator**  neg_it;

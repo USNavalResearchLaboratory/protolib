@@ -34,63 +34,63 @@
 #define MIN(X,Y) ((X<Y)?X:Y)
 #define MAX(X,Y) ((X>Y)?X:Y)
 #endif // !MIN
-// (TBD) Rewrite this implementation to use 
+// (TBD) Rewrite this implementation to use
 // native WIN32 APIs on that platform !!!
 
 #ifdef _WIN32_WCE
-// Here we enumerate some stuff to 
+// Here we enumerate some stuff to
 // make the ProtoFile work on WinCE
 enum
 {
     O_CREAT  = 0x01,
-    O_TRUNC  = 0x02,    
+    O_TRUNC  = 0x02,
     O_RDONLY = 0x04,
     O_WRONLY = 0x08,
     O_RDWR   = 0x10,
     O_BINARY = 0x20
 };
 #endif // _WIN32_WCE
-        
+
 class ProtoFile : public ProtoChannel
 {
     public:
 #ifdef WIN32
-		typedef __int64 Offset;
+        typedef __int64 Offset;
 #else
-		typedef off_t Offset;
+        typedef off_t Offset;
 #endif // if/else WIN32/UNIX
 
-        enum Type {INVALID, NORMAL, DIRECTORY};        
+        enum Type {INVALID, NORMAL, DIRECTORY};
         ProtoFile();
         ~ProtoFile();
-	    bool Open(const char* path, int theFlags = 0);
+        bool Open(const char* path, int theFlags = 0);
         bool Lock();
         void Unlock();
         bool Rename(const char* oldName, const char* newName);
         static bool Unlink(const char *path);
         void Close();
-        bool IsOpen() const 
+        bool IsOpen() const
         {
 #ifdef _WIN32_WCE
             return ((NULL != file_ptr) && ProtoChannel::IsOpen());
 #else
-			return ((descriptor >= 0) && ProtoChannel::IsOpen());
+            return ((descriptor >= 0) && ProtoChannel::IsOpen());
 #endif // _WIN32_WCE
         }
         bool Read(char* buffer, unsigned int& numBytes);//numBytes going is is requested amount comming out is amount read.  Note that a return value of true with numBytes =0 means nothing was read.
         bool Readline(char* buffer, unsigned int& bufferSize);//uses bufferedRead to read in a line quickly will return false if full line is not available
         size_t Write(const char* buffer, size_t len);
         bool Seek(Offset theOffset);
-		ProtoFile::Offset GetOffset() const {return (offset);}
-		ProtoFile::Offset GetSize() const;
+        ProtoFile::Offset GetOffset() const {return (offset);}
+        ProtoFile::Offset GetSize() const;
         bool Pad(Offset theOffset);  // if file size is less than theOffset, writes a byte to force filesize
-        
+
         // static helper methods
         static ProtoFile::Type GetType(const char *path);
-		static ProtoFile::Offset GetSize(const char* path);
+        static ProtoFile::Offset GetSize(const char* path);
         static time_t GetUpdateTime(const char* path);
         static bool IsLocked(const char *path);
-         
+
         static bool Exists(const char* path)
         {
 #ifdef WIN32
@@ -105,7 +105,7 @@ class ProtoFile : public ProtoChannel
             return (0 == access(path, F_OK));
 #endif  // if/else WIN32
         }
-        
+
         static bool IsWritable(const char* path)
         {
 #ifdef WIN32
@@ -116,21 +116,21 @@ class ProtoFile : public ProtoChannel
 #else
             DWORD attr = GetFileAttributes(path);
 #endif // if/else _UNICODE
-	        return ((0xFFFFFFFF == attr) ? 
+            return ((0xFFFFFFFF == attr) ?
                         false : (0 == (attr & FILE_ATTRIBUTE_READONLY)));
 #else
             return (0 == access(path, W_OK));
 #endif // if/else WIN32
         }
-        
+
         class Path : public ProtoQueue::Item
         {
-            
+
             // wrapper around file path string
-            // with helper methods like GetBaseName(), GetDirName(), 
+            // with helper methods like GetBaseName(), GetDirName(),
             // IsDirectory(), etc
             public:
-                Path(const char* path) 
+                Path(const char* path)
                     {SetPath(path);}
                 ~Path() {}
                 const char* GetPath() const
@@ -144,14 +144,14 @@ class ProtoFile : public ProtoChannel
                     {return ProtoFile::GetType(path_name);}
                 bool IsDirectory() const
                     {return (DIRECTORY == GetType());}
-                
+
             private:
                 char    path_name[PATH_MAX + 1];
         };  // end class ProtoFile::Path
-        
+
         private:
             class Directory;  // forward declaration for the DirectoryIterator
-    
+
     public:
         class DirectoryIterator
         {
@@ -171,17 +171,17 @@ class ProtoFile : public ProtoChannel
                 Directory*  current;
                 int         path_len;
         };  // end class ProtoFile::DirectoryIterator
-        
+
         // linked list of Path items, with added directory tree iteration capability
-        class PathList : public ProtoSimpleQueueTemplate<Path> 
+        class PathList : public ProtoSimpleQueueTemplate<Path>
         {
             public:
-                bool AppendPath(const char* thePath);    
-                class PathIterator 
+                bool AppendPath(const char* thePath);
+                class PathIterator
                 {
                     // This class iterates over the path list and walks any directory
-                    // trees found. (Alternatively, use the PathList::Iterator to 
-                    // simpy iterate over the linked list of Path items if that is 
+                    // trees found. (Alternatively, use the PathList::Iterator to
+                    // simpy iterate over the linked list of Path items if that is
                     // needed instead).
                     public:
                         // Use current, non-zero initTime so only files modified _after_ Init() are returned
@@ -198,7 +198,7 @@ class ProtoFile : public ProtoChannel
                         {
                             last_time = big_time;
                             list_iterator.Reset();
-                        }    
+                        }
                         void SetUpdatesOnly(bool enable)
                             {updates_only = enable;}
                         bool AppendPath(const char* thePath);
@@ -209,46 +209,48 @@ class ProtoFile : public ProtoChannel
                             {return GetNextPath(path, true, false);}
                         bool GetNextDirectory(char* path)
                             {return GetNextPath(path, false, true);}
-                        
+
                         const Path* GetCurrentPathItem() const
-                            {return list_iterator.PeekPrevItem();}   
-                        
+                            {return list_iterator.PeekPrevItem();}
+
                     private:
                         Iterator            list_iterator;
-                        DirectoryIterator   dir_iterator;  
+                        DirectoryIterator   dir_iterator;
                         time_t              big_time;
                         time_t              last_time;
                         bool                updates_only;
-                    
+
                 };  // end class ProtoFile::PathList::PathIterator
-                
+
         };  // end class ProtoFile::PathList
-        
-        class PathTable : public ProtoIndexedQueueTemplate<Path> 
+
+        class PathTable : public ProtoIndexedQueueTemplate<Path>
         {
             // Table of Path items, indexed by path name for quick lookup
+            
+            // TBD - add convenience methods (e.g., FindPath(const char*), etc)
             private:
                 const char* GetKey(const Item& item) const
                     {return static_cast<const Path&>(item).GetPath();}
                 unsigned int GetKeysize(const Item& item) const
                     {return ((unsigned int)strlen(static_cast<const Path&>(item).GetPath()) << 3);}
         };  // end class ProtoFile::PathTable
-        
-        
+
+
     private:
         bool ReadPrivate(char* buffer, unsigned int& numBytes);  // helper for Readline()
-    
+
         // This is used by the ProtoFile::DirectoryIterator
         class Directory
         {
-            public:           
+            public:
                 char        path[PATH_MAX+1];
                 Directory*  parent;
 #ifdef WIN32
                 HANDLE      hSearch;
 #else  // UNIX
                 DIR*        dptr;
-#endif  // if/else WIN32/UNIX    
+#endif  // if/else WIN32/UNIX
                 Directory(const char *thePath, Directory* theParent = NULL);
                 ~Directory();
                 void GetFullName(char* namePtr);
@@ -257,26 +259,26 @@ class ProtoFile : public ProtoChannel
 
                 const char* Path() const {return path;}
                 void RecursiveCatName(char* ptr);
-        };  // end class ProtoFile::Directory    
-            
+        };  // end class ProtoFile::Directory
+
 #ifdef WIN32
 #ifdef _WIN32_WCE
         FILE*           file_ptr;
 #else
-		int				descriptor;
+        int             descriptor;
 #endif // if/else _WIN32_WCE
-		__int64         offset;
+        __int64         offset;
 #else  // UNIX
         off_t           offset;
 #endif // if/else WIN32/UNIX
-		int				flags;
+        int             flags;
         // This is used for buffered reading that enables
         // better performance for ProtoFile::Readline()
         // (TBD - allocate this only when needed or split to separate "FastReader" class?)
         enum {BUFFER_SIZE = 2048};
         char            read_buffer[BUFFER_SIZE];
         char*           read_ptr;
-        unsigned int    read_count;             
+        unsigned int    read_count;
 };  // end class ProtoFile
-        
+
 #endif // _PROTO_FILE
