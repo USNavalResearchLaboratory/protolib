@@ -216,7 +216,7 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
     }
 }  // end ProtoNetlink::RecvResponse()
 
-#ifdef defined(ANDROID) && __ANDROID_API__ < 24
+#if defined(ANDROID) && __ANDROID_API__ < 24
 // Although these function would also work for Linux, we just have these defined for
 // Android where the getifaddrs() function is not available.  The non-Android Linux
 // versions of these are implemented in the more general "unixNet.cpp" module using getifaddrs()
