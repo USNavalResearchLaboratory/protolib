@@ -216,7 +216,7 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
     }
 }  // end ProtoNetlink::RecvResponse()
 
-#ifdef ANDROID
+#ifdef defined(ANDROID) && __ANDROID_API__ < 24
 // Although these function would also work for Linux, we just have these defined for
 // Android where the getifaddrs() function is not available.  The non-Android Linux
 // versions of these are implemented in the more general "unixNet.cpp" module using getifaddrs()
@@ -677,7 +677,7 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
     return 0;
 }  // end ProtoNet::GetInterfaceAddressMask()
 
-#endif // ANDROID
+#endif // defined(ANDROID) && __ANDROID_API__ < 24
 
 static unsigned int Readline(FILE* filePtr, char* buffer, unsigned int buflen)
 {

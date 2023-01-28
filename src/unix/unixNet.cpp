@@ -38,16 +38,19 @@
 #endif  // if/else (SOLARIS || IRIX)
 #endif  // !SIOCGIFHWADDR
 
-#ifndef ANDROID
+
+// UPDATE - Android API 24 and newer have getifaddrs() - YAY! - we will deprecate this stuff
+// (do need to validate that MAC address information is provided properly for privileged apps)
+#if !defined(ANDROID) || __ANDROID_API__ > 23
 // Android doesn't have getifaddrs(), so we have some netlink stuff
 // in "linuxNet.cpp" to implement specific some functions for Android
 #include <ifaddrs.h> 
-#endif // !ANDROID
+#endif // !defined(ANDROID) || __ANDROID_API__ > 23
 
 // Implementation of ProtoNet functions for Unix systems.  These are the mechanisms that are common to
 // most Unix systems.  Some additional ProtoNet mechanisms that have Linux- or MacOS-specific code are
 // implemented in "src/linux/linuxNet.cpp" or "src/macos/macosNet.cpp", etc.
-#ifndef ANDROID  // Android version implemented in linuxNet.cpp because no Android getifaddrs()
+#if !defined(ANDROID) || __ANDROID_API__ > 23  // Android < 24 version implemented in linuxNet.cpp because no Android getifaddrs()
 unsigned int ProtoNet::GetInterfaceName(const ProtoAddress& ifAddr, char* buffer, unsigned int buflen)
 {
     int family;
@@ -137,7 +140,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
     if (ProtoAddress::ETH == addressType)
     {
 #ifdef SIOCGIFHWADDR
-        // Probably Linux
+        // Probably Linux or Android
         // Get hardware (MAC) address instead of IP address
         if (ioctl(socketFd, SIOCGIFHWADDR, &req) < 0)
         {
@@ -610,9 +613,9 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
     }
     return 0;
 } // end ProtoNet::GetInterfaceAddressMask()
-#endif // !ANDROID
+#endif // !defined(ANDROID) || __ANDROID_API__ > 23
 
-#if defined(SIOCGIFINDEX) && (defined(ANDROID) || !defined(HAVE_IPV6)) 
+#if defined(SIOCGIFINDEX) && ((defined(ANDROID) && __ANDROID_API__ < 24) || !defined(HAVE_IPV6)) 
 // Internal helper function for systems without getifaddrs() (e.g. Android or older stuff)
 static int GetInterfaceList(struct ifconf& conf)
 {
@@ -653,12 +656,12 @@ static int GetInterfaceList(struct ifconf& conf)
     close(sockFd);  // done with socket (whether error or not)
     return (conf.ifc_len / sizeof(struct ifreq));  // number of interfaces (or 0)
 }  // end ProtoNet::GetInterfaceList()
-#endif // SIOCGIFINDEX  && (ANDROID || !HAVE_IPV6)
+#endif // SIOCGIFINDEX  && ((ANDROID && __ANDROID_API < 24) || !HAVE_IPV6)
 
 unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned int indexArraySize)
 {
     unsigned int indexCount = 0;
-#if defined(HAVE_IPV6) && !defined(ANDROID)
+#if defined(HAVE_IPV6) && (!defined(ANDROID) || __ANDROID_API__ > 23)
     struct if_nameindex* ifdx = if_nameindex();
     if (NULL == ifdx) return 0;  // no interfaces found
     struct if_nameindex* ifPtr = ifdx;
@@ -671,7 +674,7 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
 		ifPtr++;
 	} 
 	if_freenameindex(ifdx);
-#else  // !HAVE_IPV6  || ANDROID
+#else  // !HAVE_IPV6  || (ANDROID && __ANDROID_API < 24)
 #ifdef SIOCGIFINDEX
     struct ifconf conf;
     conf.ifc_buf = NULL;  // initialize
@@ -687,7 +690,7 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
 #else  // !SIOCGIFINDEX
 	PLOG(PL_ERROR, "ProtoNet::GetInterfaceIndices() error: interface indices not supported\n");
 #endif  // if/else SIOCGIFINDEX
-#endif  // if/else HAVE_IPV6  && !ANDROID
+#endif  // if/else HAVE_IPV6  && (!defined(ANDROID) || _ANDROID_API > 23)
     return indexCount;
 }  // end ProtoNet::GetInterfaceIndices()
 

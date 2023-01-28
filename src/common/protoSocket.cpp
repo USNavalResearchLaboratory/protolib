@@ -947,7 +947,6 @@ void ProtoSocket::Close()
 
 bool ProtoSocket::Connect(const ProtoAddress& theAddress)
 {
-    TRACE("enter ProtoSocket::Connect() ...\n");
     if (IsConnected()) Disconnect();
     if (!IsOpen() && !Open(0, theAddress.GetType()))
     {
