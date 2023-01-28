@@ -2,10 +2,9 @@
 /**
 * @file protoSocket.cpp
 * 
-* @brief Network socket container class that provides consistent interface for use of operating system (or simulation environment) transport sockets.
+* @brief Network socket container class that provides consistent interface for 
+* use of operating system (or simulation environment) transport sockets.
 */
-
-
 
 #ifdef UNIX
 
@@ -2007,7 +2006,7 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
             if (NULL != interfaceName)
             {
                 ProtoAddress interfaceAddress;
-#if defined(WIN32) && (WINVER < 0x0500)
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 if (interfaceAddress.ResolveFromString(interfaceName))
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
@@ -2015,7 +2014,7 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
                 else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
 #else
                 if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
-#endif // if/else defined(WIN32) && (WINVER < 0x0500)
+#endif // if/else (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
                 }
@@ -2059,7 +2058,7 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
             if (NULL != interfaceName)
             {
                 ProtoAddress interfaceAddress;
-#if defined(WIN32) && (WINVER < 0x0500)
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 if (interfaceAddress.ResolveFromString(interfaceName))
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
@@ -2067,7 +2066,7 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
                 else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
 #else
                 if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
-#endif // if/else defined(WIN32) && (WINVER < 0x0500)
+#endif // if/else (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
                 }
@@ -2098,7 +2097,15 @@ bool ProtoSocket::JoinGroup(const ProtoAddress& groupAddress,
             if (NULL != interfaceName)
             {
                 ProtoAddress interfaceAddress;
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
+                if (interfaceAddress.ResolveFromString(interfaceName))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#else
                 if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#endif // if/else (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
                 }
@@ -2157,7 +2164,15 @@ bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddress,
             if (interfaceName)
             {
                 ProtoAddress interfaceAddress;
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
+                if (interfaceAddress.ResolveFromString(interfaceName))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#else
                 if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#endif // if/else (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
                 }
@@ -2200,8 +2215,15 @@ bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddress,
             if (NULL != interfaceName)
             {
                 ProtoAddress interfaceAddress;
-                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, 
-                                        interfaceAddress))
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
+                if (interfaceAddress.ResolveFromString(interfaceName))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#else
+                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#endif // if/else (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
                 }
@@ -2232,8 +2254,15 @@ bool ProtoSocket::LeaveGroup(const ProtoAddress& groupAddress,
             if (interfaceName)
             {
                 ProtoAddress interfaceAddress;
-                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, 
-                                        interfaceAddress))
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
+                if (interfaceAddress.ResolveFromString(interfaceName))
+                {
+                    mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
+                }
+                else if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#else
+                if (GetInterfaceAddress(interfaceName, ProtoAddress::IPv4, interfaceAddress))
+#endif // if/else (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
                 {
                     mreq.imr_interface.s_addr = htonl(interfaceAddress.IPv4GetAddress());
                 }
@@ -2641,7 +2670,7 @@ bool ProtoSocket::SetMulticastInterface(const char* interfaceName)
         {  
             struct in_addr localAddr;
             ProtoAddress interfaceAddress;
-#if defined(WIN32) && (WINVER < 0x0500)
+#if (defined(WIN32) && (WINVER < 0x0500)) || defined(ANDROID)
             // First check to see if "interfaceName" is the IP address on older Win32 versions
             // since there seem to be issues with iphlpapi.lib (and hence GetInterfaceAddress()) on those platforms
             if (interfaceAddress.ResolveFromString(interfaceName))
