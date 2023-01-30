@@ -68,6 +68,8 @@ def options(ctx):
 def configure(ctx):
     if system == 'windows':
         ctx.env.MSVC_TARGETS = ['x86']
+    elif system == 'darwin':
+        ctx.env.ARCH = ['arm64', 'x86_64']
 
     ctx.load('compiler_cxx')
 
