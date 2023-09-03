@@ -1289,8 +1289,6 @@ void ProtoDispatcher::DestroyThread()
 // Unix-specific methods and implementation
 #ifdef UNIX
 
-
-
 #if defined(USE_SELECT)
 // USE_SELECT implementation of ProtoDispatcher::UpdateStreamNotification()
 bool ProtoDispatcher::UpdateStreamNotification(Stream& stream, NotificationCommand cmd)
@@ -1794,7 +1792,7 @@ void ProtoDispatcher::Wait()
                          (fd_set*)&output_set, 
                          (fd_set*) NULL, 
                          timeoutPtr,
-                         (sigset_t*)NULL);
+                         (sigset_t*)NULL);;
 #else    
     wait_status = select(maxDescriptor+1, 
                          (fd_set*)&input_set, 
