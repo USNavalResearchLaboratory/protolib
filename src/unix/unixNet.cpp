@@ -662,6 +662,36 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
 {
     unsigned int indexCount = 0;
 #if defined(HAVE_IPV6) && (!defined(ANDROID) || __ANDROID_API__ > 23)
+#ifdef ANDROID
+    // Evidently permission to call if_nameindex() is problematic for Android, so this
+    // uses getifaddrs() to get list of indices
+    struct ifaddrs* ifap;
+    if (0 == getifaddrs(&ifap))
+    {
+        // Get index for each valid interface
+        struct ifaddrs* ptr = ifap;
+        unsigned int namelen = 0;
+        while (ptr)
+        {
+            int ifIndex = 0;
+            if (NULL != ptr->ifa_name)
+                ifIndex = if_nametoindex(ptr->ifa_name);
+            if (0 != ifIndex)
+            {
+                if ((NULL != indexArray) && (indexCount < indexArraySize))
+			        indexArray[indexCount] = ifIndex;
+		        indexCount++;   
+            }
+            else
+            {
+                PLOG(PL_WARN, "ProtoNet::GetInterfaceIndices() warning: unable to get index for interface \"%s\"\n",
+                                 (NULL != ptr->ifa_name) ? ptr->ifa_name : "unknown");
+            }
+            ptr = ptr->ifa_next;
+        }
+        freeifaddrs(ifap);
+    }
+#else
     struct if_nameindex* ifdx = if_nameindex();
     if (NULL == ifdx) return 0;  // no interfaces found
     struct if_nameindex* ifPtr = ifdx;
@@ -674,7 +704,8 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
 		ifPtr++;
 	} 
 	if_freenameindex(ifdx);
-#else  // !HAVE_IPV6  || (ANDROID && __ANDROID_API < 24)
+#endif // if/else ANDROID
+#else  // !HAVE_IPV6  || (ANDROID && __ANDROID_API__ < 24)
 #ifdef SIOCGIFINDEX
     struct ifconf conf;
     conf.ifc_buf = NULL;  // initialize
@@ -686,7 +717,6 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
             indexArray[i] = GetInterfaceIndex(conf.ifc_req[i].ifr_name);
     }
     if (NULL != conf.ifc_buf) delete[] conf.ifc_buf;
-
 #else  // !SIOCGIFINDEX
 	PLOG(PL_ERROR, "ProtoNet::GetInterfaceIndices() error: interface indices not supported\n");
 #endif  // if/else SIOCGIFINDEX
