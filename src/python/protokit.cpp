@@ -3,14 +3,13 @@
  * By: Tom Wambold  and Brian Adamson
  */
 
- // IMPORTANT NOTE:  This code is not _yet_ compatible with Python3
-
 #define PY_SSIZE_T_CLEAN
 #include "protopy.h"
 
 // We include the other .cpp files directly
+#include "../common/protoSpace.cpp"
 #include "protopipe.cpp"
-
+#include "protospace.cpp"
 
 extern "C" {
 
@@ -30,14 +29,18 @@ static PyMethodDef protokit_methods[] = {{NULL}};
     };
 #endif  // end PY_MAJOR_VERSION >= 3
 
-
-static PyObject *
-moduleinit(void)
+static PyObject* moduleinit(void)
 {
-    PyObject *m;
+    PyObject* m = NULL;
 
     if (PyType_Ready(&PipeType) < 0)
-            return m;
+        return m;
+        
+    if (PyType_Ready(&SpaceType) < 0)
+        return m;
+        
+    if (PyType_Ready(&SpaceIteratorType) < 0)
+        return m;
 
 #if PY_MAJOR_VERSION >= 3
     m = PyModule_Create(&moduledef);
@@ -53,9 +56,17 @@ moduleinit(void)
     PyModule_AddObject(m, "ProtoError", ProtoError);
 
     Py_INCREF(&PipeType);
-    PyModule_AddObject(m, "Pipe", (PyObject *)&PipeType);
-
-  return m;
+    PyModule_AddObject(m, "Pipe", (PyObject*)&PipeType);
+    
+    Py_INCREF(&SpaceType);
+    PyModule_AddObject(m, "Space", (PyObject*)&SpaceType);
+   
+    Py_INCREF(&SpaceIteratorType);
+    PyModule_AddObject(m, "Space.Iterator", (PyObject*)&SpaceIteratorType);
+      
+    // This sets an Space.Iterator attribute so that Space.Iterator is nested class of Space
+    PyDict_SetItemString(SpaceType.tp_dict, "Iterator",  (PyObject*)&SpaceIteratorType);
+    return m;
 }
 
 #if PY_MAJOR_VERSION < 3

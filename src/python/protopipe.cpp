@@ -7,8 +7,6 @@
 #include <protoSocket.h>
 
 extern "C" {
-
-
     typedef struct {
         PyObject_HEAD
         ProtoPipe *thisptr;
@@ -139,7 +137,9 @@ extern "C" {
 
         if (!PyArg_ParseTuple(args, "s#", &buffer, &size))
             return NULL;
-        unsigned int size_u=size;
+        unsigned int size_u = size;
+        
+        //PySys_WriteStdout("sending message size %u\n", size_u);
 
         if (!self->thisptr->Send(buffer, size_u)) {
             PyErr_SetString(ProtoError, "Could not send buffer.");
@@ -155,7 +155,7 @@ extern "C" {
 
         if (!PyArg_ParseTuple(args, "I", &size))
             return NULL;
-        unsigned int size_u=size;
+        unsigned int size_u = size;
 
         buffer = new char[size];
 
@@ -163,6 +163,8 @@ extern "C" {
         Py_BEGIN_ALLOW_THREADS
         result = self->thisptr->Recv(buffer, size_u);
         Py_END_ALLOW_THREADS
+        
+        //PySys_WriteStdout("received message size %u\n", size_u);
 
         if (!result) {
             PyErr_SetString(ProtoError, "Could not recv.");
@@ -170,9 +172,10 @@ extern "C" {
         }
 
 #if PY_MAJOR_VERSION >= 3
-        PyObject *rv = PyBytes_FromStringAndSize(buffer, size); //Human readable?
+        //PyObject *rv = PyUnicode_FromStringAndSize(buffer, size_u); //Human readable?
+        PyObject *rv = PyBytes_FromStringAndSize(buffer, size_u); //Human readable?
 #else
-        PyObject *rv = PyString_FromStringAndSize(buffer, size); //Human readable?
+        PyObject *rv = PyString_FromStringAndSize(buffer, size_u); //Human readable?
 #endif
         delete[] buffer;
         return rv;
@@ -202,6 +205,7 @@ extern "C" {
         {"GetHandle", (PyCFunction)Pipe_GetHandle, METH_NOARGS,
             "Gets the file descriptor for this socket."},
         {NULL}
+        
     };
 
     static PyTypeObject PipeType = {
@@ -226,12 +230,12 @@ extern "C" {
         0,                         /*tp_as_buffer*/
         Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
         "ProtoPipe wrapper",       /* tp_doc */
-        0,		                   /* tp_traverse */
-        0,		                   /* tp_clear */
-        0,		                   /* tp_richcompare */
-        0,		                   /* tp_weaklistoffset */
-        0,		                   /* tp_iter */
-        0,		                   /* tp_iternext */
+        0,                         /* tp_traverse */
+        0,                         /* tp_clear */
+        0,                         /* tp_richcompare */
+        0,                         /* tp_weaklistoffset */
+        0,                         /* tp_iter */
+        0,                         /* tp_iternext */
         Pipe_methods,              /* tp_methods */
         0,                         /* tp_members */
         0,                         /* tp_getset */

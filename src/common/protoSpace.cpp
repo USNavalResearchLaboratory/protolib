@@ -54,6 +54,29 @@ void ProtoSpace::Empty()
     }
 }  // end ProtoSpace::Empty()
 
+void ProtoSpace::Destroy()
+{
+    Iterator iterator(*this);
+    if (!iterator.Init())
+    {
+        PLOG(PL_ERROR, "ProtoSpace::Destroy() ProtoSpace::Iterator.Init() error: %s\n", GetErrorString());
+        return;
+    }
+    Node* node;
+    while (NULL != (node = iterator.GetNextNode()))
+    {
+        RemoveNode(*node);
+        delete node;
+    }
+    if (NULL != ord_tree)
+    {
+        for (unsigned int i = 0; i < num_dimensions; i++)
+            ord_tree[i].EmptyToPool(ord_pool);
+        delete[] ord_tree;
+        ord_tree = NULL;
+    }
+    ord_pool.Destroy();
+}  // end ProtoSpace::Destroy()
 
 bool ProtoSpace::InsertNode(Node& node)
 {
@@ -238,11 +261,6 @@ void ProtoSpace::Iterator::Destroy()
     Ordinate* nextOrd;
     while (NULL != (nextOrd = static_cast<Ordinate*>(ord_tree.RemoveHead())))
         space.ReturnOrdinateToPool(*nextOrd);
-    if (NULL != orig)
-    {
-        delete[] orig;
-        orig = NULL;
-    }
     unsigned int dim = space.GetDimensions();
     if (NULL != pos_it)
     {
@@ -266,7 +284,7 @@ void ProtoSpace::Iterator::Destroy()
     {
         delete[] orig;
         orig = NULL;
-    }    
+    }
 }  // end ProtoSpace::Iterator::Destroy()
 
 
@@ -299,7 +317,6 @@ void ProtoSpace::Iterator::Reset(const double* originOrdinates)
 ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
 {
     unsigned int dim = space.GetDimensions();
-    
     while(1)
     {
         Ordinate* nextOrd = static_cast<Ordinate*>(ord_tree.GetHead());
@@ -330,7 +347,6 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
                 if (NULL != distance) 
                 {
                     *distance = sqrt(nextOrd->GetValue());
-                    //TRACE("ProtoSpace returning node01x distance %lf\n", *distance);
                 }
                 space.ReturnOrdinateToPool(*nextOrd);
                 return nextNode;
@@ -405,9 +421,7 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
                 double delta = node->GetOrdinate(j) - orig[j];
                 distPartial += delta*delta;
             }
-            
-           
-                     
+                    
             // b) get and init Ordinate 
             Ordinate* ord = space.GetOrdinateFromPool();
             if ((NULL == ord) && (NULL == (ord = new Ordinate)))

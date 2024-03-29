@@ -9,6 +9,10 @@ if len(sys.argv) != 2:
 pipe = protokit.Pipe("MESSAGE")
 pipe.Listen(sys.argv[1])
 while True:
-  print(pipe.Recv(1024))
+    msg = pipe.Recv(1024)
+    if msg:
+        print("received \"%s\"" % msg.decode('UTF-8'))
+    else:
+        break
 
 print("Exiting...")

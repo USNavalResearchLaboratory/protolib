@@ -1,7 +1,6 @@
 #ifndef _PROTO_SPACE
 #define _PROTO_SPACE
 
-
 #include "protoTree.h"
 #include <sys/types.h>  // for BYTE_ORDER macro
 
@@ -11,7 +10,6 @@
  * @brief For now, this maintains a set of "Nodes" in n-dimensional
  *  space.  Note that the "space" is destroyed, the Nodes themselves
  *  are not destroyed.
- * (TBD - support n-dimensions)
  */
 class ProtoSpace
 {
@@ -45,6 +43,7 @@ class ProtoSpace
         bool RemoveNode(Node& node); // returns false if Node not in space
         bool ContainsNode(Node& node); // returns false if Node not in space
         void Empty();
+        void Destroy();  // also deletes Nodes contained
         
         unsigned int GetNodeCount() const
             {return node_count;}

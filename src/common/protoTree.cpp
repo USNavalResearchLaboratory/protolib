@@ -283,9 +283,15 @@ ProtoTree::Item* ProtoTree::GetLastItem() const
 
 bool ProtoTree::Insert(ProtoTree::Item& item)     
 {
+    // TBD - we could allow for an optional optimization for the the 
+    //       "find fail / insert new" use pattern by having an 
+    //       optional parameter to pass in the 'x' (closest match)
+    //       pointer here found from the prior ProtoTree::Find() attempt
+    //       which does the same "closet match" traversal
     if (NULL != root)
     {
         // 1) Find closest match to "item"
+        // TBD - investigate if we can also find 'dbit' easily during this traversal
         const char* key = item.GetKey();
         unsigned int keysize = item.GetKeysize();
         Endian keyEndian = item.GetEndian();
