@@ -9,7 +9,20 @@ if len(sys.argv) <= 2:
 pipe = protokit.Pipe("MESSAGE")
 pipe.Connect(sys.argv[1])
 
-message = ' '.join(sys.argv[2:])
-pipe.Send(message)
+text = ' '.join(sys.argv[2:])
 
-print("Sent message '%s'" % message)
+# This sends the message as a string
+msg = text
+
+# Uncomment these two lines to send as bytearray 
+#msg = bytearray()
+#msg.extend(map(ord, text))
+
+# Uncomment this one to send as bytes (example/test)
+#msg = text.encode('ascii')
+
+x = 12
+
+pipe.Send(x)
+
+print("Sent message '%s'" % text)

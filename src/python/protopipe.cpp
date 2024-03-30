@@ -131,16 +131,67 @@ extern "C" {
         Py_RETURN_NONE;
     }
 
-    static PyObject* Pipe_Send(Pipe *self, PyObject *args) {
-        const char *buffer;
-        Py_ssize_t size;
-
-        if (!PyArg_ParseTuple(args, "s#", &buffer, &size))
+    static PyObject* Pipe_Send(Pipe *self, PyObject *args) 
+    {
+        const char* buffer;
+        unsigned int size_u;
+        PyObject* obj;
+        if (!PyArg_ParseTuple(args, "O", &obj)) 
+        {
+            PyErr_SetString(ProtoError, "Invalid argument.");
             return NULL;
-        unsigned int size_u = size;
-        
+        }
+        if (PyObject_TypeCheck(obj, &PyUnicode_Type)) 
+        {
+            //PySys_WriteStdout("sending string ...\n");
+            int size;
+            if (!PyArg_ParseTuple(args, "s#", &buffer, &size))
+            {
+                PyErr_SetString(ProtoError, "Invalid string.");
+                return NULL;
+            }
+            size_u = size;
+        }
+        else if (PyObject_TypeCheck(obj, &PyBytes_Type)) 
+        {
+            //PySys_WriteStdout("sending bytes ...\n");
+            Py_ssize_t size = PyBytes_Size(obj);
+            if (0 == size)
+            {
+                // Nothing to send
+                return NULL;
+            }
+            buffer = PyBytes_AsString(obj);
+            if (NULL == buffer)
+            {
+                // Nothing to send
+                return NULL;
+            }
+            size_u = size;
+        }
+        else if (PyObject_TypeCheck(obj, &PyByteArray_Type))
+        {
+            //PySys_WriteStdout("sending bytearray ...\n");
+            Py_ssize_t size = PyByteArray_Size(obj);
+            if (0 == size)
+            {
+                // Nothing to send
+                return NULL;
+            }
+            buffer = PyByteArray_AsString(obj);
+            if (NULL == buffer)
+            {
+                // Nothing to send
+                return NULL;
+            }
+            size_u = size;
+        }
+        else
+        {
+            PyErr_SetString(ProtoError, "Invalid argument type (must be str, bytes, or bytearray).");
+            return NULL;
+        }
         //PySys_WriteStdout("sending message size %u\n", size_u);
-
         if (!self->thisptr->Send(buffer, size_u)) {
             PyErr_SetString(ProtoError, "Could not send buffer.");
             return NULL;
