@@ -231,6 +231,7 @@ void PipeExample::OnServerEvent(ProtoSocket&       /*theSocket*/,
             unsigned int len = 8191;
             if (server_pipe.Recv(buffer, len))
             {
+                buffer[len] = '\0';
                 if (len)
                     PLOG(PL_ERROR, "pipeExample: recvd \"%s\"\n", buffer);
             }
