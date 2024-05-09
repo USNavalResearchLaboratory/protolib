@@ -595,7 +595,9 @@ int LinuxDetour::NfqCallback(nfq_q_handle*       nfqQueue,
     // A change to the nfq_get_payload() prototype seemed to kick in around Linux header files
     // version 3.6?  (This will probably need to be fine tuned for the right version threshold.)
 
+#ifndef LINUX_VERSION_MAJOR
 #define LINUX_VERSION_MAJOR (LINUX_VERSION_CODE/65536)
+#endif // !LINUX_VERSION_MAJOR
 #define LINUX_VERSION_MINOR ((LINUX_VERSION_CODE - (LINUX_VERSION_MAJOR*65536)) / 256)
 
 #if ((LINUX_VERSION_MAJOR > 3) || ((LINUX_VERSION_MAJOR == 3) && (LINUX_VERSION_MINOR > 5)))
