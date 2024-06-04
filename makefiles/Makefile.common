@@ -36,15 +36,14 @@ threadExample timerTest ting treeTest vifExample vifLan protoExample eventExampl
 KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase64.cpp \
           $(COMMON)/protoBitmask.cpp $(COMMON)/protoCap.cpp $(COMMON)/protoChannel.cpp \
           $(COMMON)/protoCheck.cpp $(COMMON)/protoDebug.cpp $(COMMON)/protoDispatcher.cpp \
-          $(COMMON)/protoEvent.cpp $(COMMON)/protoPipe.cpp $(COMMON)/protoJson.cpp \
-          $(COMMON)/protoPkt.cpp $(COMMON)/protoPktARP.cpp $(COMMON)/protoPktETH.cpp \
-          $(COMMON)/protoPktIGMP.cpp $(COMMON)/protoPktIP.cpp $(COMMON)/protoPktTCP.cpp \
-          $(COMMON)/protoPktRIP.cpp $(COMMON)/protoPktRTP.cpp $(COMMON)/protoSocket.cpp \
-          $(COMMON)/protoRouteMgr.cpp $(COMMON)/protoRouteTable.cpp \
+          $(COMMON)/protoEvent.cpp $(COMMON)/protoFlow.cpp  $(COMMON)/protoPipe.cpp \
+          $(COMMON)/protoJson.cpp $(COMMON)/protoPkt.cpp $(COMMON)/protoPktARP.cpp \
+          $(COMMON)/protoPktETH.cpp $(COMMON)/protoPktIGMP.cpp $(COMMON)/protoPktIP.cpp \
+          $(COMMON)/protoPktTCP.cpp $(COMMON)/protoPktRIP.cpp $(COMMON)/protoPktRTP.cpp \
+          $(COMMON)/protoSocket.cpp $(COMMON)/protoRouteMgr.cpp $(COMMON)/protoRouteTable.cpp \
           $(COMMON)/protoTime.cpp $(COMMON)/protoTimer.cpp \
           $(COMMON)/protoTree.cpp $(COMMON)/protoList.cpp $(COMMON)/protoQueue.cpp \
-          $(COMMON)/protoVif.cpp  \
-          $(COMMON)/protoSerial.cpp $(COMMON)/protoLFSR.cpp \
+          $(COMMON)/protoVif.cpp $(COMMON)/protoSerial.cpp $(COMMON)/protoLFSR.cpp \
           $(COMMON)/protoNet.cpp $(COMMON)/protoFile.cpp $(COMMON)/protoString.cpp \
           $(SYSTEM_SRC)
 
