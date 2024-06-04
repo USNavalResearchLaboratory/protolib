@@ -1003,12 +1003,12 @@ bool BsdRouteMgr::GetRoute(const ProtoAddress& dst,
                             if (ptr)
                             {
                                 unsigned int maskSize = addr->sa_len ? (addr->sa_len - (int)(ptr - (unsigned char*)addr)) : 0;
-                                unsigned int prefixLen = 0;
+                                //unsigned int prefixLen = 0;
                                 for (unsigned int i = 0; i < maskSize; i++)
                                 {
                                     if (0xff == *ptr)
                                     {
-                                        prefixLen += 8;
+                                        //prefixLen += 8;
                                         ptr++;   
                                     }
                                     else
@@ -1017,7 +1017,7 @@ bool BsdRouteMgr::GetRoute(const ProtoAddress& dst,
                                         while (0 != (bit & *ptr))
                                         {
                                             bit >>= 1;
-                                            prefixLen += 1;   
+                                            //prefixLen += 1;   
                                         }
                                     }
                                     break;   

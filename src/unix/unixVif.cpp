@@ -105,13 +105,13 @@ bool UnixVif::Open(const char* vifName, const ProtoAddress& ipAddr, unsigned int
     for (int i = 0; i < 256; i++)
     {
         //TRACE("trying to open /dev/tap%d ...\n", i);
-        sprintf(devName, "/dev/tap%d", i);
+        snprintf(devName, PATH_MAX, "/dev/tap%d", i);
         if ((descriptor = open(devName, O_RDWR)) < 0)
         {
             PLOG(PL_ERROR,"UnixVif::Open() error: open(\"%s\") failed: %s\n", devName, GetErrorString());            
             continue;
         }   
-        sprintf(vif_name, "tap%d", i);
+        snprintf(vif_name, VIF_NAME_MAX, "tap%d", i);
         break;
     }    
     if (INVALID_HANDLE == descriptor)
@@ -126,12 +126,12 @@ bool UnixVif::Open(const char* vifName, const ProtoAddress& ipAddr, unsigned int
     char cmd[1024];
 #ifdef __ANDROID__
     // Bring interface up and give it an address
-    sprintf(cmd, "ip link set %s up", vif_name);
+    snprintf(cmd, 1024, "ip link set %s up", vif_name);
 #else
     if (ipAddr.IsValid())  //IP address specified
-        sprintf(cmd, "/sbin/ifconfig %s %s/%d up", vif_name, ipAddr.GetHostString(), maskLen);
+        snprintf(cmd, 1024, "/sbin/ifconfig %s %s/%d up", vif_name, ipAddr.GetHostString(), maskLen);
     else  // IP address NOT specified, use system scripts
-        sprintf(cmd, "/sbin/ifconfig %s up", vif_name);
+        snprintf(cmd, 1024, "/sbin/ifconfig %s up", vif_name);
 #endif // if/else __ANDROID__
     if (system(cmd) < 0)
     {
@@ -178,7 +178,7 @@ void UnixVif::Close()
 bool UnixVif::SetARP(bool status)
 {
     char cmd[1024];
-    sprintf(cmd, "/sbin/ifconfig %s %s", vif_name, status ? "arp" : "-arp");
+    snprintf(cmd, 1024, "/sbin/ifconfig %s %s", vif_name, status ? "arp" : "-arp");
     if (system(cmd) < 0)
     {
         PLOG(PL_ERROR, "UnixVif::SetARP() error: \"%s\n\" failed: %s\n", cmd, GetErrorString());
@@ -199,14 +199,14 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
     
 #ifdef LINUX
     // On Linux, we need to bring the iface down before hw addr change    
-    sprintf(cmd, "/sbin/ifconfig %s down", vif_name);
+    snprintf(cmd, 1024, "/sbin/ifconfig %s down", vif_name);
     if (system(cmd) < 0)
     {
         PLOG(PL_ERROR, "UnixVif::SetHardwareAddress(%s) error: \"%s\n\" failed: %s\n", cmd, GetErrorString());
         return false;       
     }
     
-    sprintf(cmd, "/sbin/ifconfig %s hw ether %02x:%02x:%02x:%02x:%02x:%02x", 
+    sprintf(cmd, 1024, "/sbin/ifconfig %s hw ether %02x:%02x:%02x:%02x:%02x:%02x", 
                  vif_name, addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
     if (system(cmd) < 0)
     {
@@ -214,7 +214,7 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
         return false;       
     }
     // On Linux, we need to bring the iface back up after hw addr change     
-    sprintf(cmd, "/sbin/ifconfig %s up", vif_name);
+    snprintf(cmd, 1024, "/sbin/ifconfig %s up", vif_name);
     if (system(cmd) < 0)
     {
         PLOG(PL_ERROR, "UnixVif::SetHardwareAddress(%s) error: \"%s\n\" failed: %s\n", cmd, GetErrorString());
@@ -224,7 +224,7 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
     
 #ifdef MACOSX    
     // On Mac OSX, the interface is automatically brought down and back up
-    sprintf(cmd, "/sbin/ifconfig %s lladdr %02x:%02x:%02x:%02x:%02x:%02x", 
+    snprintf(cmd, 1024, "/sbin/ifconfig %s lladdr %02x:%02x:%02x:%02x:%02x:%02x", 
                  vif_name, addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
     if (system(cmd) < 0)
     {

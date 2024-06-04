@@ -146,7 +146,7 @@ bool BsdDetour::SetIPFirewall(Action              action,
         // Make and install "iptables" firewall rules
         const size_t RULE_MAX = 511;
         char rule[RULE_MAX+1];
-            
+        int slen = 0;    
         if (INSTALL == action)
         {
             if (rule_count > 2)
@@ -179,53 +179,48 @@ bool BsdDetour::SetIPFirewall(Action              action,
             // cmd  = "ipfw" or "ip6fw"
             const char* f = (ProtoAddress::IPv4 == srcFilterAddr.GetType()) ? 
                     "ip" : "ipv6";
-            sprintf(rule, "%s add divert %hu %s ", cmd, (UINT16)DIVERT_PORT, f);
+            slen += snprintf(rule, RULE_MAX-1, "%s add divert %hu %s ", cmd, (UINT16)DIVERT_PORT, f);
             if (0 != srcFilterMask)
             {
-                strcat(rule, "from ");
-                size_t len = strlen(rule);
-                if (!srcFilterAddr.GetHostString(rule+len, RULE_MAX - len))
+                slen += snprintf(rule, RULE_MAX - slen - 1, "from ");
+                if (!srcFilterAddr.GetHostString(rule+slen, RULE_MAX - slen))
                 {
                     PLOG(PL_ERROR, "BsdDetour::SetIPFirewall() error: bad source addr filter\n");
                     return false;
                 } 
-                len = strlen(rule);
-                sprintf(rule+len, "/%u ", srcFilterMask);
+                slen = strlen(rule); // to add in what GetHostString() added
+                slen += snprintf(rule+slen, RULE_MAX - slen - 1, "/%u ", srcFilterMask);
             }
             else
             {
-                size_t len = strlen(rule);
-                sprintf(rule+len, "from any ");
+                slen += snprintf(rule+slen, RULE_MAX - slen - 1, "from any ");
             }
             if (0 != dstFilterMask)
             {
-                strcat(rule, "to ");
-                size_t len = strlen(rule);
-                if (!dstFilterAddr.GetHostString(rule+len, RULE_MAX - len))
+                slen += snprintf(rule, RULE_MAX - slen - 1, "to ");
+                if (!dstFilterAddr.GetHostString(rule+slen, RULE_MAX - slen))
                 {
                     PLOG(PL_ERROR, "BsdDetour::SetIPFirewall() error: bad destination addr filter\n");
                     return false;
                 } 
-                len = strlen(rule);
-                sprintf(rule+len, "/%u ", dstFilterMask);
+                slen = strlen(rule); // to add in what GetHostString() added
+                slen += snprintf(rule+slen, RULE_MAX - slen - 1, "/%u ", dstFilterMask);
             }
             else
             {
-                size_t len = strlen(rule);
-                sprintf(rule+len, "to any ");
+                slen += snprintf(rule+slen, RULE_MAX - slen - 1, "to any ");
             }
-
             // target = "in", "out", or "via any"
-            strcat(rule, target);
+            slen += snprintf(rule, RULE_MAX - slen - 1, "%s", target);
         }
         else  // (DELETE == action)
         {
-            sprintf(rule, "%s delete %d\n", cmd, hookFlags - 1);
+            slen += snprintf(rule, RULE_MAX - slen - 1, "%s delete %d\n", cmd, hookFlags - 1);
             hookFlags = 0;
         }
                    
         // Add redirection so we can get stderr result
-        strcat(rule, " 2>&1");
+        slen += snprintf(rule, RULE_MAX - slen - 1, " 2>&1");
         
         FILE* p = popen(rule, "r");
         if (NULL != p)
