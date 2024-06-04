@@ -127,6 +127,9 @@ unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifIndex, const Proto
         return 0;
     }
 #else
+
+    // TBD - actually this appears to have been implemented and these #if/#else are OBE
+    // with them blocked within a larger #ifndef WIN32 ... so this code could be cleaned up.
 	PLOG(PL_ERROR,"ProtoNet::GetInterfaceAddressMask() error: function not implemented for WIN32\n");
 	return 0;
 #endif

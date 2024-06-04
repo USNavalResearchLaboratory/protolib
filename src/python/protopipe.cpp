@@ -69,8 +69,8 @@ extern "C" {
         }
     }
 
-    static PyObject* Pipe_GetName(Pipe *self) {
-
+    static PyObject* Pipe_GetName(Pipe *self) 
+    {
 #if PY_MAJOR_VERSION >= 3
         PyObject *rv = PyUnicode_FromString(self->thisptr->GetName()); //Human readable?
 #else
@@ -83,7 +83,8 @@ extern "C" {
         return rv;
     }
 
-    static PyObject* Pipe_Connect(Pipe *self, PyObject *args) {
+    static PyObject* Pipe_Connect(Pipe *self, PyObject *args) 
+    {
         const char * name;
 
         if (!PyArg_ParseTuple(args, "s", &name))
@@ -143,9 +144,10 @@ extern "C" {
         }
         if (PyObject_TypeCheck(obj, &PyUnicode_Type)) 
         {
-            //PySys_WriteStdout("sending string ...\n");
-            int size;
-            if (!PyArg_ParseTuple(args, "s#", &buffer, &size))
+            //PySys_WriteStderr("sending string ...\n");
+            Py_ssize_t size;
+            
+            if (NULL == (buffer = PyUnicode_AsUTF8AndSize(obj, &size)))
             {
                 PyErr_SetString(ProtoError, "Invalid string.");
                 return NULL;
@@ -154,7 +156,7 @@ extern "C" {
         }
         else if (PyObject_TypeCheck(obj, &PyBytes_Type)) 
         {
-            //PySys_WriteStdout("sending bytes ...\n");
+            //PySys_WriteStderr("sending bytes ...\n");
             Py_ssize_t size = PyBytes_Size(obj);
             if (0 == size)
             {
@@ -171,7 +173,7 @@ extern "C" {
         }
         else if (PyObject_TypeCheck(obj, &PyByteArray_Type))
         {
-            //PySys_WriteStdout("sending bytearray ...\n");
+            //PySys_WriteStderr("sending bytearray ...\n");
             Py_ssize_t size = PyByteArray_Size(obj);
             if (0 == size)
             {
@@ -191,7 +193,7 @@ extern "C" {
             PyErr_SetString(ProtoError, "Invalid argument type (must be str, bytes, or bytearray).");
             return NULL;
         }
-        //PySys_WriteStdout("sending message size %u\n", size_u);
+        
         if (!self->thisptr->Send(buffer, size_u)) {
             PyErr_SetString(ProtoError, "Could not send buffer.");
             return NULL;
@@ -200,7 +202,7 @@ extern "C" {
     }
 
     static PyObject* Pipe_Recv(Pipe *self, PyObject *args) {
-        char *buffer;
+        //char *buffer;
         Py_ssize_t size;
         bool result = false;
 
@@ -208,8 +210,16 @@ extern "C" {
             return NULL;
         unsigned int size_u = size;
 
-        buffer = new char[size];
-
+        // Had to use "malloc() here instead of "new" operator,
+        // but not really sure why
+        char* buffer = (char*)malloc(size_u);
+        
+        if (NULL == buffer)
+        {
+            PyErr_SetString(ProtoError, "Could not allocate receive buffer.");
+            return NULL;
+        }
+        
         // Release the GIL since this can block...
         Py_BEGIN_ALLOW_THREADS
         result = self->thisptr->Recv(buffer, size_u);
@@ -217,8 +227,10 @@ extern "C" {
         
         //PySys_WriteStdout("received message size %u\n", size_u);
 
-        if (!result) {
+        if (!result) 
+        {
             PyErr_SetString(ProtoError, "Could not recv.");
+            free(buffer);
             return NULL;
         }
 
@@ -228,7 +240,7 @@ extern "C" {
 #else
         PyObject *rv = PyString_FromStringAndSize(buffer, size_u); //Human readable?
 #endif
-        delete[] buffer;
+        free(buffer);
         return rv;
     }
 

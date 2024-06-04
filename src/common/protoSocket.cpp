@@ -1303,6 +1303,7 @@ bool ProtoSocket::Accept(ProtoSocket* newSocket)
 bool ProtoSocket::Send(const char*         buffer, 
                        unsigned int&       numBytes)
 {
+    //TRACE("ProtoSocket::Send() ...\n");
     if (IsConnected())
     {
 #ifdef WIN32

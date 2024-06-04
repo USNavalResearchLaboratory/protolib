@@ -21,8 +21,6 @@ msg = text
 # Uncomment this one to send as bytes (example/test)
 #msg = text.encode('ascii')
 
-x = 12
-
-pipe.Send(x)
+pipe.Send(msg)
 
 print("Sent message '%s'" % text)

@@ -1107,6 +1107,7 @@ bool ProtoNet::AddInterfaceAddress(unsigned int ifaceIndex, const ProtoAddress& 
 	PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() no matching interface found for ifaceIndex %s", ifaceIndex);
 	return false;
 };
+
 bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& ifaceAddr, unsigned int maskLen, bool dhcp_enabled)
 {
 	/*

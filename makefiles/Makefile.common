@@ -391,8 +391,9 @@ stree:    $(STREE_OBJ) libprotokit.a
             
 clean:	
 	rm -f *.o $(COMMON)/*.o $(MANET)/*.o $(NS)/*.o ../src/*/*.o ../examples/*.o \
-        *.a *.$(SYSTEM_SOEXT) ../lib/*.a ../lib/*.../bin/* $(SYSTEM_SOEXT) \
-        arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample protoCapExample protoApp protoExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample threadExample timerTest ting vifExample vifLan gr ../bin/*
+        *.a *.$(SYSTEM_SOEXT) ../lib/*.a ../lib/* ../bin/* $(SYSTEM_SOEXT) \
+        arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample protoCapExample protoApp protoExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample threadExample timerTest ting vifExample vifLan gr
+	rm -rf ../build/* ../protokit.egg-info
     
 
 # DO NOT DELETE THIS LINE -- mkdep uses it.

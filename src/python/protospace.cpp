@@ -321,7 +321,7 @@ extern "C" {
         // Init space with number of dimensions inferrred from list length
         unsigned int numDimensions = PyList_Size(pList);    
         
-        double* originOrdinates = new double[numDimensions];
+        double* originOrdinates = (double*)malloc(numDimensions);
         if (NULL == originOrdinates)
         {
             PyErr_SetString(ProtoError, "new origin ordinates error");
@@ -343,18 +343,18 @@ extern "C" {
             }
             else
             {
-                delete[] originOrdinates;
+                free(originOrdinates);
                 PyErr_SetString(ProtoError, "Space ordinates must be integers or doubles");
                 return -1;
             }
         }
         if (!self->thisptr->Init(originOrdinates))
         {
-            delete[] originOrdinates;
+            free(originOrdinates);
             PyErr_SetString(ProtoError, "ProtoSpace::Iterator::Init() error");
             return -1;
         }
-        delete[] originOrdinates;
+        free(originOrdinates);
         // SpaceIterator maintains reference to Space until destroyed
         Py_INCREF(pSpace);
         self->py_space = pSpace;
@@ -424,7 +424,7 @@ extern "C" {
         0,                                  /* tp_dictoffset */
         (initproc)SpaceIterator_init,       /* tp_init */
         0,                                  /* tp_alloc */
-        Space_new,                          /* tp_new */
+        SpaceIterator_new,                  /* tp_new */
     };
     
     static PyObject* Space_iterate(Space* self, PyObject* args)
@@ -498,6 +498,5 @@ extern "C" {
         if (NULL != originOrdinates) delete[] originOrdinates;
         return (PyObject*)iterator;
     }  // end Space_iterate()
-    
     
 }  // end extern "C"
