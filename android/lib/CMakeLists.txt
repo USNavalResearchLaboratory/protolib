@@ -42,6 +42,7 @@ add_library( ${BINARY_NAME}
     "../../src/common/protoDispatcher.cpp"
     "../../src/common/protoEvent.cpp"
     "../../src/common/protoFile.cpp"
+    "../../src/common/protoFlow.cpp"
     "../../src/common/protoGraph.cpp"
     "../../src/common/protoJson.cpp"
     "../../src/common/protoLFSR.cpp"
