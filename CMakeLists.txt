@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.28)
 cmake_policy(SET CMP0077 NEW)
 
 # set the project name
@@ -165,7 +165,7 @@ include/protoString.h
 include/protoTime.h
 include/protoTimer.h
 include/protoTree.h
-include/protoVersion
+include/protoVersion.h
 include/protoVif.h
 include/protokit.h
 include/testFuncs.h
@@ -175,40 +175,40 @@ include/unix/zebraRouteMgr.h
 
 # List platform-independent source files
 list(APPEND COMMON_SOURCE_FILES 
-          ${COMMON}/protoAddress.cpp  
-		  ${COMMON}/protoApp.cpp 
-		  ${COMMON}/protoBase64.cpp 
-          ${COMMON}/protoBitmask.cpp 
-		  ${COMMON}/protoCap.cpp 
-		  ${COMMON}/protoChannel.cpp 
-		  ${COMMON}/protoDebug.cpp 
-		  ${COMMON}/protoDispatcher.cpp 
-		  ${COMMON}/protoEvent.cpp 
-          ${COMMON}/protoFile.cpp  
-          ${COMMON}/protoFlow.cpp 
-		  ${COMMON}/protoGraph.cpp 
-		  ${COMMON}/protoJson.cpp 
-		  ${COMMON}/protoLFSR.cpp 
-		  ${COMMON}/protoList.cpp 
-          ${COMMON}/protoNet.cpp 
-          ${COMMON}/protoPipe.cpp 
-          ${COMMON}/protoPkt.cpp 
-		  ${COMMON}/protoPktARP.cpp 
-		  ${COMMON}/protoPktETH.cpp 
-		  ${COMMON}/protoPktIGMP.cpp 
-		  ${COMMON}/protoPktIP.cpp 
-		  ${COMMON}/protoPktRTP.cpp 
-		  ${COMMON}/protoQueue.cpp 
-          ${COMMON}/protoRouteMgr.cpp 
-		  ${COMMON}/protoRouteTable.cpp 
-          ${COMMON}/protoSerial.cpp 
-		  ${COMMON}/protoSocket.cpp 
-          ${COMMON}/protoSpace.cpp 
-		  ${COMMON}/protoString.cpp
-          ${COMMON}/protoTime.cpp 
-		  ${COMMON}/protoTimer.cpp 
-          ${COMMON}/protoTree.cpp 
-          ${COMMON}/protoVif.cpp )
+	${COMMON}/protoAddress.cpp  
+	${COMMON}/protoApp.cpp 
+	${COMMON}/protoBase64.cpp 
+	${COMMON}/protoBitmask.cpp 
+	${COMMON}/protoCap.cpp 
+	${COMMON}/protoChannel.cpp 
+	${COMMON}/protoDebug.cpp 
+	${COMMON}/protoDispatcher.cpp 
+	${COMMON}/protoEvent.cpp 
+	${COMMON}/protoFile.cpp  
+	${COMMON}/protoFlow.cpp 
+	${COMMON}/protoGraph.cpp 
+	${COMMON}/protoJson.cpp 
+	${COMMON}/protoLFSR.cpp 
+	${COMMON}/protoList.cpp 
+	${COMMON}/protoNet.cpp 
+	${COMMON}/protoPipe.cpp 
+	${COMMON}/protoPkt.cpp 
+	${COMMON}/protoPktARP.cpp 
+	${COMMON}/protoPktETH.cpp 
+	${COMMON}/protoPktIGMP.cpp 
+	${COMMON}/protoPktIP.cpp 
+	${COMMON}/protoPktRTP.cpp 
+	${COMMON}/protoQueue.cpp 
+	${COMMON}/protoRouteMgr.cpp 
+	${COMMON}/protoRouteTable.cpp 
+	${COMMON}/protoSerial.cpp 
+	${COMMON}/protoSocket.cpp 
+	${COMMON}/protoSpace.cpp 
+	${COMMON}/protoString.cpp
+	${COMMON}/protoTime.cpp 
+	${COMMON}/protoTimer.cpp 
+	${COMMON}/protoTree.cpp 
+	${COMMON}/protoVif.cpp )
 
 # Setup platform independent include directory
 list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_LIST_DIR}/include )
