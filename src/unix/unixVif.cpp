@@ -206,7 +206,7 @@ bool UnixVif::SetHardwareAddress(const ProtoAddress& ethAddr)
         return false;       
     }
     
-    sprintf(cmd, 1024, "/sbin/ifconfig %s hw ether %02x:%02x:%02x:%02x:%02x:%02x", 
+    snprintf(cmd, 1024, "/sbin/ifconfig %s hw ether %02x:%02x:%02x:%02x:%02x:%02x", 
                  vif_name, addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
     if (system(cmd) < 0)
     {
