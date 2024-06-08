@@ -138,6 +138,7 @@ include/protoDetour.h
 include/protoDispatcher.h  
 include/protoEvent.h       
 include/protoFile.h        
+include/protoFlow.h        
 include/protoGraph.h       
 include/protoJson.h        
 include/protoLFSR.h        
@@ -183,7 +184,8 @@ list(APPEND COMMON_SOURCE_FILES
 		  ${COMMON}/protoDebug.cpp 
 		  ${COMMON}/protoDispatcher.cpp 
 		  ${COMMON}/protoEvent.cpp 
-          ${COMMON}/protoFile.cpp 
+          ${COMMON}/protoFile.cpp  
+          ${COMMON}/protoFlow.cpp 
 		  ${COMMON}/protoGraph.cpp 
 		  ${COMMON}/protoJson.cpp 
 		  ${COMMON}/protoLFSR.cpp 

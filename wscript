@@ -191,6 +191,7 @@ def build(ctx):
             'protoDispatcher',
             'protoEvent',
             'protoFile',
+            'protoFlow',
             'protoGraph',
             'protoJson',
             'protoLFSR',
