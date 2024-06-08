@@ -50,6 +50,7 @@ inline void SetDebugLevel(unsigned int level) {}
 inline unsigned int GetDebugLevel() {return PL_FATAL;}
 inline bool OpenDebugLog(const char *path) {return true;}
 inline void CloseDebugLog() {}
+inline FILE* GetDebugLog() {return stderr;}
 inline bool OpenDebugPipe(const char* pipeName) {return true;}
 inline void CloseDebugPipe() {}
 inline void ProtoDMSG(unsigned int level, const char *format, ...) {}

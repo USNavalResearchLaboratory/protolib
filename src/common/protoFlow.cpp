@@ -1,4 +1,5 @@
 #include "protoFlow.h"
+#include "protoDebug.h"
 
 ProtoFlow::Description::Description(const ProtoAddress&  dst,            // invalid dst addr means any dst
                                     const ProtoAddress&  src,            // invalid src addr means any src
