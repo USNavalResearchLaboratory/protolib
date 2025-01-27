@@ -518,7 +518,6 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
     return true;
 }  // end ProtoNet::GetInterfaceAddressList()
 
-
 unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const ProtoAddress& theAddr)
 {
     unsigned int ifIndex = GetInterfaceIndex(ifaceName);

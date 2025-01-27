@@ -78,6 +78,7 @@ class ProtoFile : public ProtoChannel
 #endif // _WIN32_WCE
         }
         bool Read(char* buffer, unsigned int& numBytes);//numBytes going is is requested amount comming out is amount read.  Note that a return value of true with numBytes =0 means nothing was read.
+        bool Read(char* buffer, size_t& numBytes);
         bool Readline(char* buffer, unsigned int& bufferSize);//uses bufferedRead to read in a line quickly will return false if full line is not available
         size_t Write(const char* buffer, size_t len);
         bool Seek(Offset theOffset);
