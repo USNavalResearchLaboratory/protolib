@@ -10,8 +10,8 @@
  * @li PL_WARN=2;   // The WARN level designates potentially harmful situations.
  * @li PL_INFO=3;   // The INFO level designates informational messages that highlight the progress of the application at coarse-grained level.
  * @li PL_DEBUG=4;  // The DEBUG level designates fine-grained informational events that are most useful to debug an application.
- * @li PL_TRACE=5;  // The TRACE level designates finer-grained informational events than the DEBUG
- * @li PL_DETAIL=6; // The TRACE level designates even finer-grained informational events than the DEBUG
+ * @li PL_TRACE=5;  // The TRACE level designates finer-grained informational events than the PL_DEBUG
+ * @li PL_DETAIL=6; // The TRACE level designates even finer-grained informational events than the PL_TRACE
  * @li PL_MAX=7;    // Turn all comments on
  * @li PL_ALWAYS    // Messages at this level are always printed regardless of debug level
 */

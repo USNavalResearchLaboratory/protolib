@@ -145,7 +145,7 @@ bool ProtoPktIGMP::GetNextGroupRecord(ProtoPktIGMP::GroupRecord& groupRecord, bo
         return false;
     else
         return groupRecord.InitFromBuffer(recordPtr, bufferSpace);
-}  // end ProtoPktIGMP::GetGroupRecord()
+}  // end ProtoPktIGMP::GetNextGroupRecord()
 
 bool ProtoPktIGMP::InitIntoBuffer(Type         type,
                                   unsigned int version,

@@ -112,6 +112,7 @@ namespace ProtoFlow
             // flags = FLAG_ALL means _all_ fields are set
             bool InitFromPkt(ProtoPktIP& ipPkt, unsigned int ifaceIndex = 0, int flags = FLAG_ALL);  
             void InitFromDescription(const Description& description, int flags = FLAG_ALL);
+            bool InitFromText(const char* text);  // format: <srcAddr>[/maskLen],<dstAddr>[/maskLen][,<protocol>[,<class>]]] (also can use X or * to wildcard fields)
             // flow_key:  dlen [+ dstAddr + dmask] + slen [+ srcAddr + smask] + class + protocol + index
             enum {KEY_MAX = (1 + 1 + 16 + 1 + 1 + 16 + 1 + 1 + sizeof(unsigned int))};
             void SetKey(const char*             dstAddr = NULL, 

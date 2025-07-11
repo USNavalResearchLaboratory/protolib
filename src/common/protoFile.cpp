@@ -380,6 +380,46 @@ bool ProtoFile::Read(char* buffer, unsigned int& numBytes)
     }  // end while true
 }  // end ProtoFile::Read()
 
+bool ProtoFile::Read(char* buffer, size_t& numBytes)
+{
+    ASSERT(IsOpen());
+    while (true)
+    {
+#ifdef WIN32
+#ifdef _WIN32_WCE
+        size_t result = fread(buffer, 1, numBytes, file_ptr);
+#else
+        size_t result = _read(descriptor, buffer, (unsigned int)(numBytes));
+#endif // if/else _WIN32_WCE
+#else
+        ssize_t result = read(descriptor, buffer, numBytes);
+#endif // if/else WIN32
+        if (result < 0)
+        {
+#ifndef _WIN32_WCE
+            numBytes = 0;
+            switch (errno)
+            {
+                case EINTR:
+                    continue;
+                case EAGAIN:
+                    numBytes = 0;
+                    return true; // nothing more to read for the moment
+                default:
+                  break;
+            }
+#endif // !_WIN32_WCE
+            PLOG(PL_ERROR, "ProtoFile::Read() error: %s\n", GetErrorString());
+            return false;
+        }
+        else
+        {
+            numBytes = result;
+            return true;
+        }
+    }  // end while true
+}  // end ProtoFile::Read()
+
 bool ProtoFile::ReadPrivate(char* buffer, unsigned int& numBytes)
 {
     unsigned int want = numBytes;
