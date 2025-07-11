@@ -175,12 +175,12 @@ namespace ProtoNet
     
     unsigned int GetInterfaceIndex(const ProtoAddress& ifAddr);
     
-    bool GetInterfaceAddress(const char*         ifName, 
+    bool GetInterfaceAddress(const char*         ifName,
 				             ProtoAddress::Type  addrType,
 				             ProtoAddress&       theAddress,
                              unsigned int*       ifIndex = NULL);
     
-    bool GetInterfaceAddress(unsigned int        ifIndex, 
+    bool GetInterfaceAddress(unsigned int        ifIndex,
 				             ProtoAddress::Type  addrType,
 				             ProtoAddress&       theAddress);
     

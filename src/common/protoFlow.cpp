@@ -1,5 +1,8 @@
 #include "protoFlow.h"
 #include "protoDebug.h"
+#include "protoString.h"  // for ProtoTokenator
+#include "protoNet.h"     // for ProtoNet::GetInterfaceAddress() for optional flow initialization
+#include <ctype.h>  // for isspace()
 
 ProtoFlow::Description::Description(const ProtoAddress&  dst,            // invalid dst addr means any dst
                                     const ProtoAddress&  src,            // invalid src addr means any src
@@ -73,9 +76,9 @@ void ProtoFlow::Description::Print(FILE* filePtr) const
         GetSrcAddr(addr);
         fprintf(filePtr, "%s", addr.GetHostString());
         if (GetSrcMaskLength() != GetSrcLength() << 3)
-            fprintf(filePtr, "{%d}", GetSrcMaskLength());
-        if (0 != addr.GetPort())
-            fprintf(filePtr, "/%hu", addr.GetPort());
+            fprintf(filePtr, "/%d", GetSrcMaskLength());
+        //if (0 != addr.GetPort())
+        //    fprintf(filePtr, "/%hu", addr.GetPort());
     }
     else
     {
@@ -88,22 +91,22 @@ void ProtoFlow::Description::Print(FILE* filePtr) const
         GetDstAddr(addr);
         fprintf(filePtr, "->%s", addr.GetHostString());
         if (GetDstMaskLength() != GetDstLength() << 3)
-            fprintf(filePtr, "{%d}", GetDstMaskLength());
-        if (0 != addr.GetPort())
-            fprintf(filePtr, "/%hu", addr.GetPort());
+            fprintf(filePtr, "/%d", GetDstMaskLength());
+        //if (0 != addr.GetPort())
+        //    fprintf(filePtr, "/%hu", addr.GetPort());
     }
     else
     {
         fprintf(filePtr, "->*");
     }
     if (0 == --numFields) return;
-    if (0x03 != GetTrafficClass())
-        fprintf(filePtr, ",%02x", GetTrafficClass());
+    if (ProtoPktIP::RESERVED != GetProtocol())
+        fprintf(filePtr, ",%d", GetProtocol());
     else
         fprintf(filePtr, ",*");
     if (0 == --numFields) return;
-    if (ProtoPktIP::RESERVED != GetProtocol())
-        fprintf(filePtr, ",%d", GetProtocol());
+    if (0x03 != GetTrafficClass())
+        fprintf(filePtr, ",%02x", GetTrafficClass());
     else
         fprintf(filePtr, ",*");
     if (0 == --numFields) return;
@@ -323,8 +326,203 @@ bool ProtoFlow::Description::InitFromPkt(ProtoPktIP& ipPkt, unsigned int ifaceIn
             SetKeysize(0); // invalid IP version
             return false;
     }
-}  // end InitFromPkt()
+}  // end ProtoFlow::Description::InitFromPkt()
 
+bool ProtoFlow::Description::InitFromText(const char* theText)
+{
+    // format: [<srcAddr>[/maskLen]->]<dstAddr>[/maskLen][,<protocol>[,<class>]] (also can use X or * to wildcard fields)
+    // Notes:
+    // 1) <srcAddr> can an interface name
+    // 2) Can consist of just a single destination address with no delimiters (e.g., "224.1.2.3")
+    
+    ProtoTokenator tk(theText, ',');
+    // 1) Check for presence of "->" src->dst delimiter as alternative syntax to comma delimiter
+    //    (that is the format used by Description::Print(), trpr, etc, i.e., an Adamson-ism)
+    const char* text;
+    char* srcText = NULL;
+    bool dstOnly = false;
+    const char* dptr = strstr(theText, "->");
+    if (NULL != dptr)
+    {
+        // Copy the <srcAddr> field (prior to "->" delimiter ptr)
+        int srcLen = dptr - theText;
+        // Set the tokenator "cursor" to after the "->" delimiter
+        tk.Reset(dptr + 2, ',');
+        if (NULL == (srcText = new char[srcLen + 1]))
+        {
+            PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() new char[] error: %s\n", GetErrorString());
+            return false;
+        }
+        strncpy(srcText, theText, srcLen);
+        srcText[srcLen] = '\0';
+        // strip trailing whitespace
+        char* ptr = srcText + srcLen - 1;
+        while ((ptr >= srcText) && isspace(*ptr))
+            *ptr-- = '\0';
+        // strip leading whitespace
+        ptr = srcText;
+        while (isspace(*ptr) && ('\0' != *ptr))
+            ptr++;
+        text = ptr;
+    }
+    else if (NULL == strchr(theText, ','))
+    {
+        dstOnly = true;
+    }
+    else
+    {
+        text = tk.GetNextItem();
+    }
+    ProtoAddress srcAddr;
+    int srcMaskValue = -1;
+    if (dstOnly)
+    {
+        srcMaskValue = 0;  // no source was specified
+    }
+    else if (NULL != text)
+    {   
+        ProtoTokenator tk2(text, '/');
+        const char* text2 = tk2.GetNextItem();
+        if (('*' == text2[0]) || ('X' == text2[0]))
+        {
+            srcMaskValue = 0;  // wildcarded srcAddr
+            text2 = NULL;
+        }
+        else if ('/' != text[0])
+        {
+            if (!srcAddr.ConvertFromString(text2))
+            {
+                if (!ProtoNet::GetInterfaceAddress(text2, ProtoAddress::IPv4, srcAddr) &&
+                    !ProtoNet::GetInterfaceAddress(text2, ProtoAddress::IPv6, srcAddr))
+                {
+                    PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: invalid srcAddr or interface name \"%s\"\n", text2);
+                    if (NULL != srcText) delete[] srcText; // free the array that was allocated
+                    return false;
+                }
+            }
+            text2 = tk2.GetNextItem();
+        }
+        if (NULL != text2)
+        {
+            if (1 != sscanf(text2, "%d", &srcMaskValue) || (srcMaskValue < 0) || (srcMaskValue > 8*srcAddr.GetLength()))
+            {
+                PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: invalid srcAddr mask length \"%s\"\n", text2);
+                if (NULL != srcText) delete[] srcText; // free the array that was allocated
+                return false;
+            }
+        }   
+    }
+    else
+    {
+        PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: empty string?!\n");
+        if (NULL != srcText) delete[] srcText; // free the array that was allocated
+        return false;
+    }
+    if (NULL != srcText) delete[] srcText; // free the array that was allocated
+    text = tk.GetNextItem();
+    ProtoAddress dstAddr;
+    int dstMaskValue = -1;
+    if (NULL != text)
+    {   
+        ProtoTokenator tk2(text, '/');
+        const char* text2 = tk2.GetNextItem();
+        if (('*' == text2[0]) || ('X' == text2[0]))
+        {
+            dstMaskValue = 0;  // wildcarded dstAddr
+            text2 = NULL;
+        }
+        else if ('/' != text[0])
+        {
+            if (!dstAddr.ConvertFromString(text2))
+            {
+                PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: invalid dstAddr \"%s\"\n", text2);
+                return false;
+            }
+            text2 = tk2.GetNextItem();
+        }
+        if (NULL != text2)
+        {
+            if (1 != sscanf(text2, "%d", &dstMaskValue) || (dstMaskValue < 0) || (dstMaskValue > 8*dstAddr.GetLength()))
+            {
+                PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: invalid dstAddr mask length \"%s\"\n", text2);
+                return false;
+            }
+        }   
+    }
+    else
+    {
+        PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: missing dstAddr value\n");
+        return false;
+    }
+    text = tk.GetNextItem();
+    ProtoPktIP::Protocol protocol = ProtoPktIP::RESERVED;
+    if (NULL != text)
+    {
+        // TBD - support protocols by name (e.g. 'udp', 'tcp', etc)
+        if (('*' != text[0]) && ('X' != text[0]))
+        {
+            int value;
+            if ((1 != sscanf(text, "%d", &value)) || (value < 0) || (value > 254))
+            {
+                PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: invalid numeric protocol type value \"%s\"\n", text);
+                return false;
+            }
+            protocol = (ProtoPktIP::Protocol)value;
+        }
+    }
+    text = tk.GetNextItem();
+    UINT8 trafficClass = 0x03;  // default traffic class
+    if (NULL != text)
+    {
+        // TBD - support protocols by name (e.g. 'udp', 'tcp', etc)
+        if (('*' != text[0]) && ('X' != text[0]))
+        {
+            int value;
+            if ((1 != sscanf(text, "%d", &value)) || (value < 0) || (value > 255))
+            {
+                PLOG(PL_ERROR, "ProtoFlow::Description::InitFromText() error: invalid numeric traffic class value \"%s\"\n", text);
+                return false;
+            }
+            trafficClass = (UINT8)value;
+        }
+    }
+    // Use information collected from parsing to init ProtoFlow::Description via its flow_key
+    UINT8 dstLen, dstMaskLen, srcLen, srcMaskLen;
+    const char* dstPtr;
+    const char* srcPtr;
+    if (dstAddr.IsValid())
+    {
+        dstPtr = dstAddr.GetRawHostAddress();
+        dstLen = dstAddr.GetLength();   // in bytes
+        if (dstMaskValue < 0)
+            dstMaskLen = dstLen << 3;   // in bits
+        else
+            dstMaskLen = (UINT8)dstMaskValue;
+    }
+    else
+    {
+        dstPtr = NULL;
+        dstLen = 0;
+        dstMaskLen = 0;
+    }
+    if (srcAddr.IsValid())
+    {
+        srcPtr = srcAddr.GetRawHostAddress();
+        srcLen = srcAddr.GetLength();  // in bytes
+        if (srcMaskValue < 0)
+            srcMaskLen = srcLen << 3;  // to bits
+        else
+            srcMaskLen = (UINT8)srcMaskValue;
+    }
+    else
+    {
+        srcPtr = NULL;
+        srcLen = 0;
+        srcMaskLen = 0;
+    }
+    SetKey(dstPtr, dstLen, dstMaskLen, srcPtr, srcLen, srcMaskLen, trafficClass, protocol);
+    return true;
+}  // end ProtoFlow::Description::InitFromText()
 
 void ProtoFlow::Description::SetDstMaskLength(UINT8 dstMask)
 {
