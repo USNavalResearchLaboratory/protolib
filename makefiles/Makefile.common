@@ -29,7 +29,7 @@ TARGETS = libprotokit.a libprotokit
 	$(CC) -c $(CFLAGS) -o $*.o $*.cpp
 
 allExamples: arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample \
-jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample \
+jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample pcapReplay \
 protoCapExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample \
 threadExample timerTest ting treeTest vifExample vifLan protoExample eventExample tokenatorExample unitTests
 
@@ -272,7 +272,15 @@ protoCapExample:    $(CAP_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(CAP_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
-        
+
+REPLAY_SRC = $(EXAMPLES)/pcapReplay.cpp $(SYSTEM_SRC_EX)
+REPLAY_OBJ = $(REPLAY_SRC:.cpp=.o)
+pcapReplay:    $(REPLAY_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(REPLAY_OBJ) $(LDFLAGS) $(LIBS) $(SYSTEM_LIB_EX) -lpcap libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
+
+      
 DETOUR_SRC = $(EXAMPLES)/detourExample.cpp $(SYSTEM_SRC_EX)
 DETOUR_OBJ = $(DETOUR_SRC:.cpp=.o)
 detourExample:    $(DETOUR_OBJ) libprotokit.a

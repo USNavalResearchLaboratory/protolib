@@ -476,5 +476,12 @@ namespace ProtoFlow
             };  // end class ProtoFlow::TableTemplate::Iterator
     };  // end ProtoFlow:P:TableTemplate
     
+    
+    // Another data structure using ProtoIndexedQueue we may want to support is one where each 
+    // ProtoFlow::Description entry is inserted into multiple indexed queues (i.e. trees)
+    // with tree indexed with a different attribute (src, dst, protocol, etc) and then matching
+    // could be done by building  a temporary set of each non-wildcard attribute match and then 
+    // assessing set intersection membership (via discard) to identify valid matches.  
+    
 }  // end namespace ProtoFlow
 #endif // !_PROTO_FLOW

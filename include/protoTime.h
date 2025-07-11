@@ -62,8 +62,11 @@ class ProtoTime
             {return tval;}
         struct timeval& AccessTimeVal()
             {return tval;}
-        
+        // Computes (t1 - t2)
+        static double Delta(const ProtoTime& t1, const ProtoTime& t2);
         void operator+=(const ProtoTime& t);
+        double operator-(const ProtoTime& t) const
+            {return Delta(*this, t);} 
         void operator+=(double seconds);
         void operator-=(double seconds)
             {return operator+=(-seconds);}
@@ -98,11 +101,6 @@ class ProtoTime
                      ((sec() == t.sec()) &&
                       (usec() <= t.usec())));
         }
-        
-        // Computes (t1 - t2)
-        static double Delta(const ProtoTime& t1, const ProtoTime& t2);
-        double operator-(const ProtoTime& t) const
-            {return Delta(*this, t);} 
         
         class Key
         {
