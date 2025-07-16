@@ -10,6 +10,7 @@
 
 #include "protoChannel.h"
 #include "protoAddress.h"
+#include "protoNet.h"
 
 class ProtoCap : public ProtoChannel
 {
@@ -46,6 +47,13 @@ class ProtoCap : public ProtoChannel
         const ProtoAddress& GetInterfaceAddr() const
             {return if_addr;}
         
+        ProtoNet::InterfaceType GetInterfaceType() const
+            {return if_type;}
+        const ProtoAddress& GetTunnelLocalAddr() const
+            {return tunnel_local_addr;}
+        const ProtoAddress& GetTunnelRemoteAddr() const
+            {return tunnel_remote_addr;}
+        
         virtual bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL) = 0;
         virtual bool Send(const char* buffer, unsigned int& numBytes) = 0;
         
@@ -60,8 +68,12 @@ class ProtoCap : public ProtoChannel
             
     protected:
         ProtoCap();
-        unsigned int    if_index; // interface index (if applicable)
-        ProtoAddress    if_addr;  // interface MAC addr (if applicable)
+        unsigned int            if_index; // interface index (if applicable)
+        ProtoAddress            if_addr;  // interface MAC addr (if applicable)
+        // if_type distinction is currenly only supported on Linux (Ethernet iface assumed otherwise)
+        ProtoNet::InterfaceType if_type;
+        ProtoAddress            tunnel_local_addr;  // local tunnel endpoint address (if applicable)
+        ProtoAddress            tunnel_remote_addr; // remote tunnel endpoint address (if applicable)
         
     private:
         const void*     user_data;

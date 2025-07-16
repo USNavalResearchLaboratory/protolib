@@ -165,6 +165,7 @@ bool BsdCap::Open(const char* interfaceName)
         return false;   
     }
     if_index = ifIndex;
+    if_type = ProtoNet::ETH;  /// TBD - implement type check
     return true;
 }  // end BsdCap::Open()
 
@@ -174,7 +175,9 @@ void BsdCap::Close()
     {
         ProtoCap::Close();
         close(descriptor);
-        descriptor = -1;   
+        descriptor = -1;
+        if_index = 0;
+        if_type = ProtoNet::IFACE_TYPE_INVALID;
     }
 }  // end BsdCap::Close()
 

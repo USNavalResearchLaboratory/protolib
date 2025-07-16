@@ -129,6 +129,12 @@ bool LinuxCap::Open(const char* interfaceName)
         Close();
         return false;   
     }
+    if_type = ProtoNet::GetInterfaceType(ifIndex, &tunnel_local_addr, &tunnel_remote_addr);
+    if (ProtoNet::IFACE_INVALID_TYPE == if_type)
+    {
+        PLOG(PL_WARN, "LinuxCap::Open() GetInterfaceType() error: unknown interface type! (assuming ETH type)\n");
+        if_type = ProtoNet::IFACE_ETH; 
+    }
     if_index = ifIndex;
     return true;
 }  // end LinuxCap::Open()
@@ -140,6 +146,10 @@ void LinuxCap::Close()
     {
         close(descriptor);
         descriptor = INVALID_HANDLE; 
+        if_index = 0;
+        if_type = ProtoNet::IFACE_INVALID_TYPE;
+        tunnel_local_addr.Invalidate();
+        tunnel_remote_addr.Invalidate();
     }  
 }  // end LinuxCap::Close()
 
@@ -150,7 +160,7 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
     UINT16 type;
     memcpy(&type, buffer+12, 2);
     type = ntohs(type);
-    if (type <=  0x05dc) // assume it's 802.3 Length and ignore
+    if ((ProtoNet::IFACE_GRE != if_type) && (type <=  0x05dc)) // assume it's 802.3 Length and ignore
     {
             PLOG(PL_DEBUG, "LinuxCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
             return false;
@@ -188,7 +198,7 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     struct sockaddr_ll pktAddr;
     socklen_t addrLen = sizeof(pktAddr);
     int result = recvfrom(descriptor, buffer, (size_t)numBytes, 0, 
-                          (struct sockaddr*)&pktAddr, &addrLen);    
+                          (struct sockaddr*)&pktAddr, &addrLen); 
     if (result < 0)
     {
         numBytes = 0;

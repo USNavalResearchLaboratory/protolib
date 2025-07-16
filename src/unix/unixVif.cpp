@@ -104,7 +104,6 @@ bool UnixVif::Open(const char* vifName, const ProtoAddress& ipAddr, unsigned int
     char devName[PATH_MAX];
     for (int i = 0; i < 256; i++)
     {
-        //TRACE("trying to open /dev/tap%d ...\n", i);
         snprintf(devName, PATH_MAX, "/dev/tap%d", i);
         if ((descriptor = open(devName, O_RDWR)) < 0)
         {

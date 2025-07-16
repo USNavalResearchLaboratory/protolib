@@ -172,6 +172,13 @@ bool PcapCap::Open(const char* interfaceName)
         return false;   
     }
     if_index = ifIndex;
+#ifdef LINUX
+    if_type = ProtoNet::GetInterfaceType(ifIndex, &tunnel_local_addr, &tunnel_remote_addr);
+    if (ProtoNet::IFACE_INVALID_TYPE == if_type)
+    {
+        PLOG(PL_WARN, "PcapOpen::Open() warning: unknown interface type (assuming ETH)\n");
+        if_type = ProtoNet::ETH;
+    }
 #ifdef WIN32
     pcap_freealldevs(alldevs);
 #endif
@@ -185,6 +192,9 @@ void PcapCap::Close()
         ProtoCap::Close();
         pcap_close(pcap_device);
         pcap_device = NULL;
+        if_type = ProtoNet::IFACE_INVALID_TYPE;
+        tunnel_local_addr.Invalidate();
+        tunnel_remote_addr.Invalidate();
 #ifdef WIN32
         input_handle = INVALID_HANDLE_VALUE;
 #else

@@ -38,6 +38,14 @@ namespace ProtoNet
         IFACE_UP,
         IFACE_DOWN
     };
+    
+    enum InterfaceType 
+    {
+        IFACE_INVALID_TYPE, 
+        IFACE_ETH,
+        IFACE_VETH,
+        IFACE_GRE
+    };
  
     class Monitor : public ProtoChannel
     {
@@ -195,6 +203,15 @@ namespace ProtoNet
     
     InterfaceStatus GetInterfaceStatus(const char* ifaceName);
     InterfaceStatus GetInterfaceStatus(unsigned int ifaceIndex);
+    
+#ifdef LINUX
+    // These are Linux-only for now
+    // Will optionally retrieve tunnel endpoint address for GRE tunnel interfaces
+    InterfaceType GetInterfaceType(unsigned int  ifaceIndex,
+                                   ProtoAddress* localAddr = NULL,
+                                   ProtoAddress* remoteAddr = NULL);
+    //bool GetTunnelEndpoints(unsigned int ifaceIndex, ProtoAddress& localAddr, ProtoAddress& remoteAddr);
+#endif // LINUX
 
 #ifdef WIN32
     // TODO: make common function

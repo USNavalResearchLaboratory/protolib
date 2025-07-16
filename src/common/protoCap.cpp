@@ -20,7 +20,7 @@
 *
 */
 ProtoCap::ProtoCap()
- :   if_index(0), user_data(NULL)
+ :   if_index(0), if_type(ProtoNet::IFACE_INVALID_TYPE), user_data(NULL)
 {
     // Enable input notification by default for ProtoCap
     StartInputNotification();
@@ -36,7 +36,7 @@ ProtoCap::~ProtoCap()
 /**
  * @brief Changes the source mac addr to our own and writes packet to the pcap device
  *
- * 802.3 frames are not supported
+ * 802.3 frames are not yet supported
  *
  * @param buffer
  * @param buflen
@@ -52,11 +52,10 @@ bool ProtoCap::Forward(char* buffer, unsigned int& numBytes)
 }  // end ProtoCap::Forward()
 
 
-
 /**
  * @brief Changes the source mac addr to specified srcMacAddr and writes packet pcap device
  *
- * 802.3 frames are not supported
+ * 802.3 frames are not yet supported
  *
  * @param buffer
  * @param buflen

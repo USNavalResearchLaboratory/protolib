@@ -9,6 +9,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <net/if.h>
+#include <linux/if_tunnel.h>  // for IFLA_GRE_LOCAL, etc
 #include <unistd.h>  // for getpid()
 #include <sys/ioctl.h>
 
@@ -149,7 +150,7 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
     // TBD - we need to check this behavior regarding determining buffer size ...
     // (The "buffer increase" strategy doesn't work so initial size must be big enough for now.
     //  I need to see what strategy works (e.g. multi-part receives, or re-send request, etc)
-    size_t bufsize = 4096/sizeof(struct nlmsghdr);  // initial size (will be increased if needed
+    size_t bufsize = 4096/sizeof(struct nlmsghdr);  // initial size will be increased if needed
     struct nlmsghdr* buffer = NULL;
     for (;;)
     {
@@ -202,9 +203,13 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
                         continue;  // not for me
                     if (NLMSG_ERROR == hdr->nlmsg_type)
                     {
-                        PLOG(PL_ERROR, "ProtoNetlink::RecvResponse() error: NLMSG_ERROR\n");
-                        delete[] buffer;
-                        return false;
+                        struct nlmsgerr* errorMsg = (struct nlmsgerr*)NLMSG_DATA(hdr);
+                        if (0 != errorMsg->error)
+                        {
+                            PLOG(PL_ERROR, "ProtoNetlink::RecvResponse() error: NLMSG_ERROR\n");
+                            delete[] buffer;
+                            return false;
+                        }
                     }
                 }
                 // A non-error response was received
@@ -412,10 +417,18 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                     case NLMSG_ERROR:
                     {
                         struct nlmsgerr* errorMsg = (struct nlmsgerr*)NLMSG_DATA(msg);
-                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
-                                       msg->nlmsg_seq, errorMsg->error);
-                        delete[] buffer;
-                        return false;
+                        if (0 == errorMsg->error)
+                        {
+                            // Same as done?
+                            done = true;
+                        }
+                        else
+                        {
+                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
+                                           msg->nlmsg_seq, errorMsg->error);
+                            delete[] buffer;
+                            return false;
+                        }
                     }
                     case NLMSG_DONE:
                         //TRACE("recvd NLMSG_DONE ...\n");
@@ -610,10 +623,18 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
                     case NLMSG_ERROR:
                     {
                         struct nlmsgerr* errorMsg = (struct nlmsgerr*)NLMSG_DATA(msg);
-                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
+                        if (0 == errorMsg->error)
+                        {
+                            done = true;
+                        }
+                        else
+                        {
+                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
                                        msg->nlmsg_seq, errorMsg->error);
-                        delete[] buffer;
-                        return false;
+                            delete[] buffer;
+                            return false;
+                        }
+                        break;
                     }
                     case NLMSG_DONE:
                         //TRACE("recvd NLMSG_DONE ...\n");
@@ -908,7 +929,167 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
     }
 }  // end ProtoNet::GetGroupMemberships()
 
-
+ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, ProtoAddress* localAddr, ProtoAddress* remoteAddr)
+{
+    InterfaceType ifaceType = IFACE_ETH;  // assume physical Ethernet device by default
+    ProtoNetlink nlink;
+    if (!nlink.Open())
+    {
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: unable to open netlink socket\n");
+        return IFACE_INVALID_TYPE;
+    }
+    
+    // Construct request for interface information
+    struct 
+    {
+        struct nlmsghdr  nlh;
+        struct ifinfomsg ifi;
+    } req;
+    memset(&req, 0, sizeof(req));
+    
+    // fixed sequence number for single request
+    UINT32 seq = 1;
+    
+    req.nlh.nlmsg_len   = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+    req.nlh.nlmsg_type  = RTM_GETLINK;
+    req.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+    req.nlh.nlmsg_seq   = seq;
+    req.ifi.ifi_index   = ifaceIndex;
+    
+    if (!nlink.SendRequest(&req, sizeof(req)))
+    {
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: unable to send netlink request\n");
+        return IFACE_INVALID_TYPE;
+    }
+    
+    bool done = false;
+    while (!done)
+    {
+        struct nlmsghdr* buffer;
+        int msgLen;
+        if (nlink.RecvResponse(seq, &buffer, &msgLen))
+        {
+            struct nlmsghdr* msg = buffer;
+            // Parse response, adding matching addresses for "addressType" and "ifIndex"  
+            for (; 0 != NLMSG_OK(msg, (unsigned int)msgLen); msg = NLMSG_NEXT(msg, msgLen))
+            {
+                // only pay attention to matching netlink responses received
+                if ((msg->nlmsg_pid != nlink.GetPortId()) || (msg->nlmsg_seq != seq))
+                    continue;  
+                switch (msg->nlmsg_type)
+                {
+                    case NLMSG_NOOP:
+                        //TRACE("recvd NLMSG_NOOP ...\n");
+                        break;
+                    case NLMSG_ERROR:
+                    {
+                        struct nlmsgerr* errorMsg = (struct nlmsgerr*)NLMSG_DATA(msg);
+                        if (0 == errorMsg->error)
+                        {
+                            done = true;
+                        }
+                        else
+                        {
+                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
+                                           msg->nlmsg_seq, errorMsg->error);
+                            delete[] buffer;
+                            return IFACE_INVALID_TYPE;
+                        }
+                        break;
+                    }
+                    case NLMSG_DONE:
+                        //TRACE("recvd NLMSG_DONE ...\n");
+                        done = true;
+                        break;
+                    case RTM_NEWLINK:
+                    {
+                        struct ifinfomsg* ifi = (struct ifinfomsg*)NLMSG_DATA(msg);
+                        int rtalen = IFLA_PAYLOAD(msg);
+                        // Walk top-level attributes of RTM_NEWLINK
+                        struct rtattr* attr;
+                        for (attr = IFLA_RTA(ifi); RTA_OK(attr, rtalen); attr = RTA_NEXT(attr, rtalen))
+                        {
+                            if (attr->rta_type == IFLA_LINKINFO) 
+                            {
+                                /* tunnel info lives here */
+                                int infolen = RTA_PAYLOAD(attr);
+                                struct rtattr* linkinfo;
+                                for (linkinfo = (struct rtattr*)RTA_DATA(attr); RTA_OK(linkinfo, infolen); linkinfo = RTA_NEXT(linkinfo, infolen)) 
+                                {
+                                    if (IFLA_INFO_KIND == linkinfo->rta_type)
+                                    {
+                                        const char* kind = (const char*)RTA_DATA(linkinfo);
+                                        if (0 == strcmp("gre", kind)) 
+                                        {
+                                            ifaceType = IFACE_GRE;
+                                        }
+                                        else if (0 == strcmp("veth", kind))
+                                        {
+                                            ifaceType = IFACE_VETH;
+                                        }
+                                        else
+                                        {
+                                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: unknown kind \"%s\"\n", kind);
+                                            ifaceType = IFACE_INVALID_TYPE;
+                                        }
+                                        if ((NULL == localAddr) && (NULL == remoteAddr))
+                                        {
+                                            done = true;
+                                            break;
+                                        }
+                                    }
+                                    else if (IFLA_INFO_DATA == linkinfo->rta_type) 
+                                    {
+                                        // nested tunnel parameters 
+                                        struct rtattr *a;
+                                        int l = RTA_PAYLOAD(linkinfo);
+                                        for (a = (struct rtattr*)RTA_DATA(linkinfo); RTA_OK(a, l); a = RTA_NEXT(a, l)) 
+                                        {
+                                            int alen = RTA_PAYLOAD(a);
+                                            if ((NULL != localAddr) && (IFLA_GRE_LOCAL == a->rta_type))
+                                            {
+                                                if (4 == alen)
+                                                    localAddr->SetRawHostAddress(ProtoAddress::IPv4, (char*)RTA_DATA(a), 4);
+                                                else if (16 == alen)
+                                                    localAddr->SetRawHostAddress(ProtoAddress::IPv6, (char*)RTA_DATA(a), 16);
+                                                else
+                                                    PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: invalid GRE local addr len!\n");
+                                            }
+                                            else if ((IFLA_GRE_REMOTE == a->rta_type) && (NULL != remoteAddr))
+                                            {
+                                                if (4 == alen)
+                                                    remoteAddr->SetRawHostAddress(ProtoAddress::IPv4, (char*)RTA_DATA(a), 4);
+                                                else if (16 == alen)
+                                                    remoteAddr->SetRawHostAddress(ProtoAddress::IPv6, (char*)RTA_DATA(a), 16);
+                                                else
+                                                    PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: invalid GRE remote addr len!\n");
+                                            }
+                                            // TBD - support other parameters or tunnel types?
+                                        }  // end for (a = RTA_DATA() ...)
+                                    }
+                                } // end for (linkinfo = ...)
+                            }  // end if IFLA_LINKINFO
+                        }  // end for (attr = IFLA_RTA() ...)
+                        break;
+                    }
+                    default:
+                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() matching reply type:%d len:%d bytes\n", 
+                                msg->nlmsg_type, msg->nlmsg_len);
+                        break;
+                    
+                }  // end switch()
+                if (done) break;
+            }  // end for NLMSG_NEXT()
+        }
+        else
+        {
+            PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error:invalid netlink response\n");
+            done = true;
+        }  // end if/else nlink.RecvResponse()
+    }  // end while (!done)
+    nlink.Close();
+    return ifaceType;
+}  // end ProtoNet::GetInterfaceType()
 
 class LinuxNetMonitor : public ProtoNet::Monitor
 {
