@@ -26,6 +26,7 @@ makefiles/lfsrExample
 makefiles/msg2MsgExample
 makefiles/msgExample
 makefiles/netExample
+makefiles/pcapReplay
 makefiles/pcmd
 makefiles/pipe2SockExample
 makefiles/pipeExample
