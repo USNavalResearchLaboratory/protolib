@@ -4,7 +4,7 @@
 # Example scripts are provided in the "examples" subdirectory.
 
 import platform
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
 # This setup.py script assumes that Protolib (libprotokit.a) has already
 # been built and located in "protolib/lib with respect to this script
