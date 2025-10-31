@@ -51,18 +51,18 @@ def options(ctx):
     ctx.load('python')
     ctx.load('java')
 
-    bind_opts = ctx.parser.add_option_group('Language Bindings', 'Use during configure step.')
-    bind_opts.add_option('--build-python', action='store_true',
+    bind_opts = ctx.parser.add_argument_group('Language Bindings', 'Use during configure step.')
+    bind_opts.add_argument('--build-python', action='store_true',
             help='Build Python bindings [default:false]')
-    bind_opts.add_option('--build-java', action='store_true',
+    bind_opts.add_argument('--build-java', action='store_true',
             help='Build Java bindings [default:false]')
 
-    build_opts = ctx.parser.add_option_group('Compile Options', 'Use during build step.')
-    build_opts.add_option('--debug', action='store_true',
+    build_opts = ctx.parser.add_argument_group('Compile Options', 'Use during build step.')
+    build_opts.add_argument('--debug', action='store_true',
             help='Build in debug mode [default:release]')
-    build_opts.add_option('--enable-wx', action='store_true',
+    build_opts.add_argument('--enable-wx', action='store_true',
             help='Enable checking for wxWidgets.')
-    build_opts.add_option('--enable-static-library', action='store_true',
+    build_opts.add_argument('--enable-static-library', action='store_true',
             help='Enable installing static library. [default:false]')
 
 def configure(ctx):
