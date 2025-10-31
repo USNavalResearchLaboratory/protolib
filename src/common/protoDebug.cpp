@@ -84,7 +84,7 @@ void SetDebugLevel(unsigned int level)
 #endif // WIN32
 	DebugLevel(true, level); // this sets the underlying static "debug_level" state variable
     if (level != debugLevel)
-        PLOG(PL_INFO,"ProtoDebug>SetDebugLevel: debug level changed from %d to %d\n", debugLevel, level);
+        PLOG(PL_ALWAYS,"ProtoDebug>SetDebugLevel: debug level changed from %d to %d\n", debugLevel, level);
 }  // end SetDebugLevel()
 
 unsigned int GetDebugLevel()
