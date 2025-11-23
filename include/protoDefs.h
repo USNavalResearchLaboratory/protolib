@@ -45,6 +45,16 @@ const char PROTO_PATH_DELIMITER = '/';
 #endif
 #endif // if/else UNICODE || _UNICODE
 
+#ifndef WIN32
+#include <strings.h>  // for strcasecmp(), strncasecmp(), wcscasecmp(), wcsncasecmp()
+#else
+#include <string.h>  // for _stricmp(), _strnicmp(), _wcsicmp(), _wcsnicmp()
+#define strcasecmp(s1, s2) _stricmp(s1, s2)
+#define strncasecmp(s1, s2, n) _strnicmp(s1, s2, n)
+#define wcscasecmp(ws1, ws2) _wcsicmp(ws1, ws2)
+#define wcsncasecmp(ws1, ws2, n) _wcsnicmp(ws1, ws2, n)
+#endif
+
 #ifdef SIMULATE
 #ifdef NS2
 #include "scheduler.h"
