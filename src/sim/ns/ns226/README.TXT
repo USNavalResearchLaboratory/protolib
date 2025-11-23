@@ -76,6 +76,6 @@ OBJ_PROTOLIB_CPP = \
 6)  Run "./configure" in the ns source directory to create
     a new Makefile and  then type "make ns" to rebuild ns.
 
-    
-Brian Adamson <mailto://adamson@itd.nrl.navy.mil> 
+
+Brian Adamson <brian.adamson@nrl.navy.mil>
 31 October 2005
