@@ -9,7 +9,7 @@
 @section building_with_make Building Protolib with Make
 
 Protolib can be built using the Make build tool.  Makefile configuration files
-for a variety of platforms are included in the distribution in the makefiles 
+for a variety of platforms are included in the distribution in the makefiles
 directory.
 
 <hr>

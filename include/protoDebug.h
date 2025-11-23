@@ -17,7 +17,7 @@
 */
 #ifndef _PROTO_DEBUG
 #define _PROTO_DEBUG
-         
+
 #include "protoDefs.h"
 
 #ifdef WIN32
@@ -27,7 +27,7 @@
 #include <errno.h>   // for errno
 #endif // if/else WIN32/UNIX
 
-enum ProtoDebugLevel {PL_FATAL, PL_ERROR, PL_WARN, PL_INFO, PL_DEBUG, PL_TRACE, PL_DETAIL, PL_MAX, PL_ALWAYS}; 
+enum ProtoDebugLevel {PL_FATAL, PL_ERROR, PL_WARN, PL_INFO, PL_DEBUG, PL_TRACE, PL_DETAIL, PL_MAX, PL_ALWAYS};
 
 #if defined(PROTO_DEBUG) || defined(PROTO_MSG)
 void SetDebugLevel(unsigned int level);
@@ -73,11 +73,11 @@ inline void ProtoNoop() {}
 
 // The following prototype and "SetAssertFunction()" allows the behavior of the PROTO_ASSERT macro
 // to be overridden.  The default behavior is just a call to the "assert()" system call (or ABORT() if no "assert()" call is available)
-// IMPORTANT NOTE:  The "NDEBUG" macro can be enabled to disable the "assert()" system call even 
+// IMPORTANT NOTE:  The "NDEBUG" macro can be enabled to disable the "assert()" system call even
 //                  if the "PROTO_DEBUG" is kept in place.
 
 typedef void (ProtoAssertFunction)(bool condition, const char* conditionText, const char* fileName, int lineNumber, void* userData);
-void SetAssertFunction(ProtoAssertFunction* assertFunction, void* userData = NULL); 
+void SetAssertFunction(ProtoAssertFunction* assertFunction, void* userData = NULL);
 void ClearAssertFunction();
 bool HasAssertFunction();
 void ProtoAssertHandler(bool condition, const char* conditionText, const char* fileName, int lineNumber);
@@ -117,7 +117,7 @@ inline void TRACE(const char *format, ...) {}
 
 #endif // if/else PROTO_DEBUG
 
-// Historically, "protolib" has used an "ASSERT()" macro for assertions.  It now makes sense to 
+// Historically, "protolib" has used an "ASSERT()" macro for assertions.  It now makes sense to
 // transition to a more explicit "PROTO_ASSERT()" - we should/will probably deprecate this
 // "ASSERT()" macro definition but for now it is in many projects that use Protolib
 #undef ASSERT
@@ -128,7 +128,7 @@ inline const char* GetErrorString()
 #ifdef WIN32
     static char errorString[256];
     errorString[255] = '\0';
-    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | 
+    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
                   FORMAT_MESSAGE_IGNORE_INSERTS,
                   NULL,
                   GetLastError(),
@@ -152,7 +152,7 @@ inline const char* GetErrorString(ProtoErrorCode errorCode)
 #ifdef WIN32
     static char errorString[256];
     errorString[255] = '\0';
-    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | 
+    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
                   FORMAT_MESSAGE_IGNORE_INSERTS,
                   NULL,
                   errorCode,

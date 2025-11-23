@@ -44,7 +44,7 @@
 #if !defined(ANDROID) || __ANDROID_API__ > 23
 // Android doesn't have getifaddrs(), so we have some netlink stuff
 // in "linuxNet.cpp" to implement specific some functions for Android
-#include <ifaddrs.h> 
+#include <ifaddrs.h>
 #endif // !defined(ANDROID) || __ANDROID_API__ > 23
 
 // Implementation of ProtoNet functions for Unix systems.  These are the mechanisms that are common to
@@ -130,13 +130,13 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             socketFd = socket(PF_INET, SOCK_DGRAM, 0);
             break;
     }
-    
+
     if (socketFd < 0)
     {
-        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() socket() error: %s\n", GetErrorString()); 
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() socket() error: %s\n", GetErrorString());
         return false;
-    }   
-    
+    }
+
     if (ProtoAddress::ETH == addressType)
     {
 #ifdef SIOCGIFHWADDR
@@ -147,8 +147,8 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() ioctl(SIOCGIFHWADDR) error: %s\n",
                     GetErrorString());
             close(socketFd);
-            return false;   
-        }  
+            return false;
+        }
         else
         {
             close(socketFd);
@@ -160,13 +160,13 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             {
                 PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: invalid ETH addr?\n");
                 return false;
-            }   
+            }
             if (!addrList.Insert(ethAddr))
             {
                 PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unable to add ETH addr to list.\n");
                 return false;
             }
-            return true;            
+            return true;
         }
 #else
 #if defined(SOLARIS) || defined(IRIX)
@@ -181,7 +181,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             return false;
         }
         int ifNumber = atoi(ptr);
-        *ptr = '\0';    
+        *ptr = '\0';
         if ((socketFd = open(deviceName, O_RDWR)) < 0)
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() dlpi open() error: %s\n",
@@ -255,7 +255,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         memset(&dlp->bind_req, 0, DL_BIND_REQ_SIZE);
         dlp->bind_req.dl_primitive = DL_BIND_REQ;
 #ifdef DL_HP_RAWDLS
-	    dlp->bind_req.dl_sap = 24;	
+	    dlp->bind_req.dl_sap = 24;
 	    dlp->bind_req.dl_service_mode = DL_HP_RAWDLS;
 #else
 	    dlp->bind_req.dl_sap = DL_ETHER;
@@ -269,7 +269,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() dlpi putmsg(DL_BIND_REQ) error: %s\n",
                     GetErrorString());
             close(socketFd);
-            return false;     
+            return false;
         }
         msg.maxlen = 8192;
         msg.len = 0;
@@ -298,7 +298,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() dlpi putmsg() error: %s\n",
                     GetErrorString());
             close(socketFd);
-            return false;     
+            return false;
         }
         msg.maxlen = 8192;
         msg.len = 0;
@@ -323,7 +323,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         if (!addrList.Insert(macAddr))
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unable to add ETH addr to list.\n");
-            return false; 
+            return false;
         }
         return true;
 #else
@@ -349,20 +349,20 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                             return false;
                         }
                         ProtoAddress macAddr;
-                        macAddr.SetRawHostAddress(addressType, 
+                        macAddr.SetRawHostAddress(addressType,
                                                   sdl->sdl_data + sdl->sdl_nlen,
                                                   sdl->sdl_alen);
-                        if (NULL != interfaceIndex) 
+                        if (NULL != interfaceIndex)
                             *interfaceIndex = sdl->sdl_index;
                         freeifaddrs(ifap);
                         if (!addrList.Insert(macAddr))
                         {
                             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unable to add ETH addr to list.\n");
-                            return false; 
+                            return false;
                         }
                         return true;
                     }
-                }   
+                }
                 ptr = ptr->ifa_next;
             }
             freeifaddrs(ifap);
@@ -373,14 +373,14 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         {
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() getifaddrs() error: %s\n",
                     GetErrorString());
-            return false;  
+            return false;
         }
 #endif // if/else (SOLARIS || IRIX)
 #endif // if/else SIOCGIFHWADDR
     }  // end if (ETH == addrType)
 
-#ifdef HAVE_IPV6    
-    // Try using getifaddrs() to get all address else resort to ioctl(SIOCGIFADDR) below 
+#ifdef HAVE_IPV6
+    // Try using getifaddrs() to get all address else resort to ioctl(SIOCGIFADDR) below
     struct ifaddrs* ifap;
     if (0 == getifaddrs(&ifap))
     {
@@ -427,10 +427,10 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             ptr = ptr->ifa_next;
         }
         freeifaddrs(ifap);
-        
+
         if (foundIface)
         {
-            if (NULL != interfaceIndex) 
+            if (NULL != interfaceIndex)
                 *interfaceIndex = GetInterfaceIndex(interfaceName);
         }
         else
@@ -449,17 +449,17 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                     PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unknown interface address\n");
                 }
             }
-            return false; 
-            
+            return false;
+
         }
     }
-    else 
+    else
 #endif // HAVE_IPV6
     if (ioctl(socketFd, SIOCGIFADDR, &req) < 0)
     {
         // (TBD - more sophisticated warning logic here
         PLOG(PL_DEBUG, "ProtoNet::GetInterfaceAddressList() ioctl(SIOCGIFADDR) error for iface>%s: %s\n",
-                      interfaceName, GetErrorString()); 
+                      interfaceName, GetErrorString());
         close(socketFd);
         // Perhaps "interfaceName" is an address string?
         ProtoAddress ifAddr;
@@ -475,7 +475,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                 PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unknown interface address\n");
             }
         }
-        return false; 
+        return false;
     }
     else
     {
@@ -488,7 +488,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_DEBUG, "ProtoNet::GetInterfaceAddressList() warning: no addresses for given family?\n");
             return false;
         }
-        else 
+        else
 #endif // MACOSX
         if (ifAddr.SetSockAddr(req.ifr_addr))
         {
@@ -507,7 +507,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: invalid address family\n");
             return false;
         }
-        if (NULL != interfaceIndex) 
+        if (NULL != interfaceIndex)
             *interfaceIndex = GetInterfaceIndex(req.ifr_name);
     }
     return true;
@@ -609,18 +609,18 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
     }
     else
     {
-        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() getifaddrs() error: %s\n");  
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() getifaddrs() error: %s\n");
     }
     return 0;
 } // end ProtoNet::GetInterfaceAddressMask()
 #endif // !defined(ANDROID) || __ANDROID_API__ > 23
 
-#if defined(SIOCGIFINDEX) && ((defined(ANDROID) && __ANDROID_API__ < 24) || !defined(HAVE_IPV6)) 
+#if defined(SIOCGIFINDEX) && ((defined(ANDROID) && __ANDROID_API__ < 24) || !defined(HAVE_IPV6))
 // Internal helper function for systems without getifaddrs() (e.g. Android or older stuff)
 static int GetInterfaceList(struct ifconf& conf)
 {
     int sockFd = socket(PF_INET, SOCK_DGRAM, 0);
-    if (sockFd < 0) 
+    if (sockFd < 0)
     {
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceList() socket() error: %s\n", GetErrorString());
         return 0;
@@ -680,7 +680,7 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
             {
                 if ((NULL != indexArray) && (indexCount < indexArraySize))
 			        indexArray[indexCount] = ifIndex;
-		        indexCount++;   
+		        indexCount++;
             }
             else
             {
@@ -700,9 +700,9 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
 		// need to take into account (NULL, 0) input (see GetInterfaceName)
 		if ((NULL != indexArray) && (indexCount < indexArraySize))
 			indexArray[indexCount] = ifPtr->if_index;
-		indexCount++;         
+		indexCount++;
 		ifPtr++;
-	} 
+	}
 	if_freenameindex(ifdx);
 #endif // if/else ANDROID
 #else  // !HAVE_IPV6  || (ANDROID && __ANDROID_API__ < 24)
@@ -726,13 +726,13 @@ unsigned int ProtoNet::GetInterfaceIndices(unsigned int* indexArray, unsigned in
 
 unsigned int ProtoNet::GetInterfaceIndex(const char* interfaceName)
 {
-    unsigned int index = 0;    
+    unsigned int index = 0;
 #ifdef HAVE_IPV6
     index = if_nametoindex(interfaceName);
 #else
 #ifdef SIOCGIFINDEX
     int sockFd = socket(PF_INET, SOCK_DGRAM, 0);
-    if (sockFd < 0) 
+    if (sockFd < 0)
     {
         PLOG(PL_WARN, "ProtoNet::GetInterfaceIndex() socket() error: %s\n",
                        GetErrorString());
@@ -781,7 +781,7 @@ unsigned int ProtoNet::GetInterfaceName(unsigned int index, char* buffer, unsign
 #else
 #ifdef SIOCGIFNAME
     int sockFd = socket(PF_INET, SOCK_DGRAM, 0);
-    if (sockFd < 0) 
+    if (sockFd < 0)
     {
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceName() socket() error: %s\n",
                        GetErrorString());
@@ -832,12 +832,12 @@ ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(const char* ifaceName)
         return IFACE_UNKNOWN;
     }
     close(fd);
-    
+
     if (0 != (req.ifr_flags & IFF_UP))
         return IFACE_UP;
-    else 
+    else
         return IFACE_DOWN;
-    
+
 }  // end ProtoNet::GetInterfaceStatus(by name)
 
 ProtoNet::InterfaceStatus ProtoNet::GetInterfaceStatus(unsigned int ifaceIndex)
@@ -858,7 +858,7 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
     char cmd[1024];
 #ifdef LINUX
 #ifdef __ANDROID__
-    sprintf(cmd, "ip addr add %s/%u dev %s", ifaceAddr.GetHostString(), maskLen, ifaceName); 
+    sprintf(cmd, "ip addr add %s/%u dev %s", ifaceAddr.GetHostString(), maskLen, ifaceName);
 #else
     switch (ifaceAddr.GetType())
     {
@@ -944,7 +944,7 @@ bool ProtoNet::AddInterfaceAddress(const char* ifaceName, const ProtoAddress& if
                 // Set primary address for interface ifaceName
                 if (32 == maskLen)
                     sprintf(cmd, "/sbin/ifconfig %s %s broadcast 0.0.0.0 netmask 255.255.255.255", ifaceName, ifaceAddr.GetHostString());
-                else                            
+                else
                     sprintf(cmd, "/sbin/ifconfig %s %s/%u", ifaceName, ifaceAddr.GetHostString(), maskLen);
             }
             break;
@@ -1032,9 +1032,9 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
             PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: invalid address type\n");
             return false;
         }
-    }    
+    }
 #endif // if/else __ANDROID__
-#else  // BSD, MacOSX, etc       
+#else  // BSD, MacOSX, etc
     switch (ifaceAddr.GetType())
     {
         case ProtoAddress::IPv4:
@@ -1049,7 +1049,7 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
             PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() error: invalid address type\n");
             return false;
     }
-#endif  // if/else LINUX/OTHER 
+#endif  // if/else LINUX/OTHER
     if (system(cmd) < 0)
     {
         PLOG(PL_ERROR, "ProtoNet::RemoveInterfaceAddress() /sbin/ifconfig error: %s\n", GetErrorString());
