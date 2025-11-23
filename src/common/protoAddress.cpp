@@ -2,7 +2,7 @@
 #include "protoAddress.h"
 #include "protoSocket.h"  // for ProtoSocket::GetInterfaceAddress() routines
 #include "protoDebug.h"   // for print out of warnings, etc
-/** 
+/**
  * @file protoAddress.cpp
  * @brief Network address container class.
  */
@@ -92,7 +92,7 @@ bool ProtoAddress::IsMulticast() const
         {
             if (IN6_IS_ADDR_V4MAPPED(&(((struct sockaddr_in6*)&addr)->sin6_addr)))
             {
-                return (htonl(0xe0000000) == 
+                return (htonl(0xe0000000) ==
                         ((UINT32)(htonl(0xf0000000) &
                          IN6_V4MAPPED_ADDR(&(((struct sockaddr_in6*)&addr)->sin6_addr)))));
             }
@@ -112,7 +112,7 @@ bool ProtoAddress::IsMulticast() const
                 return (0 != (addr.addr & 0x80000000));
 			// && (addr.addr != 0xffffffff);
 #endif // NS2
-#ifdef OPNET  
+#ifdef OPNET
                 return (0xe0000000 == (0xf0000000 & addr.addr));
 #endif // OPNET
 #endif // SIMULATE
@@ -137,7 +137,7 @@ bool ProtoAddress::IsBroadcast() const
             return false;  // no IPv6 broadcast address
         }
 #endif // HAVE_IPV6
-        
+
         case ETH:
         {
             const unsigned char temp[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
@@ -149,7 +149,7 @@ bool ProtoAddress::IsBroadcast() const
 #ifdef NS2
                 return ((int)0xffffffff == addr.addr);
 #endif // NS2
-#ifdef OPNET  
+#ifdef OPNET
 		        return (0xffffffff == addr.addr);
 #endif // OPNET
 #endif // SIMULATE
@@ -165,7 +165,7 @@ bool ProtoAddress::IsLoopback() const
         case IPv4:
         {
             // This was changed since any 127.X.X.X is a loopback address
-            // and many Linux configs have started using this fact for some purpose 
+            // and many Linux configs have started using this fact for some purpose
             UINT32 addrVal = (UINT32)((struct sockaddr_in*)&addr)->sin_addr.s_addr;
             return (0x7f == (ntohl(addrVal) >> 24));
         }
@@ -204,7 +204,7 @@ bool ProtoAddress::IsUnspecified() const
         {
             if (IN6_IS_ADDR_V4MAPPED(&(((struct sockaddr_in6*)&addr)->sin6_addr)))
             {
-                return (0x0000000 == 
+                return (0x0000000 ==
                         IN6_V4MAPPED_ADDR(&(((struct sockaddr_in6*)&addr)->sin6_addr)));
             }
             else
@@ -232,7 +232,7 @@ bool ProtoAddress::IsLinkLocal() const
         case IPv6:
         {
             struct in6_addr* a = &(((struct sockaddr_in6*)&addr)->sin6_addr);
-            return (0 != IN6_IS_ADDR_MULTICAST(a) ? 
+            return (0 != IN6_IS_ADDR_MULTICAST(a) ?
                     (0 != IN6_IS_ADDR_MC_LINKLOCAL(a) ? true : false) :
                     (0 != IN6_IS_ADDR_LINKLOCAL(a) ? true : false));
         }
@@ -269,7 +269,7 @@ bool ProtoAddress::IsSiteLocal() const
         case IPv6:
         {
             struct in6_addr* a = &(((struct sockaddr_in6*)&addr)->sin6_addr);
-            return (IN6_IS_ADDR_MULTICAST(a) ? 
+            return (IN6_IS_ADDR_MULTICAST(a) ?
                     (0 != IN6_IS_ADDR_MC_SITELOCAL(a) ? true : false) :
                     (0 != IN6_IS_ADDR_SITELOCAL(a) ? true : false));
         }
@@ -338,8 +338,8 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
                     size_t len = strlen(buffer);
                     if (len > buflen) len = buflen;
 					ptr++;
-					memmove(buffer, ptr, len - (ptr-buffer));   
-                }  
+					memmove(buffer, ptr, len - (ptr-buffer));
+                }
                 ptr = strrchr(buffer, '%');  // nuke if index, if applicable
                 if (!ptr) ptr = strrchr(buffer, ']'); // nuke end bracket
 				ptr = (char *)memchr(buffer, ']', strlen(buffer));
@@ -350,7 +350,7 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
 #endif // HAVE_IPV6
             return buffer ? buffer : "(null)";
         }
-#else 
+#else
 #ifdef HAVE_IPV6
         case IPv4:
         {
@@ -358,7 +358,7 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
             return result ? result : "(bad address)";
         }
         case IPv6:
-        { 
+        {
             const char* result = inet_ntop(AF_INET6, &((struct sockaddr_in6*)&addr)->sin6_addr, buffer, buflen);
             return result ? result : "(bad address)";
         }
@@ -465,7 +465,7 @@ UINT16 ProtoAddress::GetPort() const
 void ProtoAddress::Reset(ProtoAddress::Type theType, bool zero)
 {
     char value = zero ? 0x00 : 0xff;
-    char fill[16];   
+    char fill[16];
     switch (theType)
     {
         case IPv4:
@@ -510,7 +510,7 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
     {
         case AF_INET:
             //((struct sockaddr_in&)addr) = ((struct sockaddr_in&)theAddr);
-            // memcpy() safer here due to memory alignment issues on 
+            // memcpy() safer here due to memory alignment issues on
             // some compilers / platforms (e.g. Android ARM)??
             memcpy(&addr, &theAddr, sizeof(struct sockaddr_in));
             type = IPv4;
@@ -519,7 +519,7 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
 #ifdef HAVE_IPV6
         case AF_INET6:
             //((struct sockaddr_in6&)addr) = ((struct sockaddr_in6&)theAddr);
-            // memcpy() safer here due to memory alignment issues on 
+            // memcpy() safer here due to memory alignment issues on
             // some compilers / platforms (e.g. Android ARM)??
             memcpy(&addr, &theAddr, sizeof(struct sockaddr_in6));
             type = IPv6;
@@ -536,7 +536,7 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
                 PLOG(PL_WARN, "ProtoNet::SetSockAddr() error: non-Ethertype link address!\n");
                 return false;
             }
-            SetRawHostAddress(ETH, sdl->sdl_data + sdl->sdl_nlen, sdl->sdl_alen);        
+            SetRawHostAddress(ETH, sdl->sdl_data + sdl->sdl_nlen, sdl->sdl_alen);
             return true;
         }
 #endif  // HAVE_IFDL
@@ -564,7 +564,7 @@ bool ProtoAddress::SetRawHostAddress(ProtoAddress::Type theType,
 {
     UINT16 thePort = GetPort();
     switch (theType)
-    {       
+    {
         case IPv4:
             if (buflen > 4) return false;
             type = IPv4;
@@ -588,7 +588,7 @@ bool ProtoAddress::SetRawHostAddress(ProtoAddress::Type theType,
 #endif // defined(_SOCKLENT_T)  || defined(_SOCKLEN_T_DECLARED)
             ((struct sockaddr_in6*)&addr)->sin6_family = AF_INET6;
             break;
-#endif // HAVE_IPV6  
+#endif // HAVE_IPV6
         case ETH:
             if (buflen > 6) return false;
             type = ETH;
@@ -596,7 +596,7 @@ bool ProtoAddress::SetRawHostAddress(ProtoAddress::Type theType,
             memset((char*)&addr, 0, 6);
             memcpy((char*)&addr, buffer, buflen);
             break;
-#ifdef SIMULATE          
+#ifdef SIMULATE
         case SIM:
             if (buflen > sizeof(SIMADDR)) return false;
             type = SIM;
@@ -612,7 +612,7 @@ bool ProtoAddress::SetRawHostAddress(ProtoAddress::Type theType,
     SetPort(thePort);
     return true;
 }  // end ProtoAddress::SetRawHostAddress()
-        
+
 
 const char* ProtoAddress::GetRawHostAddress() const
     {return AccessRawHostAddress();}
@@ -626,10 +626,10 @@ char* ProtoAddress::AccessRawHostAddress() const
 #ifdef HAVE_IPV6
         case IPv6:
             return ((char*)&((struct sockaddr_in6*)&addr)->sin6_addr);
-#endif // HAVE_IPV6  
+#endif // HAVE_IPV6
         case ETH:
             return ((char*)&addr);
-#ifdef SIMULATE          
+#ifdef SIMULATE
         case SIM:
             return ((char*)&((struct sockaddr_sim*)&addr)->addr);
 #endif // SIMULATE
@@ -721,8 +721,8 @@ UINT8 ProtoAddress::GetPrefixLength() const
             ptr = ((UINT8*)&((struct sockaddr_in6*)&addr)->sin6_addr);
             maxBytes = 16;
             break;
-#endif // HAVE_IPV6  
-#ifdef SIMULATE          
+#endif // HAVE_IPV6
+#ifdef SIMULATE
         case SIM:
             ptr = ((UINT8*)&((struct sockaddr_sim*)&addr)->addr);
             maxBytes = sizeof(SIMADDR);
@@ -739,7 +739,7 @@ UINT8 ProtoAddress::GetPrefixLength() const
         if (0xff == *ptr)
         {
             prefixLen += 8;
-            ptr++;   
+            ptr++;
         }
         else
         {
@@ -747,10 +747,10 @@ UINT8 ProtoAddress::GetPrefixLength() const
             while (0 != (bit & *ptr))
             {
                 bit >>= 1;
-                prefixLen += 1;   
+                prefixLen += 1;
             }
             break;
-        }   
+        }
     }
     return prefixLen;
 }  // end ProtoAddress::GetPrefixLength()
@@ -767,11 +767,11 @@ void ProtoAddress::GeneratePrefixMask(ProtoAddress::Type type, UINT8 prefixLen)
         case IPv6:
             ptr = ((unsigned char*)&((struct sockaddr_in6*)&addr)->sin6_addr);
             break;
-#endif // HAVE_IPV6  
+#endif // HAVE_IPV6
         case ETH:
             ptr =  ((unsigned char*)&addr);
             break;
-#ifdef SIMULATE          
+#ifdef SIMULATE
         case SIM:
             ptr = ((unsigned char*)&((struct sockaddr_sim*)&addr)->addr);
             break;
@@ -813,8 +813,8 @@ void ProtoAddress::ApplyPrefixMask(UINT8 prefixLen)
             ptr = ((UINT8*)&((struct sockaddr_in6*)&addr)->sin6_addr);
             maxLen = 128;
             break;
-#endif // HAVE_IPV6  
-#ifdef SIMULATE          
+#endif // HAVE_IPV6
+#ifdef SIMULATE
         case SIM:
             ptr = ((UINT8*)&((struct sockaddr_sim*)&addr)->addr);
             maxLen = sizeof(SIMADDR) << 3;
@@ -828,12 +828,12 @@ void ProtoAddress::ApplyPrefixMask(UINT8 prefixLen)
     if (prefixLen >= maxLen) return;
     UINT8 nbytes = prefixLen >> 3;
     UINT8 remainder = prefixLen & 0x07;
-    if (remainder) 
+    if (remainder)
     {
         ptr[nbytes] &= (UINT8)(0x00ff << (8 - remainder));
         nbytes++;
     }
-    memset(ptr + nbytes, 0, length - nbytes);    
+    memset(ptr + nbytes, 0, length - nbytes);
 }  // end ProtoAddress::ApplyPrefixMask()
 
 void ProtoAddress::ApplySuffixMask(UINT8 suffixLen)
@@ -851,8 +851,8 @@ void ProtoAddress::ApplySuffixMask(UINT8 suffixLen)
             ptr = ((UINT8*)&((struct sockaddr_in6*)&addr)->sin6_addr);
             maxLen = 128;
             break;
-#endif // HAVE_IPV6  
-#ifdef SIMULATE          
+#endif // HAVE_IPV6
+#ifdef SIMULATE
         case SIM:
             ptr = ((UINT8*)&((struct sockaddr_sim*)&addr)->addr);
             maxLen = sizeof(SIMADDR) << 3;
@@ -866,14 +866,14 @@ void ProtoAddress::ApplySuffixMask(UINT8 suffixLen)
     if (suffixLen >= maxLen) return;
     UINT8 nbytes = suffixLen >> 3;
     UINT8 remainder = suffixLen & 0x07;
-    if (remainder) 
+    if (remainder)
     {
         ptr[(maxLen >> 3)-nbytes-1] &= (UINT8)(0x00ff >> (8-remainder));
         nbytes++;
     }
     memset(ptr, 0, length - nbytes);
 }
-void ProtoAddress::GetSubnetAddress(UINT8         prefixLen, 
+void ProtoAddress::GetSubnetAddress(UINT8         prefixLen,
                                     ProtoAddress& subnetAddr) const
 {
     subnetAddr = *this;
@@ -890,10 +890,10 @@ void ProtoAddress::GetSubnetAddress(UINT8         prefixLen,
             ptr = ((UINT8*)&((struct sockaddr_in6*)&subnetAddr.addr)->sin6_addr);
             maxLen = 128;
             break;
-#endif // HAVE_IPV6  
+#endif // HAVE_IPV6
         case ETH:
             return;
-#ifdef SIMULATE          
+#ifdef SIMULATE
         case SIM:
             ptr = ((UINT8*)&((struct sockaddr_sim*)&subnetAddr.addr)->addr);
             maxLen = sizeof(SIMADDR) << 3;
@@ -906,17 +906,17 @@ void ProtoAddress::GetSubnetAddress(UINT8         prefixLen,
     if (prefixLen >= maxLen) return;
     UINT8 nbytes = prefixLen >> 3;
     UINT8 remainder = prefixLen & 0x07;
-    if (remainder) 
+    if (remainder)
     {
         ptr[nbytes] &= (UINT8)(0xff << (8 - remainder));
         nbytes++;
     }
-    memset(ptr + nbytes, 0, length - nbytes);           
+    memset(ptr + nbytes, 0, length - nbytes);
 }  // end ProtoAddress::GetSubnetAddress()
 
 bool ProtoAddress::Increment()
 {
-    if (!IsValid()) 
+    if (!IsValid())
     {
         PLOG(PL_ERROR, "ProtoAddress::Increment() error:  invalid address\n");
         return false;
@@ -934,9 +934,9 @@ bool ProtoAddress::Increment()
     }
     return false;
 }  // end ProtoAddress::Increment()
-    
 
-void ProtoAddress::GetBroadcastAddress(UINT8         prefixLen, 
+
+void ProtoAddress::GetBroadcastAddress(UINT8         prefixLen,
                                        ProtoAddress& broadcastAddr) const
 {
     broadcastAddr = *this;
@@ -953,13 +953,13 @@ void ProtoAddress::GetBroadcastAddress(UINT8         prefixLen,
             ptr = ((UINT8*)&((struct sockaddr_in6*)&broadcastAddr.addr)->sin6_addr);
             maxLen = 128;
             break;
-#endif // HAVE_IPV6  
+#endif // HAVE_IPV6
         case ETH:
             ptr = (UINT8*)&broadcastAddr.addr;
             maxLen = 48;
             prefixLen = 0;
             break;
-#ifdef SIMULATE          
+#ifdef SIMULATE
         case SIM:
             ptr = ((UINT8*)&((struct sockaddr_sim*)&broadcastAddr.addr)->addr);
             maxLen = sizeof(SIMADDR) << 3;
@@ -972,12 +972,12 @@ void ProtoAddress::GetBroadcastAddress(UINT8         prefixLen,
     if (prefixLen >= maxLen) return;
     UINT8 nbytes = prefixLen >> 3;
     UINT8 remainder = prefixLen & 0x07;
-    if (remainder) 
+    if (remainder)
     {
         ptr[nbytes] |= (0x00ff >> remainder);
         nbytes++;
     }
-    memset(ptr + nbytes, 0xff, length - nbytes);           
+    memset(ptr + nbytes, 0xff, length - nbytes);
 }  // end ProtoAddress::GetBroadcastAddress()
 
 ProtoAddress& ProtoAddress::GetEthernetMulticastAddress(const ProtoAddress& ipMcastAddr)
@@ -1061,7 +1061,7 @@ UINT32 ProtoAddress::GetEndIdentifier() const
         case IPv4:
         {
             return ntohl(((struct sockaddr_in*)&addr)->sin_addr.s_addr);
-            
+
         }
 #ifdef HAVE_IPV6
         case IPv6:
@@ -1069,7 +1069,7 @@ UINT32 ProtoAddress::GetEndIdentifier() const
             return ntohl(IN6_V4MAPPED_ADDR(&(((struct sockaddr_in6*)&addr)->sin6_addr)));
         }
 #endif // HAVE_IPV6
-        case ETH:  
+        case ETH:
         {
             // a dumb little hash: MSB is randomized vendor id, 3 LSB's is device id
             UINT8* addrPtr = (UINT8*)&addr;
@@ -1113,7 +1113,7 @@ bool ProtoAddress::HostIsEqual(const ProtoAddress& theAddr) const
                 return true;
             else
                 return false;
-#endif // HAVE_IPV6 
+#endif // HAVE_IPV6
         case ETH:
             if ((ETH == theAddr.type) &&
                 0 == memcmp((char*)&addr, (char*)&theAddr.addr, 6))
@@ -1151,12 +1151,12 @@ int ProtoAddress::CompareHostAddr(const ProtoAddress& theAddr) const
                           16);
 #endif // HAVE_IPV6
         case ETH:
-            return memcmp((char*)&addr, (char*)&theAddr.addr, 6);                
+            return memcmp((char*)&addr, (char*)&theAddr.addr, 6);
 #ifdef SIMULATE
         case SIM:
         {
             SIMADDR addr1 = ((struct sockaddr_sim*)&addr)->addr;
-            SIMADDR addr2 = ((struct sockaddr_sim*)&(theAddr.addr))->addr;  
+            SIMADDR addr2 = ((struct sockaddr_sim*)&(theAddr.addr))->addr;
             if (addr1 < addr2)
                 return -1;
             else if (addr1 > addr2)
@@ -1182,7 +1182,7 @@ bool ProtoAddress::ResolveEthFromString(const char* text)
     }
     for (int i=0;i<=5;i++)
         b[i] = (char) a[i];
-    SetRawHostAddress(ETH, b, 6); 
+    SetRawHostAddress(ETH, b, 6);
     return true;
 }  // end ProtoAddress::ResolveEthFromString()
 
@@ -1193,7 +1193,7 @@ bool ProtoAddress::ConvertFromString(const char* text)
     return ResolveFromString(text);
 #else
 	// inet_pton not available below Vista
-#ifdef WIN32 
+#ifdef WIN32
     // Initialize the address family
     // Startup WinSock for name lookup
     if (!Win32Startup())
@@ -1201,7 +1201,7 @@ bool ProtoAddress::ConvertFromString(const char* text)
         PLOG(PL_ERROR, "ProtoAddress: GetHostString(): Error initializing WinSock!\n");
         return NULL;
     }
-	struct sockaddr_in sa = (struct sockaddr_in&)addr;	
+	struct sockaddr_in sa = (struct sockaddr_in&)addr;
 	sa.sin_family = AF_INET;
 	int addrSize = sizeof(struct sockaddr_storage);
 
@@ -1243,14 +1243,14 @@ bool ProtoAddress::ConvertFromString(const char* text)
     {
         sa.sin_family = AF_INET;
         return SetSockAddr((struct sockaddr&)sa);
-    }  
-    // Next try for an IPv6 addr 
-    struct sockaddr_in6 sa6; 
+    }
+    // Next try for an IPv6 addr
+    struct sockaddr_in6 sa6;
     if (1 == inet_pton(AF_INET6, text, &sa6.sin6_addr))
     {
         sa6.sin6_family = AF_INET6;
         return SetSockAddr((struct sockaddr&)sa6);
-    }  
+    }
     // Finally, see if it's an Ethertype addr string
     return ResolveEthFromString(text);
 #endif  // if/else WIN32
@@ -1283,7 +1283,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
     }
 #else
    // Use DNS to look it up
-   // Get host address, looking up by hostname if necessary      
+   // Get host address, looking up by hostname if necessary
 #ifdef WIN32
     // Startup WinSock for name lookup
     if (!Win32Startup())
@@ -1294,7 +1294,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
 #endif //WIN32
 #if defined(HAVE_IPV6)// Try to get address using getaddrinfo()
     struct addrinfo* addrInfoPtr = NULL;
-    if(0 == getaddrinfo(text, NULL, NULL, &addrInfoPtr)) 
+    if(0 == getaddrinfo(text, NULL, NULL, &addrInfoPtr))
     {
 #ifdef WIN32
 		Win32Cleanup();
@@ -1390,7 +1390,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
     }
 #endif // WIN32 || !HAVE_IPV6
 #endif // !SIMULATE
-    
+
 }  // end ProtoAddress::ResolveFromString()
 #ifdef USE_GETHOSTBYADDR
 bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
@@ -1431,7 +1431,7 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
 #ifdef WIN32
 		Win32Cleanup();
 #endif // WIN32
-        
+
     if (hp)
     {
         // Use the hp->h_name hostname by default
@@ -1444,14 +1444,14 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
         while ((ptr = strchr(ptr, '.')))
         {
             ptr++;
-            dotCount++;   
+            dotCount++;
         }
-        
+
         char** alias = hp->h_aliases;
         // Use first alias by default
         if (alias && *alias && buffer)
         {
-            // Try to find the fully-qualified name 
+            // Try to find the fully-qualified name
             // (longest alias with most '.')
             while (NULL != *alias)
             {
@@ -1463,10 +1463,10 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
                     ptr++;
                     // don't let ".arpa" aliases override
                     isArpa = (0 == strcmp(ptr, "arpa"));
-                    dc++;   
+                    dc++;
                 }
                 size_t alen = strlen(*alias);
-                bool override = (dc > dotCount) || 
+                bool override = (dc > dotCount) ||
                                 ((dc == dotCount) && (alen >nameLen));
                 if (isArpa) override = false;
                 if (override)
@@ -1488,7 +1488,7 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
         GetHostString(buffer, buflen);
         return false;
     }
-}  // end ProtoAddress::ResolveToName() 
+}  // end ProtoAddress::ResolveToName()
 
 #else // Use newer getnameinfo rather than legacy gethostbyaddr
 bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
@@ -1533,9 +1533,9 @@ bool ProtoAddress::ResolveToName(char* buffer, unsigned int buflen) const
             PLOG(PL_ERROR, "ProtoAddress::ResolveToName() error: %s\n", gai_strerror(retval));
             return false;
         }
-        
+
         return true;
-}  // end ProtoAddress::ResolveToName() 
+}  // end ProtoAddress::ResolveToName()
 #endif // endif USE_GETHOSTBYADDR
 
 bool ProtoAddress::ResolveLocalAddress(char* buffer, unsigned int buflen)
@@ -1575,17 +1575,17 @@ bool ProtoAddress::ResolveLocalAddress(char* buffer, unsigned int buflen)
         }
         if (!lookupOK || IsLoopback())
         {
-            // darn it! lookup failed or we got the loopback address ... 
+            // darn it! lookup failed or we got the loopback address ...
             // So, try to troll interfaces for a decent address
             // using our handy-dandy ProtoSocket::GetInterfaceInfo routines
             gethostname(hostName, 255);
             if (!lookupOK)
             {
                 // Set IPv4 loopback address as fallback id if no good address is found
-                UINT32 loopbackAddr = htonl(0x7f000001); 
-                SetRawHostAddress(IPv4, (char*)&loopbackAddr, 4);  
+                UINT32 loopbackAddr = htonl(0x7f000001);
+                SetRawHostAddress(IPv4, (char*)&loopbackAddr, 4);
             }
-            
+
             // Use "ProtoSocket::FindLocalAddress()" that trolls through network interfaces
             // looking for an interface with a non-loopback address assigned.
             if (!ProtoSocket::FindLocalAddress(IPv4, *this))
@@ -1599,7 +1599,7 @@ bool ProtoAddress::ResolveLocalAddress(char* buffer, unsigned int buflen)
 #endif // HAVE_IPV6
             }
             if (IsLoopback() || IsUnspecified())
-                PLOG(PL_ERROR, "ProtoAddress::ResolveLocalAddress() warning: only loopback address found!\n");    
+                PLOG(PL_ERROR, "ProtoAddress::ResolveLocalAddress() warning: only loopback address found!\n");
         }
         SetPort(thePort);  // restore port number
         buflen = buflen < 255 ? buflen : 255;
@@ -1623,7 +1623,7 @@ void ProtoAddressList::Destroy()
     Item* entry;
     while (NULL != (entry = static_cast<Item*>(addr_tree.GetRoot())))
     {
-        addr_tree.Remove(*entry);   
+        addr_tree.Remove(*entry);
         delete entry;
     }
 }  // end ProtoAddressList::Destroy()
@@ -1661,7 +1661,7 @@ void ProtoAddressList::Remove(const ProtoAddress& addr)
     {
         addr_tree.Remove(*entry);
         delete entry;
-    }   
+    }
 }  // end ProtoAddressList::Remove()
 
 bool ProtoAddressList::AddList(ProtoAddressList& addrList)
@@ -1700,7 +1700,7 @@ bool ProtoAddressList::GetFirstAddress(ProtoAddress& firstAddr) const
     }
 }  // end ProtoAddressList::GetFirstAddress()
 
-        
+
 /*
 ProtoAddressList::Item* ProtoAddressList::GetFirstItem()
 {
@@ -1712,7 +1712,7 @@ ProtoAddressList::Item* ProtoAddressList::GetFirstItem()
 
 ProtoAddressList::Item::Item(const ProtoAddress& theAddr, const void* userData)
  : addr(theAddr), user_data(userData)
-{   
+{
 }
 
 ProtoAddressList::Item::~Item()
@@ -1741,7 +1741,7 @@ bool ProtoAddressList::Iterator::GetNextAddress(ProtoAddress& nextAddr)
     {
         nextAddr.Invalidate();
         return false;
-    }   
+    }
 }  // end ProtoAddressList::Iterator::GetNextAddress()
 
 bool ProtoAddressList::Iterator::PeekNextAddress(ProtoAddress& nextAddr)
@@ -1756,5 +1756,5 @@ bool ProtoAddressList::Iterator::PeekNextAddress(ProtoAddress& nextAddr)
     {
         nextAddr.Invalidate();
         return false;
-    }   
+    }
 }  // end ProtoAddressList::Iterator::PeekNextAddress()

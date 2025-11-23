@@ -28,18 +28,18 @@ class IvoxActivityComponent : public AnimatedAppComponent
             RECV,
             PLAY
         };
-            
+
         void SetBackgroundColour(Colour colour)
         {
             bg_colour = colour;
             repaint();
         }
-    
+
         Status GetStatus() const
             {return activity_status;}
-        
-        void SetStatus(Status status, bool animate = true); 
-    
+
+        void SetStatus(Status status, bool animate = true);
+
     private:
         void paint (Graphics&) override;
         void resized() override;
@@ -52,8 +52,8 @@ class IvoxActivityComponent : public AnimatedAppComponent
         Colour    blue_shades[5];
         Colour    grey_shades[5];
         Colour    dead_shades[5];
-    
-        
+
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IvoxActivityComponent)
-                
+
 };  // end IvoxActivityComponent
