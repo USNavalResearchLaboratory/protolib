@@ -388,7 +388,7 @@ void PcapReplay::OnTxTimeout(ProtoTimer& theTimer)
                 case 6:
                 {
                     ProtoPktIPv6 ip6Pkt(ipPkt);
-                    pcapReplayol = ip6Pkt.GetNextHeader();;
+                    protocol = ip6Pkt.GetNextHeader();;
                     break;
                 }
                 default:
