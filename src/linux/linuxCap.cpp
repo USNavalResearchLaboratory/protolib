@@ -2,6 +2,7 @@
 #include "protoCap.h"
 #include "protoDebug.h"
 #include "protoSocket.h"
+#include "protoNet.h"
 
 #include <unistd.h>
 #include <sys/socket.h>
@@ -97,7 +98,6 @@ bool LinuxCap::Open(const char* interfaceName)
         PLOG(PL_ERROR, "LinuxCap::Open() setsockopt(PACKET_MR_PROMISC) warning: %s\n", 
                 GetErrorString());
     
-    
     if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
     {
         PLOG(PL_ERROR, "LinuxCap::Open() error getting interface MAC address\n");
@@ -106,9 +106,11 @@ bool LinuxCap::Open(const char* interfaceName)
     }
     
     // Init our interface address structure  
+    if_type = ProtoNet::GetInterfaceType(ifIndex);
+    UINT16 protoType = (ProtoNet::IFACE_GRE == if_type) ? ETH_P_IP : ETH_P_ALL;
     struct sockaddr_ll  ifaceAddr; 
     memset((char*)&ifaceAddr, 0, sizeof(ifaceAddr));
-    ifaceAddr.sll_protocol = htons(ETH_P_ALL);
+    ifaceAddr.sll_protocol = htons(protoType);
     ifaceAddr.sll_ifindex = ifIndex;
     ifaceAddr.sll_family = AF_PACKET;
     memcpy(ifaceAddr.sll_addr, if_addr.GetRawHostAddress(), 6);
@@ -155,40 +157,96 @@ void LinuxCap::Close()
 
 bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
 {
-    // Make sure packet is a type that is OK for us to send
-    // (Some packets seem to cause a PF_PACKET socket trouble)
-    UINT16 type;
-    memcpy(&type, buffer+12, 2);
-    type = ntohs(type);
-    if ((ProtoNet::IFACE_GRE != if_type) && (type <=  0x05dc)) // assume it's 802.3 Length and ignore
+    if (0 == numBytes)
     {
+        PLOG(PL_WARN, "LinuxCap::Send() warning: can't send zero length frame!\n");
+        return false;
+    }
+    if (ProtoNet::IFACE_GRE != if_type)
+    {
+        UINT16 type;
+        memcpy(&type, buffer+12, 2);
+        type = ntohs(type);
+        if (type <= 0x05dc)
+        {
+            // Make sure packet is a type that is OK for us to send
+            // (Some packets seem to cause a PF_PACKET socket trouble)
             PLOG(PL_DEBUG, "LinuxCap::Send() unsupported 802.3 frame (len = %04x)\n", type);
             return false;
-    }
-    for(;;)
-    {
-        ssize_t result = write(descriptor, buffer, numBytes);
-        if (result < 0)
+        }  
+        for(;;)
         {
-            switch (errno)
+            ssize_t result = write(descriptor, buffer, numBytes);
+            if (result < 0)
             {
-                case EINTR:
-                    continue;  // try again
-                case EWOULDBLOCK:
-                    numBytes = 0;
-                case ENOBUFS:
-                    // because this doesn't block write()
-                default:
-                    PLOG(PL_WARN, "LinuxCap::Send() error: %s\n", GetErrorString());
-                    break;
-            }   
-            return false; 
-        }   
-        else
+                switch (errno)
+                {
+                    case EINTR:
+                        continue;  // try again
+                    case EWOULDBLOCK:
+                        numBytes = 0;
+                    case ENOBUFS:
+                        // because this doesn't block write()
+                    default:
+                        PLOG(PL_WARN, "LinuxCap::Send() error: %s\n", GetErrorString());
+                        break;
+                }   
+                return false; 
+            }
+            else
+            {
+                ASSERT(result == numBytes);
+                break;
+            }
+        }
+    }
+    else
+    {
+        // Use sendto() to denote IP/IPv6 properly 
+        // (ensures GRE protocol type is correct)
+        struct sockaddr_ll addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sll_family   = AF_PACKET;
+        addr.sll_ifindex  = if_index;
+        // Check IP header version (first nybble)
+        switch ((buffer[0] & 0xf0) >> 4)
         {
-            ASSERT(result == numBytes);
-            break;
-        } 
+            case 4:
+                addr.sll_protocol = htons(ETH_P_IP);
+                break;
+            case 6:
+                addr.sll_protocol = htons(ETH_P_IPV6);
+                break;
+            default:
+                PLOG(PL_WARN, "LinuxCap::Send(GRE) error: invalid IP protocol version!\n");
+                return false;
+        }
+        for (;;)
+        {
+            ssize_t result = sendto(descriptor, buffer, numBytes, 0,
+                                    (struct sockaddr*)&addr, sizeof(addr));
+            if (result < 0)
+            {
+                switch (errno)
+                {
+                    case EINTR:
+                        continue;  // try again
+                    case EWOULDBLOCK:
+                        numBytes = 0;
+                    case ENOBUFS:
+                        // because this doesn't block write()
+                    default:
+                        PLOG(PL_WARN, "LinuxCap::Send() error: %s\n", GetErrorString());
+                        break;
+                }   
+                return false; 
+            }
+            else
+            {
+                ASSERT(result == numBytes);
+                break;
+            }
+        }
     }
     return true;
 }  // end LinuxCap::Send()
