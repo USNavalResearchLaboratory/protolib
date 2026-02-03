@@ -47,7 +47,7 @@ jobs:
       run: |
         set(cmake_version $ENV{CMAKE_VERSION})
         set(ninja_version $ENV{NINJA_VERSION})
-        message(STATUS "Using host CMake version: ${CMAKE_VERSION}")
+        message(STATUS "Using  CMake version: ${CMAKE_VERSION}")
         if ("${{ runner.os }}" STREQUAL "Windows")
           set(ninja_suffix "win.zip")
           set(cmake_suffix "win64-x64.zip")
