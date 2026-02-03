@@ -69,7 +69,7 @@ jobs:
         execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./cmake.zip)
         # Save the path for other steps
         file(TO_CMAKE_PATH "$ENV{GITHUB_WORKSPACE}/${cmake_dir}" cmake_dir)
-        message("::set-output name=cmake_dir::${cmake_dir}")
+        file(APPEND "$ENV{GITHUB_OUTPUT}" "cmake_dir=${cmake_dir}\n")
         if (NOT "${{ runner.os }}" STREQUAL "Windows")
           execute_process(
             COMMAND chmod +x ninja
@@ -88,9 +88,9 @@ jobs:
       shell: cmake -P {0}
       run: |
         string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
-        message("::set-output name=timestamp::${current_date}")
+        file(APPEND "$ENV{GITHUB_OUTPUT}" "timestamp=${current_date}\n")
     - name: ccache cache files
-      uses: actions/cache@4
+      uses: actions/cache@v4
       with:
         path: .ccache
         key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
