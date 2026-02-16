@@ -2,7 +2,7 @@ Generating doxygen output on Windows:
 
 1. Make sure the doc/doxygen/Doxyfile configuration file points to the correct location
    of graphwiz's "dot" exectuable for your system. (DOT_PATH variable)
-2. Load the doxygen configuration file (doc/doxygen/Doxyfile) into the 
+2. Load the doxygen configuration file (doc/doxygen/Doxyfile) into the
    doxygen wizard.
 3. Start, output will be put in /doc/doxygen/html.
 
@@ -23,7 +23,7 @@ How to document classes:
 
 /**
  * @class ClassName
- * 
+ *
  * @brief Enter a brief description of the
  * class, the first sentence (deliminated by a period)
  * will be included in the brief description.
@@ -40,16 +40,16 @@ How to document classes:
 How to document functions:
 --------------------------
 
-Keep the Doxygen function documentation with the function definition, e.g. in 
+Keep the Doxygen function documentation with the function definition, e.g. in
 either the .h or the .cpp file.
 
 Placing "/**" before the comments will cause Doxygen to generate a link
-to the function documentation.  
+to the function documentation.
 
 /**
  *
  * @brief Description of the function.  Will appear before function
- * definition.  Don't really need "@brief" as JAVADOC_AUTOBRIEF is 
+ * definition.  Don't really need "@brief" as JAVADOC_AUTOBRIEF is
  * turned on.
  *
  * @param Defailed parameter text, if needed.  Will appear in
@@ -60,10 +60,10 @@ to the function documentation.
  */
 void someFunc() {}
 
-Placing "///" before the comments will cause Doxygen to include the 
+Placing "///" before the comments will cause Doxygen to include the
 associated text next to the function name in the function listing only.
- 
- 
+
+
 Other Notes:
 
 1.  Sometimes the html directory has to be cleared out and the entire
@@ -79,7 +79,7 @@ to no, use the @callgraph/@callergraph commands.
 
 4. @sa "See also" alias.
    @note "Note" alias
-   @exception 
+   @exception
    @class
    @param
    @return
@@ -97,7 +97,7 @@ Modify INPUT in config file to add additional code/directories, e.g.
 INPUT = ../common
 
 #Add protolib to the doxygen output
-#INPUT += ../../protolib/common 
+#INPUT += ../../protolib/common
 
 #To add files
 #INPUT += ../../protolib/common/protoApp.h ../../protolib/common/protoApp.cpp

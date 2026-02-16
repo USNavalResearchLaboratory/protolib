@@ -10,7 +10,6 @@ to have no user interface for background processing or as
 an example to use the PROTOLIB classes in classical GUI Win32 
 applications.  
 
-Brian Adamson
-<mailto://adamson@itd.nrl.navy.mil>
+Brian Adamson <brian.adamson@nrl.navy.mil>
 18 December 2001
 

@@ -78,9 +78,9 @@ void IvoxActivityComponent::paint(Graphics& g)
     gradient.addColour(0.50, shade[2]);
     gradient.addColour(0.75, shade[3]);
     g.setGradientFill(gradient);
-    
+
     g.fillEllipse (c.x - radius, c.y - radius, diameter, diameter);
-    
+
     if (PLAY == activity_status)
     {
         g.setColour(blue_shades[0]);
