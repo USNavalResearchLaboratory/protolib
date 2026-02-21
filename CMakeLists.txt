@@ -148,7 +148,8 @@ include/protoNotify.h
 include/protoPipe.h     
 include/protoPkt.h      
 include/protoPktARP.h   
-include/protoPktETH.h   
+include/protoPktETH.h  
+include/protoPktGRE.h 
 include/protoPktIGMP.h  
 include/protoPktIP.h    
 include/protoPktRIP.h   
@@ -195,6 +196,7 @@ list(APPEND COMMON_SOURCE_FILES
 	${COMMON}/protoPkt.cpp 
 	${COMMON}/protoPktARP.cpp 
 	${COMMON}/protoPktETH.cpp 
+	${COMMON}/protoPktGRE.cpp
 	${COMMON}/protoPktIGMP.cpp 
 	${COMMON}/protoPktIP.cpp 
 	${COMMON}/protoPktRTP.cpp 

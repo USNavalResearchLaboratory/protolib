@@ -227,6 +227,24 @@ namespace ProtoNet
 #ifdef WIN32
     bool GetInterfaceAddressDhcp(unsigned int ifIndex, const ProtoAddress& ifAddr);
 #endif // WIN32
+    
+    /*class TunnelInfo
+    {
+        public:
+            TunnelInfo() :
+                
+        private:
+            ProtoAddress local_addr;
+            ProtoAddress remote_addr;
+            bool         checksum;
+            bool         routing;
+            bool         has_key;
+            UINT32       key;
+            bool         sequence;
+            bool         strict_src;
+            
+    };  // end class ProtoNet::TunnelInfo*/
+    
 }  // end namespace ProtoNet
 
 

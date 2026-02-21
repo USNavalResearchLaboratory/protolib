@@ -1046,7 +1046,7 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                                         for (a = (struct rtattr*)RTA_DATA(linkinfo); RTA_OK(a, l); a = RTA_NEXT(a, l)) 
                                         {
                                             int alen = RTA_PAYLOAD(a);
-                                            if ((NULL != localAddr) && (IFLA_GRE_LOCAL == a->rta_type))
+                                            if ((IFLA_GRE_LOCAL == a->rta_type) && (NULL != localAddr))
                                             {
                                                 if (4 == alen)
                                                     localAddr->SetRawHostAddress(ProtoAddress::IPv4, (char*)RTA_DATA(a), 4);
@@ -1063,6 +1063,17 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                                                     remoteAddr->SetRawHostAddress(ProtoAddress::IPv6, (char*)RTA_DATA(a), 16);
                                                 else
                                                     PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: invalid GRE remote addr len!\n");
+                                            }
+                                            else if ((IFLA_GRE_LINK == a->rta_type) && (NULL != localAddr))
+                                            {
+                                                // Alternate way to get tunnel local endpoint address
+                                                unsigned int index = *((uint32_t*)RTA_DATA(a));
+                                                if (0 != index)
+                                                    ProtoNet::GetInterfaceAddress(index, ProtoAddress::IPv4, *localAddr);
+                                            }
+                                            else if (IFLA_GRE_COLLECT_METADATA == a->rta_type)
+                                            {
+                                                //TRACE("IFLA_GRE_COLLECT_METADATA ...\n");
                                             }
                                             // TBD - support other parameters or tunnel types?
                                         }  // end for (a = RTA_DATA() ...)

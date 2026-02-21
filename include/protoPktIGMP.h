@@ -7,10 +7,10 @@
 class ProtoPktIGMP : public ProtoPkt
 {
     public:
-        ProtoPktIGMP(void*          bufferPtr = NULL, 
-                     unsigned int   numBytes = 0, 
+        ProtoPktIGMP(void*          bufferPtr = NULL,
+                     unsigned int   numBytes = 0,
                      bool           initFromBuffer = false,
-                     bool           freeOnDestruct = false); 
+                     bool           freeOnDestruct = false);
         ~ProtoPktIGMP();
         
         enum Type

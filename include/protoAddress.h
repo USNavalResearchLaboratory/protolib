@@ -91,6 +91,7 @@ class ProtoAddress
         // Construction/initialization
         ProtoAddress();
         ProtoAddress(const ProtoAddress& theAddr);
+        ProtoAddress(const ProtoAddress* theAddr);
         ProtoAddress(const char* theAddr);  // must be a numeric address, not a host name!
         ~ProtoAddress();
         bool IsValid() const {return (INVALID != type);}
@@ -356,6 +357,8 @@ class ProtoAddressList
 };  // end class ProtoAddressList
 
 extern const ProtoAddress PROTO_ADDR_NONE;      // invalid ProtoAddress (useful as a default)
+extern const ProtoAddress PROTO_ADDR_ANY;       // IPv4 INADDR_ANY equivalent
+extern const ProtoAddress PROTO_ADDR_ANY6;      // IPv6 inaddr6_any equivalent
 extern const ProtoAddress PROTO_ADDR_BROADCAST; // Ethernet broadcast address
 
 #endif // _PROTO_ADDRESS

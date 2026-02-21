@@ -373,13 +373,13 @@ class ProtoPktIPv4 : public ProtoPktIP
         UINT16 FinalizeChecksum()
             {return CalculateChecksum(true);}
            
-    private:
+    //private:
         enum
         {
             OFFSET_HDR_LEN  = OFFSET_VERSION,            // 0.5 bytes (masked)            
             OFFSET_TOS      = OFFSET_HDR_LEN + 1,        // 1 bytes                     
             OFFSET_LEN      = (OFFSET_TOS+1)/2,          // 1 UINT16 (2 bytes)          
-            OFFSET_ID       = OFFSET_LEN+1,              // 2 UINT16 (4 bytes)          
+            OFFSET_ID       = OFFSET_LEN+1,              // 1 UINT16 (2 bytes)          
             OFFSET_FLAGS    = (OFFSET_ID+1)*2,           // 3 bits            
             OFFSET_FRAGMENT = OFFSET_FLAGS/2,            // 13 bits (masked) 
             OFFSET_TTL      = (OFFSET_FRAGMENT+1)*2,     // 8 bytes                     

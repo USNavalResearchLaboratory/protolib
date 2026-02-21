@@ -32,9 +32,13 @@
 #include <stdio.h>   // for sprintf()
 #include <string.h>  // for memset()
 
-const ProtoAddress PROTO_ADDR_NONE;
+const ProtoAddress PROTO_ADDR_NONE;                            // invalid address (i.e. ProtoAddress.IsValid() is false)
 
-const ProtoAddress PROTO_ADDR_BROADCAST("ff:ff:ff:ff:ff:ff");
+const ProtoAddress PROTO_ADDR_ANY("0.0.0.0");                  // IPv4 INADDR_ANY
+
+const ProtoAddress PROTO_ADDR_ANY6("0:0:0:0:0:0:0:0");         // IPv6 in6addr_any
+
+const ProtoAddress PROTO_ADDR_BROADCAST("ff:ff:ff:ff:ff:ff");  // Ethernet broadcast address
 
 ProtoAddress::ProtoAddress()
  : type(INVALID), length(0)
@@ -45,6 +49,15 @@ ProtoAddress::ProtoAddress()
 ProtoAddress::ProtoAddress(const ProtoAddress& theAddr)
 {
     *this = theAddr;
+}
+
+ProtoAddress::ProtoAddress(const ProtoAddress* theAddr)
+{
+    
+    if (NULL != theAddr)
+        *this = *theAddr;
+    else
+        *this = PROTO_ADDR_NONE;
 }
 
 ProtoAddress::ProtoAddress(const char* theAddr)

@@ -54,6 +54,11 @@ class ProtoCap : public ProtoChannel
         const ProtoAddress& GetTunnelRemoteAddr() const
             {return tunnel_remote_addr;}
         
+        void SetTunnelLocalAddr(const ProtoAddress& addr)
+            {tunnel_local_addr = addr;}
+        void SetTunnelRemoteAddr(const ProtoAddress& addr)
+            {tunnel_remote_addr = addr;}
+        
         virtual bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL) = 0;
         virtual bool Send(const char* buffer, unsigned int& numBytes) = 0;
         

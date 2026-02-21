@@ -4,6 +4,10 @@
 #include "protoSocket.h"
 #include "protoNet.h"
 
+#include "protoPktIP.h"
+#include "protoPktETH.h"
+#include "protoPktGRE.h"
+
 #include <unistd.h>
 #include <sys/socket.h>
 #include <features.h>    /* for the glibc version number */
@@ -68,25 +72,38 @@ bool LinuxCap::Open(const char* interfaceName)
         interfaceName = buffer;
     }
     
-    if ((descriptor = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0)
+    int ifIndex = ProtoSocket::GetInterfaceIndex(interfaceName);
+    if (0 == ifIndex)
+    {
+        PLOG(PL_ERROR, "LinuxCap::Open() error getting interface index\n");
+        return false;   
+    }
+    if_type = ProtoNet::GetInterfaceType(ifIndex, &tunnel_local_addr, &tunnel_remote_addr);
+    if (ProtoNet::IFACE_INVALID_TYPE == if_type)
+    {
+        PLOG(PL_WARN, "LinuxCap::Open() GetInterfaceType() error: unknown interface type! (assuming ETH type)\n");
+        if_type = ProtoNet::IFACE_ETH; 
+    }
+    
+    int sockType = (ProtoNet::IFACE_GRE == if_type) ? SOCK_DGRAM : SOCK_RAW;
+    //sockType = SOCK_RAW;
+    UINT16 protoType = (ProtoNet::IFACE_GRE == if_type) ? ETH_P_IP : ETH_P_ALL;
+    //protoType = ETH_P_ALL;
+    
+    //if ((descriptor = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0)
+    if ((descriptor = socket(PF_PACKET, sockType, htons(protoType))) < 0)
     {
         PLOG(PL_ERROR, "LinuxCap::Open() socket(PF_PACKET) error: %s\n", GetErrorString());
         return false;   
     }
+    
+    TRACE("LinuxCap::Open(%s) ifIndex:%d ifType:%d descriptor:%d\n", interfaceName, ifIndex, if_type, descriptor);
     
     // try to turn on broadcast capability (why?)
     int enable = 1;
     if (setsockopt(descriptor, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable)) < 0)
         PLOG(PL_ERROR, "LinuxCap::Open() setsockopt(SO_BROADCAST) warning: %s\n", 
                 GetErrorString());
-    
-    int ifIndex = ProtoSocket::GetInterfaceIndex(interfaceName);
-    if (0 == ifIndex)
-    {
-        PLOG(PL_ERROR, "LinuxCap::Open() error getting interface index\n");
-        Close();
-        return false;   
-    }
     
     // Set interface to promiscuous mode
     // (TBD) add ProtoCap method to control interface promiscuity
@@ -105,23 +122,32 @@ bool LinuxCap::Open(const char* interfaceName)
         return false;
     }
     
-    // Init our interface address structure  
-    if_type = ProtoNet::GetInterfaceType(ifIndex);
-    UINT16 protoType = (ProtoNet::IFACE_GRE == if_type) ? ETH_P_IP : ETH_P_ALL;
-    struct sockaddr_ll  ifaceAddr; 
-    memset((char*)&ifaceAddr, 0, sizeof(ifaceAddr));
-    ifaceAddr.sll_protocol = htons(protoType);
-    ifaceAddr.sll_ifindex = ifIndex;
-    ifaceAddr.sll_family = AF_PACKET;
-    memcpy(ifaceAddr.sll_addr, if_addr.GetRawHostAddress(), 6);
-    ifaceAddr.sll_halen = if_addr.GetLength();
-    
-    // bind() the socket to the specified interface
-    if (bind(descriptor, (struct sockaddr*)&ifaceAddr, sizeof(ifaceAddr)) < 0)
+    //if (ProtoNet::IFACE_GRE != if_type)
+    if (true)
     {
-        PLOG(PL_ERROR, "LinuxCap::Open() bind error: %s\n", GetErrorString());
-        Close();
-        return false;      
+        // Init our interface address structure  
+        struct sockaddr_ll  ifaceAddr; 
+        memset((char*)&ifaceAddr, 0, sizeof(ifaceAddr));
+        ifaceAddr.sll_protocol = htons(protoType);
+        ifaceAddr.sll_ifindex = ifIndex;
+        //if (ProtoNet::IFACE_GRE != if_type)
+        {
+            ifaceAddr.sll_family = AF_PACKET;
+            memcpy(ifaceAddr.sll_addr, if_addr.GetRawHostAddress(), 6);
+            ifaceAddr.sll_halen = if_addr.GetLength();
+        }
+        // bind() the socket to the specified interface
+        if (bind(descriptor, (struct sockaddr*)&ifaceAddr, sizeof(ifaceAddr)) < 0)
+        {
+            PLOG(PL_ERROR, "LinuxCap::Open() bind error: %s\n", GetErrorString());
+            Close();
+            return false;      
+        }
+        setsockopt(descriptor, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, strlen(interfaceName)+1);
+    }
+    else
+    {
+        setsockopt(descriptor, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, strlen(interfaceName)+1);
     }
     
     // Explicitly call ProtoCap::Open so that ProtoChannel stuff is properly set up
@@ -131,12 +157,7 @@ bool LinuxCap::Open(const char* interfaceName)
         Close();
         return false;   
     }
-    if_type = ProtoNet::GetInterfaceType(ifIndex, &tunnel_local_addr, &tunnel_remote_addr);
-    if (ProtoNet::IFACE_INVALID_TYPE == if_type)
-    {
-        PLOG(PL_WARN, "LinuxCap::Open() GetInterfaceType() error: unknown interface type! (assuming ETH type)\n");
-        if_type = ProtoNet::IFACE_ETH; 
-    }
+    
     if_index = ifIndex;
     return true;
 }  // end LinuxCap::Open()
@@ -188,7 +209,7 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
                     case ENOBUFS:
                         // because this doesn't block write()
                     default:
-                        PLOG(PL_WARN, "LinuxCap::Send() error: %s\n", GetErrorString());
+                        PLOG(PL_WARN, "LinuxCap::Send() write() error: %s\n", GetErrorString());
                         break;
                 }   
                 return false; 
@@ -205,10 +226,12 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
         // Use sendto() to denote IP/IPv6 properly 
         // (ensures GRE protocol type is correct)
         struct sockaddr_ll addr;
-        memset(&addr, 0, sizeof(addr));
+        memset(&addr, 0, sizeof(struct sockaddr_ll));
         addr.sll_family   = AF_PACKET;
         addr.sll_ifindex  = if_index;
-        // Check IP header version (first nybble)
+        addr.sll_halen = 0;
+        
+       // Check IP header version (first nybble)
         switch ((buffer[0] & 0xf0) >> 4)
         {
             case 4:
@@ -221,10 +244,35 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
                 PLOG(PL_WARN, "LinuxCap::Send(GRE) error: invalid IP protocol version!\n");
                 return false;
         }
+        /*
+        TRACE("   sll_family:%d sll_ifindex:%d sll_protocol:%d sll_halen:%d\n",
+               addr.sll_family, addr.sll_ifindex, addr.sll_protocol, addr.sll_halen);
+        
+        TRACE("   v=%u ihl=%u totlen=%u len=%zu proto=%u\n",
+               buffer[0]>>4, buffer[0]&0x0f,
+               (buffer[2]<<8)|buffer[3], numBytes,
+               buffer[9]);
+        */
+        
         for (;;)
         {
+            /*TRACE("sendto() buffer bytes:\n");
+            const char* ptr = buffer;
+            for (int i = 0; i < 4; i++)
+            {
+                TRACE("    ");
+                for (int j = 0; j < 16; j++)
+                {
+                    TRACE("%02x%02x ", *ptr, *(ptr+1));
+                    ptr += 2;
+                }
+                TRACE("\n");
+            }
+            TRACE("\n");
+            */
+            
             ssize_t result = sendto(descriptor, buffer, numBytes, 0,
-                                    (struct sockaddr*)&addr, sizeof(addr));
+                                    (struct sockaddr*)&addr, sizeof(struct sockaddr_ll));
             if (result < 0)
             {
                 switch (errno)
@@ -236,7 +284,7 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
                     case ENOBUFS:
                         // because this doesn't block write()
                     default:
-                        PLOG(PL_WARN, "LinuxCap::Send() error: %s\n", GetErrorString());
+                        PLOG(PL_WARN, "LinuxCap::Send() sendto() error: %s\n", GetErrorString());
                         break;
                 }   
                 return false; 
@@ -273,6 +321,59 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
     }
     else
     {
+        /*
+        void* ipBuffer = (UINT32*)buffer;
+        unsigned int ipLen = result;
+        if (ProtoNet::IFACE_GRE != if_type)
+        {
+            ProtoPktETH ethPkt(buffer, result);
+            ipBuffer = ethPkt.AccessPayload();
+            ipLen = ethPkt.GetPayloadLength();
+        }
+        ProtoPktIP ipPkt;
+        if (ipPkt.InitFromBuffer(ipLen, ipBuffer, ipLen))
+        {
+            ProtoAddress srcAddr, dstAddr;
+            ipPkt.GetSrcAddr(srcAddr);
+            ipPkt.GetDstAddr(dstAddr);
+            ProtoPktIP::Protocol protocol = ProtoPktIP::RESERVED;
+            switch (ipPkt.GetVersion())
+            {
+                case 4:
+                {
+                    TRACE("IPv4 ");
+                    ProtoPktIPv4 ip4(ipPkt);
+                    protocol = ip4.GetProtocol();
+                    break;
+                }
+                case 6:
+                {
+                    TRACE("IPv6 ");
+                    ProtoPktIPv6 ip6(ipPkt);
+                    protocol = ip6.GetNextHeader();
+                    break;
+                }
+                default:
+                    TRACE("IPv%d ??? ", ipPkt.GetVersion());
+                    break;
+            }
+            TRACE("src:%s ", srcAddr.GetHostString());
+            TRACE("dst:%s protocol:%d\n", dstAddr.GetHostString(), protocol);
+        }
+         
+        char* ptr = buffer;
+        for (int i = 0; i < 4; i++)
+        {
+            TRACE("    ");
+            for (int j = 0; j < 16; j++)
+            {
+                TRACE("%02x%02x ", *ptr, *(ptr+1));
+                ptr += 2;
+            }
+            TRACE("\n");
+        }
+        TRACE("\n");
+        */
         if (NULL != direction)
         {
             if (pktAddr.sll_pkttype == PACKET_OUTGOING)

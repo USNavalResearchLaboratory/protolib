@@ -201,6 +201,8 @@ def build(ctx):
             'protoPkt',
             'protoPktARP',
             'protoPktETH',
+            'protoPktGRE',
+            'protoPktIGMP',
             'protoPktIP',
             'protoPktRTP',
             'protoQueue',
