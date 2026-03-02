@@ -13,6 +13,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sysctl.h>
 #include <ifaddrs.h>
 #include <string.h>
 #include <net/if_dl.h>
@@ -25,10 +26,14 @@
 #include <sys/ioctl.h>  // for ioctl()
 #include <net/if.h>  // for KEV_DL_SUBCLASS, etc
 #include <net/if_var.h> // needed for freebsd
+#include <net/route.h>
 #include <netinet/in.h>      // for KEV_INET_SUBCLASS, etc
 #include <netinet/in_var.h>  // for KEV_INET_SUBCLASS, etc
 #include <netinet6/in6_var.h>  // for KEV_INET6_SUBCLASS, etc
- 
+
+#include <cstring>
+#include <cstdlib>
+
 bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type addrType, ProtoAddressList& addrList)
 {
     int family;
@@ -109,6 +114,218 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
         return false;
     }
 }   // end ProtoNet::GetGroupMemberships()
+
+
+// ---------- helpers ----------
+static inline bool starts_with(const char* s, const char* pfx)
+{
+    return s && pfx && (0 == std::strncmp(s, pfx, std::strlen(pfx)));
+}
+
+static inline bool is_ip_sockaddr(const sockaddr* sa)
+{
+    return sa && (sa->sa_family == AF_INET || sa->sa_family == AF_INET6);
+}
+
+// Round sockaddr length used inside route messages
+static size_t sa_rounded_len(const struct sockaddr* sa)
+{
+    if (!sa) return 0;
+    size_t len = sa->sa_len;
+    if (len == 0) len = sizeof(long);
+    return (len + sizeof(long) - 1) & ~(sizeof(long) - 1);
+}
+
+/*
+ * Fast path: getifaddrs()
+ * - local: ifa_addr
+ * - remote (if point-to-point): ifa_dstaddr
+ *
+ * This works well for many tunnel interfaces on BSD/macOS.
+ */
+static void TryGetEndpointsByIfAddrs(const char* ifname,
+                                     ProtoAddress* localAddr,
+                                     ProtoAddress* remoteAddr)
+{
+    if (!ifname) return;
+
+    struct ifaddrs* ifa0 = nullptr;
+    if (0 != getifaddrs(&ifa0) || !ifa0) return;
+
+    bool gotLocal  = false;
+    bool gotRemote = false;
+
+    for (struct ifaddrs* ifa = ifa0; ifa; ifa = ifa->ifa_next)
+    {
+        if (!ifa->ifa_name || 0 != std::strcmp(ifa->ifa_name, ifname))
+            continue;
+
+        // local endpoint
+        if (localAddr && !gotLocal && is_ip_sockaddr(ifa->ifa_addr))
+        {
+            gotLocal = localAddr->SetSockAddr(*ifa->ifa_addr);
+        }
+
+        // remote endpoint for point-to-point
+        if (remoteAddr && !gotRemote &&
+            (ifa->ifa_flags & IFF_POINTOPOINT) &&
+            is_ip_sockaddr(ifa->ifa_dstaddr))
+        {
+            gotRemote = remoteAddr->SetSockAddr(*ifa->ifa_dstaddr);
+        }
+
+        if ((!localAddr || gotLocal) && (!remoteAddr || gotRemote))
+            break;
+    }
+
+    freeifaddrs(ifa0);
+}  // end TryGetEndpointsByIfAddrs()
+
+/*
+ * Heavier fallback: sysctl NET_RT_IFLIST scanning for RTM_NEWADDR on this ifname.
+ * On some BSDs, tunnel peer may appear in RTAX_BRD / RTAX_GATEWAY / RTAX_DST.
+ */
+static void TryGetEndpointsBySysctlRoute(const char* ifname,
+                                         ProtoAddress* localAddr,
+                                         ProtoAddress* remoteAddr)
+{
+    if (!ifname) return;
+
+    int mib[6] = { CTL_NET, PF_ROUTE, 0, 0 /*AF_UNSPEC*/, NET_RT_IFLIST, 0 };
+    size_t needed = 0;
+
+    if (0 != sysctl(mib, 6, nullptr, &needed, nullptr, 0) || needed == 0)
+        return;
+
+    char* buf = (char*)std::malloc(needed);
+    if (!buf) return;
+
+    if (0 != sysctl(mib, 6, buf, &needed, nullptr, 0))
+    {
+        std::free(buf);
+        return;
+    }
+
+    char* end = buf + needed;
+
+    for (char* p = buf; p < end; )
+    {
+        struct if_msghdr* ifm = (struct if_msghdr*)p;
+        if (ifm->ifm_msglen == 0) break;
+
+        if (ifm->ifm_type == RTM_IFINFO)
+        {
+            // Followed by sockaddr_dl containing name
+            char* cp = p + sizeof(struct if_msghdr);
+            struct sockaddr_dl* sdl = (struct sockaddr_dl*)cp;
+
+            if (sdl->sdl_family == AF_LINK)
+            {
+                char namebuf[IFNAMSIZ];
+                std::memset(namebuf, 0, sizeof(namebuf));
+                size_t nlen = (sdl->sdl_nlen < IFNAMSIZ - 1) ? sdl->sdl_nlen : (IFNAMSIZ - 1);
+                std::memcpy(namebuf, sdl->sdl_data, nlen);
+
+                if (0 == std::strcmp(namebuf, ifname))
+                {
+                    // Scan subsequent messages until next RTM_IFINFO
+                    bool gotLocal = false;
+                    bool gotRemote = false;
+
+                    char* q = p + ifm->ifm_msglen;
+                    while (q < end)
+                    {
+                        struct if_msghdr* mh = (struct if_msghdr*)q;
+                        if (mh->ifm_msglen == 0) break;
+                        if (mh->ifm_type == RTM_IFINFO) break;
+
+                        if (mh->ifm_type == RTM_NEWADDR)
+                        {
+                            struct ifa_msghdr* ifam = (struct ifa_msghdr*)q;
+                            char* sa_ptr = q + sizeof(struct ifa_msghdr);
+
+                            const struct sockaddr* rta[RTAX_MAX];
+                            std::memset(rta, 0, sizeof(rta));
+
+                            for (int i = 0; i < RTAX_MAX; ++i)
+                            {
+                                if (ifam->ifam_addrs & (1 << i))
+                                {
+                                    const struct sockaddr* sa = (const struct sockaddr*)sa_ptr;
+                                    rta[i] = sa;
+                                    sa_ptr += sa_rounded_len(sa);
+                                }
+                            }
+
+                            if (localAddr && !gotLocal && is_ip_sockaddr(rta[RTAX_IFA]))
+                                gotLocal = localAddr->SetSockAddr(*rta[RTAX_IFA]);
+
+                            if (remoteAddr && !gotRemote)
+                            {
+                                // Different BSDs may put peer in different slots
+                                if (is_ip_sockaddr(rta[RTAX_BRD]))
+                                    gotRemote = remoteAddr->SetSockAddr(*rta[RTAX_BRD]);
+                                else if (is_ip_sockaddr(rta[RTAX_GATEWAY]))
+                                    gotRemote = remoteAddr->SetSockAddr(*rta[RTAX_GATEWAY]);
+                                else if (is_ip_sockaddr(rta[RTAX_DST]))
+                                    gotRemote = remoteAddr->SetSockAddr(*rta[RTAX_DST]);
+                            }
+
+                            if ((!localAddr || gotLocal) && (!remoteAddr || gotRemote))
+                            {
+                                std::free(buf);
+                                return;
+                            }
+                        }
+
+                        q += mh->ifm_msglen;
+                    }
+                }
+            }
+        }
+
+        p += ifm->ifm_msglen;
+    }
+
+    std::free(buf);
+}  // end TryGetEndpointsBySysctlRoute()
+
+ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex,
+                                                   ProtoAddress* localAddr,
+                                                   ProtoAddress* remoteAddr)
+{
+    // If you have Invalidate() you can call it; otherwise omit.
+    if (localAddr)  localAddr->Invalidate();
+    if (remoteAddr) remoteAddr->Invalidate();
+
+    char ifname[IFNAMSIZ];
+    if (!if_indextoname(ifaceIndex, ifname))
+        return IFACE_INVALID_TYPE;
+
+    // GRE naming on BSDs: greX / gretapX
+    // macOS/FreeBSD also commonly have gifX (generic tunnel).
+    const bool isGre =
+        starts_with(ifname, "gre") ||
+        starts_with(ifname, "gretap") ||
+        starts_with(ifname, "gif");   // include if you want macOS parity for "tunnel-like"
+    
+    if (!isGre)
+        return IFACE_ETH;
+
+    // Best-effort endpoint extraction
+    if (localAddr || remoteAddr)
+    {
+        TryGetEndpointsByIfAddrs(ifname, localAddr, remoteAddr);
+
+        // If either endpoint is still unknown, try sysctl route parsing
+        // (If you don’t have Invalidate()/IsValid(), just always call fallback;
+        // it’s safe but slightly more expensive.)
+        TryGetEndpointsBySysctlRoute(ifname, localAddr, remoteAddr);
+    }
+    // gretap interfaces act like ETH, but can have tunnel endpoint info
+    return starts_with(ifname, "gretap") ? IFACE_ETH: IFACE_GRE;
+}  // end ProtoNet::GetInterfaceType(()
+
 
 // IMPORTANT - The BsdNetMonitor implementation here is currently
 //             specific to Mac OSX.  TBD - Provide implementation that
