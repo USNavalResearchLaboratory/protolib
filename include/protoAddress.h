@@ -360,6 +360,7 @@ extern const ProtoAddress PROTO_ADDR_NONE;      // invalid ProtoAddress (useful 
 extern const ProtoAddress PROTO_ADDR_ANY;       // IPv4 INADDR_ANY equivalent
 extern const ProtoAddress PROTO_ADDR_ANY6;      // IPv6 inaddr6_any equivalent
 extern const ProtoAddress PROTO_ADDR_BROADCAST; // Ethernet broadcast address
+extern const ProtoAddress PROTO_ADDR_EINVALID;  // Invalid Ethernet address (all zero)
 
 #endif // _PROTO_ADDRESS
 

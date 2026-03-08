@@ -512,6 +512,21 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
     }
     return true;
 }  // end ProtoNet::GetInterfaceAddressList()
+ 
+unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifIndex, const ProtoAddress& ifAddr)
+{
+    char ifName[256];
+    ifName[255] = '\0';
+	if (GetInterfaceName(ifIndex, ifName, 255))
+    {
+        return GetInterfaceAddressMask(ifName, ifAddr);
+    }
+    else
+    {
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() error: invalid interface index?!\n");
+        return 0;
+    }
+}  // end ProtoNet::GetInterfaceAddressMask()
 
 unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const ProtoAddress& theAddr)
 {

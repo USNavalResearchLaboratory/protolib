@@ -115,7 +115,11 @@ bool LinuxCap::Open(const char* interfaceName)
         PLOG(PL_ERROR, "LinuxCap::Open() setsockopt(PACKET_MR_PROMISC) warning: %s\n", 
                 GetErrorString());
     
-    if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
+    if (ProtoNet::IFACE_GRE == if_type)
+    {
+        if_addr = tunnel_local_addr;
+    }
+    else if (!ProtoSocket::GetInterfaceAddress(interfaceName, ProtoAddress::ETH, if_addr))
     {
         PLOG(PL_ERROR, "LinuxCap::Open() error getting interface MAC address\n");
         Close();

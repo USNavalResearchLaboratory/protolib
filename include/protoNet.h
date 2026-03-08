@@ -165,8 +165,9 @@ namespace ProtoNet
 	bool AddInterfaceAddress(const char* ifaceName, const  ProtoAddress& addr, unsigned int maskLen);
 
 #endif //WIN32
-	unsigned int GetInterfaceAddressMask(const char* ifName, const ProtoAddress& ifAddr);  // returns masklen?
 	bool RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress& addr, unsigned int maskLen = 0);
+    unsigned int GetInterfaceAddressMask(const char* ifName, const ProtoAddress& ifAddr);  // returns masklen
+    unsigned int GetInterfaceAddressMask(unsigned int ifIndex, const ProtoAddress& ifAddr);
 
 #ifndef WIN32  // TBD - implement these for WIN32
       
@@ -220,7 +221,6 @@ namespace ProtoNet
 
     bool RemoveInterfaceAddress(unsigned int ifaceIndex, const ProtoAddress& addr, unsigned int maskLen = 0);
 
-    unsigned int GetInterfaceAddressMask(unsigned int ifIndex, const ProtoAddress& ifAddr);
 #ifdef WIN32
     bool GetInterfaceAddressDhcp(unsigned int ifIndex, const ProtoAddress& ifAddr);
 #endif // WIN32

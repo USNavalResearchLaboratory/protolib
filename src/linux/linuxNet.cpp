@@ -546,6 +546,11 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: invalid interface name\n");
         return false;
     }
+    return GetInterfaceAddressMask(ifaceIndex, theAddr);
+}  // end ProtoNet::GetInterfaceAddressMask()
+
+unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const ProtoAddress& theAddr)
+{
     // Instantiate a netlink socket and open it
     ProtoNetlink nlink;
     if (!nlink.Open())

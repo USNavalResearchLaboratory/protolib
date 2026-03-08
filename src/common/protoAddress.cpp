@@ -39,6 +39,7 @@ const ProtoAddress PROTO_ADDR_ANY("0.0.0.0");                  // IPv4 INADDR_AN
 const ProtoAddress PROTO_ADDR_ANY6("0:0:0:0:0:0:0:0");         // IPv6 in6addr_any
 
 const ProtoAddress PROTO_ADDR_BROADCAST("ff:ff:ff:ff:ff:ff");  // Ethernet broadcast address
+const ProtoAddress PROTO_ADDR_EINVALID("00:00:00:00:00:00");   // invalid Ethernet address
 
 ProtoAddress::ProtoAddress()
  : type(INVALID), length(0)

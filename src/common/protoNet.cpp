@@ -73,10 +73,30 @@ bool ProtoNet::GetHostAddressList(ProtoAddress::Type  addrType,
     return true;  // all interfaces found & list returned in addrList
 }  // end ProtoNet::GetHostAddressList()
 
-// given "addrType", searches through interface list, returns first non-loopback address found
-// TBD - should we _try_ to find a non-link-local addr as well?
+bool ProtoNet::GetInterfaceAddress(const char*         ifName, 
+				                   ProtoAddress::Type  addrType,
+				                   ProtoAddress&       theAddress,
+                                   unsigned int*       ifIndex)
+{
+    ProtoAddressList addrList;
+    GetInterfaceAddressList(ifName, addrType, addrList, ifIndex);
+    return addrList.GetFirstAddress(theAddress);   
+}  // end ProtoNet::GetInterfaceAddress()
+
+bool ProtoNet::GetInterfaceAddress(unsigned int        ifIndex,
+				                   ProtoAddress::Type  addrType,
+				                   ProtoAddress&       theAddress)
+{
+    ProtoAddressList addrList;
+    GetInterfaceAddressList(ifIndex, addrType, addrList);
+    return addrList.GetFirstAddress(theAddress);   
+}  // end ProtoNet::GetInterfaceAddress()
+
 #ifndef WIN32
-// FindLocalAddress defined in win32Net.cpp
+// FindLocalAddress() and other here defined in win32Net.cpp
+
+// Given "addrType", searches through interface list, returns first non-loopback address found
+// TBD - should we _try_ to find a non-link-local addr as well?
 bool ProtoNet::FindLocalAddress(ProtoAddress::Type addrType, ProtoAddress& theAddress)
 {
     ProtoAddressList addrList;
@@ -91,53 +111,9 @@ bool ProtoNet::FindLocalAddress(ProtoAddress::Type addrType, ProtoAddress& theAd
     }
     return false;
 }  // end ProtoNet::FindLocalAddress()
-#endif
-bool ProtoNet::GetInterfaceAddress(const char*         ifName, 
-				                   ProtoAddress::Type  addrType,
-				                   ProtoAddress&       theAddress,
-                                   unsigned int*       ifIndex)
-{
-    ProtoAddressList addrList;
-    GetInterfaceAddressList(ifName, addrType, addrList, ifIndex);
-    return addrList.GetFirstAddress(theAddress);   
-}  // end ProtoNet::GetInterfaceAddress()
-
-bool ProtoNet::GetInterfaceAddress(unsigned int        ifIndex, 
-				                   ProtoAddress::Type  addrType,
-				                   ProtoAddress&       theAddress)
-{
-    ProtoAddressList addrList;
-    GetInterfaceAddressList(ifIndex, addrType, addrList);
-    return addrList.GetFirstAddress(theAddress);   
-}  // end ProtoNet::GetInterfaceAddress()
-
-#ifndef WIN32  
-unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifIndex, const ProtoAddress& ifAddr)
-{
-#ifndef WIN32
-    char ifName[256];
-    ifName[255] = '\0';
-	if (GetInterfaceName(ifIndex, ifName, 255))
-    {
-        return GetInterfaceAddressMask(ifName, ifAddr);
-    }
-    else
-    {
-        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressMask() error: invalid interface index?!\n");
-        return 0;
-    }
-#else
-
-    // TBD - actually this appears to have been implemented and these #if/#else are OBE
-    // with them blocked within a larger #ifndef WIN32 ... so this code could be cleaned up.
-	PLOG(PL_ERROR,"ProtoNet::GetInterfaceAddressMask() error: function not implemented for WIN32\n");
-	return 0;
-#endif
-}  // end ProtoNet::GetInterfaceAddressMask()
 
 bool ProtoNet::AddInterfaceAddress(unsigned int ifIndex, const ProtoAddress& addr, unsigned int maskLen)
 {
-#ifndef WIN32
     char ifName[256];
     ifName[255] = '\0';
 	if (GetInterfaceName(ifIndex, ifName, 255))
@@ -149,15 +125,11 @@ bool ProtoNet::AddInterfaceAddress(unsigned int ifIndex, const ProtoAddress& add
         PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() error: invalid interface index?!\n");
         return false;
     }
-#else
-	PLOG(PL_ERROR,"ProtoNet::AddInterfaceAddress() error: function not implemented in WIN32\n");
-	return false;
-#endif
+
 }  // end ProtoNet::AddInterfaceAddress()
 
 bool ProtoNet::RemoveInterfaceAddress(unsigned int ifIndex, const ProtoAddress& addr, unsigned int maskLen)
 {
-#ifndef WIN32
     char ifName[256];
     ifName[255] = '\0';
 	if (GetInterfaceName(ifIndex, ifName, 255))
@@ -169,10 +141,6 @@ bool ProtoNet::RemoveInterfaceAddress(unsigned int ifIndex, const ProtoAddress& 
         PLOG(PL_ERROR, "ProtoNet::AddInterfaceAddress() error: invalid interface index?!\n");
         return false;
     }
-#else
-	PLOG(PL_ERROR,"ProtoNet::RemoveInterfaceAddress() error: function not implemented in WIN32\n");
-	return false;
-#endif
 }   // end ProtoNet::RemoveInterfaceAddress()
 #endif // !WIN32   
 
