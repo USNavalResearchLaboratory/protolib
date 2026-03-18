@@ -1,6 +1,6 @@
 /**
 * @file protoSpace.cpp
-* 
+*
 * @brief This maintains a set of "Nodes" in n-dimensional Euclidean space.
 */
 // Uncomment this to have SDT display bounding box iteration
@@ -9,7 +9,7 @@
 #include "protoDebug.h"
 
 #include "protoSpace.h"
-#include <math.h>  // for "fabs()" 
+#include <math.h>  // for "fabs()"
 #include <stdio.h> // for "printf()"
 ProtoSpace::Node::Node()
 {
@@ -96,7 +96,7 @@ bool ProtoSpace::InsertNode(Node& node)
         PLOG(PL_ERROR, "ProtoSpace::InsertNode() error: Node dimensions does not match space!\n");
         return false;
     }
-    
+
     // Get and Insert "Ordinate" entries for the node for each dimension
     for (unsigned int i = 0; i < num_dimensions; i++)
     {
@@ -190,7 +190,7 @@ bool ProtoSpace::Iterator::Init(const double* originOrdinates)
         memcpy(orig, originOrdinates, dim*sizeof(double));
     else
         memset(orig, 0, dim*sizeof(double));
-    
+
     // Allocate and init positive ordinate iterators
     if (NULL == (pos_it = new ProtoSortedTree::Iterator*[dim]))
     {
@@ -204,8 +204,8 @@ bool ProtoSpace::Iterator::Init(const double* originOrdinates)
     for (unsigned int i = 0; i < dim; i++)
     {
         tempOrd.SetValue(orig[i]);
-        if (NULL == (pos_it[i] = new ProtoSortedTree::Iterator(space.ord_tree[i], 
-                                                               false, 
+        if (NULL == (pos_it[i] = new ProtoSortedTree::Iterator(space.ord_tree[i],
+                                                               false,
                                                                tempOrd.GetKey(),
                                                                Ordinate::KEYBITS)))
         {
@@ -213,7 +213,7 @@ bool ProtoSpace::Iterator::Init(const double* originOrdinates)
             return false;
         }
     }
-    
+
     // Allocate and init negative ordinate iterators
     if (NULL == (neg_it = new ProtoSortedTree::Iterator*[dim]))
     {
@@ -226,8 +226,8 @@ bool ProtoSpace::Iterator::Init(const double* originOrdinates)
     for (unsigned int i = 0; i < dim; i++)
     {
         tempOrd.SetValue(orig[i]);
-        if (NULL == (neg_it[i] = new ProtoSortedTree::Iterator(space.ord_tree[i], 
-                                                               false, 
+        if (NULL == (neg_it[i] = new ProtoSortedTree::Iterator(space.ord_tree[i],
+                                                               false,
                                                                tempOrd.GetKey(),
                                                                Ordinate::KEYBITS)))
         {
@@ -248,10 +248,10 @@ bool ProtoSpace::Iterator::Init(const double* originOrdinates)
     printf("link ur,lr,blue,2\n");
     printf("link ll,lr,blue,2\n");
 #endif // USE_SDT
-        
+
     bbox_radius = 0.0;
     x_factor = sqrt((double)dim);
-    
+
     return true;
 }  // end ProtoSpace::Iterator::Init()
 
@@ -298,9 +298,9 @@ void ProtoSpace::Iterator::Reset(const double* originOrdinates)
     for (unsigned int i = 0; i < dim; i++)
     {
         tempOrd.SetValue(orig[i]);
-        pos_it[i]->Reset(false, tempOrd.GetKey(), Ordinate::KEYBITS);   
-        neg_it[i]->Reset(false, tempOrd.GetKey(), Ordinate::KEYBITS);   
-        neg_it[i]->Reverse(); 
+        pos_it[i]->Reset(false, tempOrd.GetKey(), Ordinate::KEYBITS);
+        neg_it[i]->Reset(false, tempOrd.GetKey(), Ordinate::KEYBITS);
+        neg_it[i]->Reverse();
     }
     // empty our queue
     Ordinate* nextOrd;
@@ -313,7 +313,7 @@ void ProtoSpace::Iterator::Reset(const double* originOrdinates)
  * bounding box that meets these criteria
  *    1) Closest location to <orig_x, orig_y>, _and_
  *    2) Falls within the current bounding box
- */  
+ */
 ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
 {
     unsigned int dim = space.GetDimensions();
@@ -327,7 +327,7 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
             bool inBox = true;
             if (bbox_radius >= 0.0)
             {
-            
+
                 // Is the "nextNode" within the bbox*x_factor
                 // (Note "x_factor = radius * sqrt(num_dimensions))
                 double xRadius = bbox_radius / x_factor;
@@ -344,21 +344,21 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
             if (inBox)
             {
                 ord_tree.RemoveHead();
-                if (NULL != distance) 
+                if (NULL != distance)
                 {
                     *distance = sqrt(nextOrd->GetValue());
                 }
                 space.ReturnOrdinateToPool(*nextOrd);
                 return nextNode;
             }
-            
+
         }
         else if (bbox_radius < 0.0)
         {
             return NULL;  // finished
         }
-        
-        
+
+
         // A) Find the ordinate with smallest delta from origin
         //    to set "radius" of current bounding space
         double deltaMin = -1.0;
@@ -386,8 +386,8 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
             }
         }
         bbox_radius = deltaMin;
-        if (deltaMin < 0.0) continue; 
-        
+        if (deltaMin < 0.0) continue;
+
         // Output new bounding box for SDT visualization
 #ifdef USE_SDT
         printf("node ul position %f,%f\n", orig[0] - deltaMin, orig[1] - deltaMin);
@@ -395,7 +395,7 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
         printf("node ll position %f,%f\n", orig[0] - deltaMin, orig[1] + deltaMin);
         printf("node lr position %f,%f\n", orig[0] + deltaMin, orig[1] + deltaMin);
 #endif // USE_SDT
-                
+
         Node* node = neg ? static_cast<Ordinate*>(neg_it[index]->PeekPrevItem())->GetNode() :
                            static_cast<Ordinate*>(pos_it[index]->PeekNextItem())->GetNode();
 
@@ -410,7 +410,7 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
                 break;
             }
         }
-        
+
         // C) Enqueue any nodes that lie _within_ the current bounding space
         if (inBox)
         {
@@ -421,8 +421,8 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
                 double delta = node->GetOrdinate(j) - orig[j];
                 distPartial += delta*delta;
             }
-                    
-            // b) get and init Ordinate 
+
+            // b) get and init Ordinate
             Ordinate* ord = space.GetOrdinateFromPool();
             if ((NULL == ord) && (NULL == (ord = new Ordinate)))
             {
@@ -432,26 +432,25 @@ ProtoSpace::Node* ProtoSpace::Iterator::GetNextNode(double* distance)
             }
             ord->SetNode(node);
             ord->SetValue(distPartial);
-            
+
             // c) if not already enqueued, enqueue it
             if (NULL == ord_tree.Find(ord->GetKey(), Ordinate::KEYBITS))
                 ord_tree.Insert(*ord);
             else
                 space.ReturnOrdinateToPool(*ord);
         }
-        
+
         // D) Consume the applicable ordinate, expanding our bounding box
         if (neg)
             neg_it[index]->GetPrevItem();
         else
             pos_it[index]->GetNextItem();
 
-#ifdef USE_SDT        
+#ifdef USE_SDT
         printf("wait 1\n");
 #endif // USE_SDT
-                
+
     }  // end while(1)
-  
 }  // end ProtoSpace::Iterator::GetNextNode()
 
 

@@ -544,7 +544,7 @@ void NetGraph::Node::RemoveInterface(Interface& iface)
         extra_addr_list.Remove(addr);
     //check to see if was the default and reassign a default if it was
     if (&iface == default_interface_ptr)
-        default_interface_ptr = (NetGraph::Interface*)(iface_list.GetRoot());
+        default_interface_ptr = (NetGraph::Interface*)(iface_list.GetHead());
 }  // end NetGraph::Node::RemoveInterface()
 
 bool NetGraph::Node::IsSymmetricNeighbor(Node& node)

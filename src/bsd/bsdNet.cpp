@@ -197,7 +197,7 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
     if (0 != sysctl(mib, 6, nullptr, &needed, nullptr, 0) || needed == 0)
         return;
 
-    char* buf = (char*)std::malloc(needed);
+    void* buf = (char*)std::malloc(needed);
     if (!buf) return;
 
     if (0 != sysctl(mib, 6, buf, &needed, nullptr, 0))
@@ -206,9 +206,9 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
         return;
     }
 
-    char* end = buf + needed;
+    void* end = ((char*)buf) + needed;
 
-    for (char* p = buf; p < end; )
+    for (void* p = buf; p < end; )
     {
         struct if_msghdr* ifm = (struct if_msghdr*)p;
         if (ifm->ifm_msglen == 0) break;
@@ -216,7 +216,7 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
         if (ifm->ifm_type == RTM_IFINFO)
         {
             // Followed by sockaddr_dl containing name
-            char* cp = p + sizeof(struct if_msghdr);
+            void* cp = ((char*)p) + sizeof(struct if_msghdr);
             struct sockaddr_dl* sdl = (struct sockaddr_dl*)cp;
 
             if (sdl->sdl_family == AF_LINK)
@@ -232,7 +232,7 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
                     bool gotLocal = false;
                     bool gotRemote = false;
 
-                    char* q = p + ifm->ifm_msglen;
+                    void* q = ((char*)p) + ifm->ifm_msglen;
                     while (q < end)
                     {
                         struct if_msghdr* mh = (struct if_msghdr*)q;
@@ -242,7 +242,7 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
                         if (mh->ifm_type == RTM_NEWADDR)
                         {
                             struct ifa_msghdr* ifam = (struct ifa_msghdr*)q;
-                            char* sa_ptr = q + sizeof(struct ifa_msghdr);
+                            void* sa_ptr = ((char*)q) + sizeof(struct ifa_msghdr);
 
                             const struct sockaddr* rta[RTAX_MAX];
                             std::memset(rta, 0, sizeof(rta));
@@ -253,7 +253,7 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
                                 {
                                     const struct sockaddr* sa = (const struct sockaddr*)sa_ptr;
                                     rta[i] = sa;
-                                    sa_ptr += sa_rounded_len(sa);
+                                    sa_ptr = ((char*)sa_ptr) + sa_rounded_len(sa);
                                 }
                             }
 
@@ -278,13 +278,13 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
                             }
                         }
 
-                        q += mh->ifm_msglen;
+                        q = ((char*)q) + mh->ifm_msglen;
                     }
                 }
             }
         }
 
-        p += ifm->ifm_msglen;
+        p = ((char*)p) + ifm->ifm_msglen;
     }
 
     std::free(buf);

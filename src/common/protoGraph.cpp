@@ -509,7 +509,7 @@ ProtoGraph::AdjacencyQueue::~AdjacencyQueue()
 void ProtoGraph::AdjacencyQueue::Empty()
 {
     Edge* edge;
-    while (NULL != (edge = static_cast<Edge*>(adjacency_tree.GetRoot())))
+    while (NULL != (edge = static_cast<Edge*>(adjacency_tree.GetHead())))
     {
         Vertice* dst = edge->GetDst();
         ASSERT(NULL != dst);
