@@ -2,56 +2,57 @@
 /*********************************************************************
  *
  * AUTHORIZATION TO USE AND DISTRIBUTE
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that: 
+ * modification, are permitted provided that:
  *
- * (1) source code distributions retain this paragraph in its entirety, 
- *  
+ * (1) source code distributions retain this paragraph in its entirety,
+ *
  * (2) distributions including binary code include this paragraph in
- *     its entirety in the documentation or other materials provided 
- *     with the distribution, and 
+ *     its entirety in the documentation or other materials provided
+ *     with the distribution, and
  *
- * (3) all advertising materials mentioning features or use of this 
+ * (3) all advertising materials mentioning features or use of this
  *     software display the following acknowledgment:
- * 
- *      "This product includes software written and developed 
- *       by Brian Adamson of the Naval Research Laboratory (NRL)." 
- *         
+ *
+ *      "This product includes software written and developed
+ *       by Brian Adamson of the Naval Research Laboratory (NRL)."
+ *
  *  The name of NRL, the name(s) of NRL  employee(s), or any entity
  *  of the United States Government may not be used to endorse or
- *  promote  products derived from this software, nor does the 
+ *  promote  products derived from this software, nor does the
  *  inclusion of the NRL written and developed software  directly or
  *  indirectly suggest NRL or United States  Government endorsement
  *  of this product.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  ********************************************************************/
  /**
 * @file protoTree.cpp
-* 
-* @brief This is a general purpose prefix-based C++ Patricia tree. 
-* The code also provides an ability to iterate over items with a 
+*
+* @brief This is a general purpose prefix-based C++ Patricia tree.
+* The code also provides an ability to iterate over items with a
 * common prefix of arbitrary bit length
 */
 #include "protoTree.h"
 #include "protoDebug.h"  // for PLOG()
+#include "protoAddress.h"
 
 #include <string.h>
 #include <stdlib.h>  // for labs()
 
 ProtoTree::Item::Item()
  : bit(0), parent((Item*)NULL), left((Item*)NULL), right((Item*)NULL)
-{      
+{
 }
 
 ProtoTree::Item::~Item()
-{  
+{
 }
 
-unsigned int ProtoTree::Item::GetDepth() const 
+unsigned int ProtoTree::Item::GetDepth() const
 {
     unsigned int depth = 0;
     const Item* p = this;
@@ -109,13 +110,13 @@ void ProtoTree::Destroy()
     {
         Item* item = root;
         Remove(*item);
-        delete item;   
+        delete item;
     }
 }  // end ProtoTree::Destroy()
 
-bool ProtoTree::PrefixIsEqual(const char*  key, 
+bool ProtoTree::PrefixIsEqual(const char*  key,
                               unsigned int keysize,
-                              const char*  prefix, 
+                              const char*  prefix,
                               unsigned int prefixSize,
                               Endian       keyEndian)
 {
@@ -123,9 +124,9 @@ bool ProtoTree::PrefixIsEqual(const char*  key,
     unsigned int fullByteCount = (prefixSize >> 3);
     unsigned int remBitCount = prefixSize & 0x07;
     if (ENDIAN_BIG == keyEndian)
-        
+
     {
-        // Compare any "remainder bits" of the "prefix" to the 
+        // Compare any "remainder bits" of the "prefix" to the
         // corresponding bits of the "key"
         // (we do this first to possibly avoid call to "memcmp()" below)
         if (0 != remBitCount)
@@ -142,7 +143,7 @@ bool ProtoTree::PrefixIsEqual(const char*  key,
         key += (keysize >> 3);
         if (0 != (keysize &0x07)) key++;
         key -= fullByteCount;
-        // Compare any "remainder bits" of the "prefix" to the 
+        // Compare any "remainder bits" of the "prefix" to the
         // corresponding bits of the "key"
         // (we do this first to possibly avoid call to "memcmp()" below)
         if (0 != remBitCount)
@@ -151,7 +152,7 @@ bool ProtoTree::PrefixIsEqual(const char*  key,
             // "remainder bits" are in first byte of little endian "prefix"
             if ((key[0] & remBitMask) != (prefix[0] & remBitMask))
                 return false;
-        
+
             // Compare any full byte portion of the key / prefix
             if (0 != fullByteCount)
                 return (0 == memcmp(key+1, prefix+1, fullByteCount));
@@ -159,16 +160,16 @@ bool ProtoTree::PrefixIsEqual(const char*  key,
                 return true;
         }
     }
-    // Compare any full byte portion of the "prefix" 
-    // to the corresponding "key" bytes        
+    // Compare any full byte portion of the "prefix"
+    // to the corresponding "key" bytes
     if (0 != fullByteCount)
         return (0 == memcmp(key, prefix, fullByteCount));
     else
         return true;
 }  // end ProtoTree::PrefixIsEqual()
 
-bool ProtoTree::KeysAreEqual(const char*  key1, 
-                             const char*  key2, 
+bool ProtoTree::KeysAreEqual(const char*  key1,
+                             const char*  key2,
                              unsigned int keysize,
                              Endian       keyEndian)
 {
@@ -209,7 +210,7 @@ bool ProtoTree::ItemsAreEqual(const Item& item1, const Item& item2)
     unsigned int keysize = item1.GetKeysize();
     if (item2.GetKeysize() != keysize) return false;
     Endian keyEndian = item1.GetEndian();
-    if (keyEndian != item2.GetEndian()) 
+    if (keyEndian != item2.GetEndian())
     {
         PLOG(PL_WARN, "ProtoTree::ItemsAreEqual() mis-matched key endian?!\n");
         ASSERT(0);
@@ -224,13 +225,14 @@ bool ProtoTree::ItemIsEqual(const Item& item, const char* key, unsigned int keys
     return KeysAreEqual(item.GetKey(), key, keysize, item.GetEndian());
 }  // end ProtoTree::ItemIsEqual()
 
+/*
 bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian)
 {
     if (index < keysize)
     {
         unsigned int byteIndex = index >> 3;
         byteIndex = (ENDIAN_BIG == keyEndian) ? byteIndex : ((keysize - 1) >> 3) - byteIndex;
-        return (0 != (key[byteIndex] & (0x80 >> (index & 0x07)))); 
+        return (0 != (key[byteIndex] & (0x80 >> (index & 0x07))));
     }
     else if (index < (keysize + (sizeof(keysize) << 3)))
     {
@@ -242,7 +244,28 @@ bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, E
         return false;
     }
 }  // end ProtoTree::Bit()
-        
+*/
+
+bool ProtoTree::Bit(const char* key, unsigned int keysize, unsigned int index, Endian keyEndian)
+{
+    if (index < keysize)
+    {
+        unsigned int byteIndex = index >> 3;
+        byteIndex = (ENDIAN_BIG == keyEndian) ? byteIndex : ((keysize - 1) >> 3) - byteIndex;
+        return (0 != (key[byteIndex] & (0x80 >> (index & 0x07))));
+    }
+    else if (index == keysize)
+    {
+        // explicit end-of-key marker
+        return true;
+    }
+    else
+    {
+        // zero padding beyond the terminator
+        return false;
+    }
+}  // end ProtoTree::Bit()
+
 ProtoTree::Item* ProtoTree::GetFirstItem() const
 {
     if (NULL != root)
@@ -251,11 +274,11 @@ ProtoTree::Item* ProtoTree::GetFirstItem() const
         {
             // 2-A) Only one node in this tree
             return root;
-        }            
+        }
         else
         {
             // 2-B) Return left most node in this tree
-            Item* x = (root->left == root) ? root->right : root;   
+            Item* x = (root->left == root) ? root->right : root;
             while (x->left->parent == x) x = x->left;
             return (x->left);
         }
@@ -281,10 +304,11 @@ ProtoTree::Item* ProtoTree::GetLastItem() const
     return NULL;
 }  // end ProtoTree::GetLastItem()
 
-bool ProtoTree::Insert(ProtoTree::Item& item)     
+/* "legacy" in sertion method before new 32-bit and 64-bit, etc optimizations
+bool ProtoTree::Insert(ProtoTree::Item& item)
 {
-    // TBD - we could allow for an optional optimization for the the 
-    //       "find fail / insert new" use pattern by having an 
+    // TBD - we could allow for an optional optimization for the the
+    //       "find fail / insert new" use pattern by having an
     //       optional parameter to pass in the 'x' (closest match)
     //       pointer here found from the prior ProtoTree::Find() attempt
     //       which does the same "closet match" traversal
@@ -302,13 +326,13 @@ bool ProtoTree::Insert(ProtoTree::Item& item)
             p = x;
             x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
         } while (p == x->parent);
-        
+
         // 2) Then, find index of first differing bit ("dBit")
         //    (also look out for exact match!)
         unsigned int dBit = 0;
         // A) Do byte-wise comparison to extent possible
         unsigned int keysizeMin, indexMax;
-        if (keysize < x->GetKeysize()) 
+        if (keysize < x->GetKeysize())
         {
             keysizeMin = keysize;
             indexMax = x->GetKeysize() + (sizeof(unsigned int) << 3);
@@ -350,8 +374,8 @@ bool ProtoTree::Insert(ProtoTree::Item& item)
             {
                 ptr1--;
                 ptr2--;
-            } 
-            dBit += 8;  
+            }
+            dBit += 8;
         }
         ASSERT(dBit <= fullByteBits);
         if (dBit == fullByteBits)
@@ -377,7 +401,7 @@ bool ProtoTree::Insert(ProtoTree::Item& item)
         {
             p = x;
             x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
-        } while ((x->bit < dBit) && (p == x->parent)); 
+        } while ((x->bit < dBit) && (p == x->parent));
 
 
         // 4) Insert "item" into tree
@@ -390,14 +414,14 @@ bool ProtoTree::Insert(ProtoTree::Item& item)
         else
         {
             item.left = &item;
-            item.right = x;                 
+            item.right = x;
         }
         item.parent = p;
         if (Bit(key, keysize, p->bit, keyEndian))
             p->right = &item;
-        else 
+        else
             p->left = &item;
-        if (p == x->parent) 
+        if (p == x->parent)
             x->parent = &item;
     }
     else
@@ -412,12 +436,292 @@ bool ProtoTree::Insert(ProtoTree::Item& item)
     // insertion/removal since we just reset the iterators
     UpdateIterators(&item, Iterator::INSERT);
     return true;
+}  // end ProtoTree::Insert() [legacy]
+*/
+
+/*
+ * ProtoTree::Insert() wide-comparison optimization
+ *
+ * We compare equal leading key bytes in larger chunks before falling back
+ * to byte-at-a-time comparison.  When a wide block differs, we resolve the
+ * differing byte _within that block_ immediately and then use the MSB lookup
+ * table to locate the differing bit within that byte.
+ *
+ * Why only for ENDIAN_BIG?
+ * ------------------------
+ * For ENDIAN_BIG keys, the logical comparison order matches the in-memory
+ * byte order, so a contiguous 64-bit or 32-bit memcpy/load compares exactly
+ * the next bytes that the original byte loop would have examined.
+ *
+ * For ENDIAN_LITTLE keys, the logical comparison order runs backward through
+ * memory.  The original code handles that cleanly by initializing the byte
+ * pointers at the end of the key and decrementing them.  Wide contiguous
+ * block compares do _not_ map as directly onto that reverse traversal, so
+ * we keep the original byte loop for ENDIAN_LITTLE in order to preserve
+ * simple, obvious correctness.
+ *
+ * Why use memcpy()?
+ * -----------------
+ * Small fixed-size memcpy() calls are typically optimized by the compiler
+ * into efficient loads, while avoiding alignment and aliasing issues that
+ * direct pointer casts could introduce.
+ *
+ * Why resolve the differing byte within the wide block?
+ * -----------------------------------------------------
+ * When a 64-bit or 32-bit block differs, this avoids dropping back to the
+ * outer byte loop for the bytes in that block.  That is a little more code
+ * than the simpler skip-ahead version, but it is still straightforward and
+ * keeps the original algorithm structure intact.
+ */
+
+#if defined(UINT32_MAX)
+#define PROTO_TREE_USE_32BIT_COMPARE
+#endif
+#if defined(UINT64_MAX) && \
+    (defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || \
+     defined(__ppc64__) || defined(__LP64__) || defined(_WIN64))
+#define PROTO_TREE_USE_64BIT_COMPARE
+#endif
+
+// For a non-zero byte value, this gives the bit offset (0..7)
+// of the first set bit scanning from MSB to LSB.
+// Example: 0x80 -> 0, 0x40 -> 1, 0x20 -> 2, ..., 0x01 -> 7
+const unsigned char ProtoTree::MSB_INDEX[256] =
+{
+    0,7,6,6,5,5,5,5,4,4,4,4,4,4,4,4,
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+
+// Return the index of the first differing byte between two buffers.
+// Assumes the buffers differ somewhere within the given length.
+inline unsigned int ProtoTree::FindDiffByte(const char*  p1,
+                                            const char*  p2,
+                                            unsigned int len)
+{
+    unsigned int i;
+    for (i = 0; i < len; ++i)
+    {
+        if (p1[i] != p2[i])
+            break;
+    }
+    ASSERT(i < len);
+    return i;
+}  // end ProtoTree::FindDiffByte()
+
+// Update "dBit" given two buffers that differ somewhere within "len" bytes.
+inline void ProtoTree::UpdateDiffBit(const char* p1,
+                                     const char* p2,
+                                     unsigned int len,
+                                     unsigned int& dBit)
+{
+    unsigned int i = FindDiffByte(p1, p2, len);
+    unsigned char delta = (unsigned char)(p1[i] ^ p2[i]);
+    ASSERT(0 != delta);
+    dBit += (i << 3);
+    dBit += MSB_INDEX[delta];
+}  // end ProtoTree::UpdateDiffBit()
+
+
+bool ProtoTree::Insert(ProtoTree::Item& item, Item* match)
+{
+    if (NULL != root)
+    {
+        const char* key = item.GetKey();
+        unsigned int keysize = item.GetKeysize();
+        Endian keyEndian = item.GetEndian();
+        Item* x;
+        if (NULL == match)
+        {
+            // 1) Find closest match to "item"
+            x = root;
+            Item* p;
+            do
+            {
+                p = x;
+                x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
+            } while (p == x->parent);
+        }
+        else
+        {
+            x = match;
+        }
+
+        // 2) Find index of first differing bit ("dBit")
+        unsigned int dBit = 0;
+
+        unsigned int xKeysize = x->GetKeysize();
+        unsigned int keysizeMin =
+            (keysize < xKeysize) ? keysize : xKeysize;
+        unsigned int indexMax =
+            ((keysize > xKeysize) ? keysize : xKeysize) + 1;  // explicit terminator bit
+
+        const char* ptr1 = key;
+        const char* ptr2 = x->GetKey();
+        ASSERT(x->GetEndian() == keyEndian);
+
+        if (ENDIAN_LITTLE == keyEndian)
+        {
+            ptr1 += ((keysize - 1) >> 3);
+            ptr2 += ((xKeysize - 1) >> 3);
+        }
+
+        unsigned int fullByteBits = keysizeMin & ~0x07;
+        unsigned int fullByteCount = fullByteBits >> 3;
+        bool done = false;
+
+        if (ENDIAN_BIG == keyEndian)
+        {
+#ifdef PROTO_TREE_USE_64BIT_COMPARE
+            while ((!done) && (fullByteCount >= 8))
+            {
+                uint64_t word1;
+                uint64_t word2;
+                memcpy(&word1, ptr1, 8);
+                memcpy(&word2, ptr2, 8);
+                if (word1 != word2)
+                {
+                    UpdateDiffBit(ptr1, ptr2, 8, dBit);
+                    done = true;
+                }
+                else
+                {
+                    ptr1 += 8;
+                    ptr2 += 8;
+                    dBit += 64;
+                    fullByteCount -= 8;
+                }
+            }
+#endif // PROTO_TREE_USE_64BIT_COMPARE
+
+#ifdef PROTO_TREE_USE_32BIT_COMPARE
+            while ((!done) && (fullByteCount >= 4))
+            {
+                uint32_t word1;
+                uint32_t word2;
+                memcpy(&word1, ptr1, 4);
+                memcpy(&word2, ptr2, 4);
+                if (word1 != word2)
+                {
+                    UpdateDiffBit(ptr1, ptr2, 4, dBit);
+                    done = true;
+                }
+                else
+                {
+                    ptr1 += 4;
+                    ptr2 += 4;
+                    dBit += 32;
+                    fullByteCount -= 4;
+                }
+            }
+#endif // PROTO_TREE_USE_32BIT_COMPARE
+        }
+
+        // Compare remaining full bytes one at a time
+        while ((!done) && (fullByteCount > 0))
+        {
+            if (*ptr1 != *ptr2)
+            {
+                unsigned char delta = (unsigned char)(*ptr1 ^ *ptr2);
+                ASSERT(0 != delta);
+                dBit += MSB_INDEX[delta];
+                done = true;
+            }
+            else
+            {
+                if (ENDIAN_BIG == keyEndian)
+                {
+                    ptr1++;
+                    ptr2++;
+                }
+                else
+                {
+                    ptr1--;
+                    ptr2--;
+                }
+                dBit += 8;
+                fullByteCount--;
+            }
+        }
+
+        ASSERT(dBit <= fullByteBits);
+        if (!done)
+        {
+            // Compare any remainder bit-by-bit, including the
+            // explicit end-of-key marker bit at index == keysize.
+            for (; dBit < indexMax; dBit++)
+            {
+                if (Bit(key, keysize, dBit, keyEndian) !=
+                    Bit(x->GetKey(), x->GetKeysize(), dBit, keyEndian))
+                    break;
+            }
+            if (dBit == indexMax)
+            {
+                PLOG(PL_WARN, "ProtoTree::Insert() Equivalent item already in tree!\n");
+                return false;
+            }
+        }
+        item.bit = dBit;
+
+        // 3) Find "item" insertion point
+        x = root;
+        Item* p;
+        do
+        {
+            p = x;
+            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
+        } while ((x->bit < dBit) && (p == x->parent));
+
+        // 4) Insert "item" into tree
+        if (Bit(key, keysize, dBit, keyEndian))
+        {
+            ASSERT(NULL != x);
+            item.left = x;
+            item.right = &item;
+        }
+        else
+        {
+            item.left = &item;
+            item.right = x;
+        }
+        item.parent = p;
+        if (Bit(key, keysize, p->bit, keyEndian))
+            p->right = &item;
+        else
+            p->left = &item;
+        if (p == x->parent)
+            x->parent = &item;
+    }
+    else
+    {
+        // tree is empty, so make "item" the tree root
+        root = &item;
+        item.parent = (Item*)NULL;
+        item.left = item.right = &item;
+        item.bit = 0;
+    }
+
+    UpdateIterators(&item, Iterator::INSERT);
+    return true;
 }  // end ProtoTree::Insert()
 
 // Find node with backpointer to "item"
 ProtoTree::Item* ProtoTree::FindPredecessor(ProtoTree::Item& item) const
 {
-    // Find terminal "q"  with backpointer to "item"   
+    // Find terminal "q"  with backpointer to "item"
     Item* x = &item;
     Item* q;
     const char* key = item.GetKey();
@@ -434,40 +738,254 @@ ProtoTree::Item* ProtoTree::FindPredecessor(ProtoTree::Item& item) const
     return q;
 }  // end ProtoTree::FindPredecessor()
 
+// "Unrolled", more efficient versions of above two methods.  
+// BUT - needs to be tested!
+ProtoTree::Item* ProtoTree::FindLexicalPredecessor(Item* item) const
+{
+    ASSERT(NULL != item);
+    if (NULL == root)
+        return NULL;
+
+    Endian keyEndian = item->GetEndian();
+
+    // Find node "q" with backpointer to "item"
+    Item* x;
+    if ((NULL == item->parent) && (item->right == item))
+        x = item->left;
+    else
+        x = item;
+
+    Item* q;
+    do
+    {
+        q = x;
+        if (Bit(item->GetKey(), item->GetKeysize(), x->bit, keyEndian))
+            x = x->right;
+        else
+            x = x->left;
+    } while (x != item);
+
+    if (q->right != item)
+    {
+        // Go up the tree
+        do
+        {
+            x = q;
+            q = q->parent;
+        } while ((NULL != q) && (x == q->left));
+
+        if ((NULL == q) || (NULL == q->parent))
+        {
+            if ((NULL == q) || (q->left == q))
+            {
+                // Bubbled completely up, or root has no left side
+                return NULL;
+            }
+            else
+            {
+                // Iterated to root from the right side and root has
+                // a left side we should check out.
+                Item* r = q;
+                x = q->left;
+                do
+                {
+                    q = x;
+                    if (Bit(r->GetKey(), r->GetKeysize(), x->bit, keyEndian))
+                        x = x->right;
+                    else
+                        x = x->left;
+                } while (x != r);
+
+                if (q->left != q)
+                {
+                    // Go as far right of q->left as possible
+                    q = q->left;
+                    do
+                    {
+                        x = q;
+                        q = q->right;
+                    } while (x == q->parent);
+                }
+                return q;
+            }
+        }
+    }
+
+    if (q->left->parent != q)
+    {
+        if ((NULL == q->left->parent) &&
+            (q->left->left != q->left) &&
+            Bit(q->GetKey(), q->GetKeysize(), 0, keyEndian))
+        {
+            // Came from the right and there is a left of root.
+            // Go as far right of the left of root as possible.
+            x = q->left->left;
+            do
+            {
+                q = x;
+                x = x->right;
+            } while (q == x->parent);
+            return x;
+        }
+        else
+        {
+            return q->left;
+        }
+    }
+    else
+    {
+        // Go as far right of q->left as possible
+        x = q->left;
+        do
+        {
+            q = x;
+            x = x->right;
+        } while (q == x->parent);
+        return x;
+    }
+}  // end ProtoTree::FindLexicalPredecessor()
+
+
+ProtoTree::Item* ProtoTree::FindLexicalSuccessor(Item* item) const
+{
+    ASSERT(NULL != item);
+    if (NULL == root)
+        return NULL;
+
+    Endian keyEndian = item->GetEndian();
+
+    // Find node "q" with backpointer to "item"
+    Item* x;
+    if ((NULL == item->parent) && (item->left == item))
+        x = item->right;
+    else
+        x = item;
+
+    Item* q;
+    do
+    {
+        q = x;
+        if (Bit(item->GetKey(), item->GetKeysize(), x->bit, keyEndian))
+            x = x->right;
+        else
+            x = x->left;
+    } while (x != item);
+
+    if (q->left != item)
+    {
+        // Go up the tree
+        do
+        {
+            x = q;
+            q = q->parent;
+        } while ((NULL != q) && (x == q->right));
+
+        if ((NULL == q) || (NULL == q->parent))
+        {
+            if ((NULL == q) || (q->right == q))
+            {
+                // Bubbled completely up, or root has no right side
+                return NULL;
+            }
+            else
+            {
+                // Iterated to root from the left side and root has
+                // a right side we should check out.
+                Item* r = q;
+                x = q->right;
+                do
+                {
+                    q = x;
+                    if (Bit(r->GetKey(), r->GetKeysize(), x->bit, keyEndian))
+                        x = x->right;
+                    else
+                        x = x->left;
+                } while (x != r);
+
+                if (q->right != q)
+                {
+                    // Go as far left of q->right as possible
+                    q = q->right;
+                    do
+                    {
+                        x = q;
+                        q = q->left;
+                    } while (x == q->parent);
+                }
+                return q;
+            }
+        }
+    }
+
+    if (q->right->parent != q)
+    {
+        if ((NULL == q->right->parent) &&
+            (q->right->right != q->right) &&
+            !Bit(q->GetKey(), q->GetKeysize(), 0, keyEndian))
+        {
+            // Came from the left and there is a right of root.
+            // Go as far left of the right of root as possible.
+            x = q->right->right;
+            do
+            {
+                q = x;
+                x = x->left;
+            } while (q == x->parent);
+            return x;
+        }
+        else
+        {
+            return q->right;
+        }
+    }
+    else
+    {
+        // Go as far left of q->right as possible
+        x = q->right;
+        do
+        {
+            q = x;
+            x = x->left;
+        } while (q == x->parent);
+        return x;
+    }
+}  // end ProtoTree::FindLexicalSuccessor()
+
+
 void ProtoTree::Remove(ProtoTree::Item& item)
 {
     ASSERT(0 != item.GetKeysize());
     if (((&item == item.left) || (&item == item.right)) && (NULL != item.parent))
     {
-        // non-root "item" that has at least one self-pointer  
+        // non-root "item" that has at least one self-pointer
         // (a.k.a an "external entry"?)
         Item* orphan = (&item == item.left) ? item.right : item.left;
         if (item.parent->left == &item)
             item.parent->left = orphan;
-        else 
+        else
             item.parent->right = orphan;
         if (orphan->bit > item.parent->bit)
             orphan->parent = item.parent;
     }
     else
     {
-        // Root or "item" with no self-pointers 
+        // Root or "item" with no self-pointers
         // (a.k.a an "internal entry"?)
-        // 1) Find terminal "q"  with backpointer to "item"  
+        // 1) Find terminal "q"  with backpointer to "item"
         const char* key = item.GetKey();
         unsigned int keysize = item.GetKeysize();
         Endian keyEndian = item.GetEndian();
         Item* x = &item;
         Item* q;
-        do                      
-        {     
-            q = x;              
+        do
+        {
+            q = x;
             if (Bit(key, keysize, x->bit, keyEndian))
                 x = x->right;
-            else                
-                x = x->left;    
+            else
+                x = x->left;
         } while (x != &item);
-        
+
         if (NULL != q->parent)
         {
             // Non-root "q", so "q" is moved into the place of "item"
@@ -488,10 +1006,10 @@ void ProtoTree::Remove(ProtoTree::Item& item)
                         x = x->left;
                 } while (x != &item);
             }
-            
+
             // A) Set bit index of "q" to that of "item"
             q->bit = item.bit;
-            
+
             // B) Fix the parent, left, and right node pointers to "q"
             //    (removes "q" from its current place in the tree)
             Item* parent = q->parent;
@@ -503,7 +1021,7 @@ void ProtoTree::Remove(ProtoTree::Item& item)
                 parent->right = child;
             if (child->bit > parent->bit)
                 child->parent = parent;
-            
+
             // C) Fix the item's left->parent and right->parent node pointers to "item"
             //    (places "q" into the current place of the "item" in the tree)
             ASSERT(q != NULL);
@@ -515,12 +1033,12 @@ void ProtoTree::Remove(ProtoTree::Item& item)
             {
                 if (item.parent->left == &item)
                     item.parent->left = q;
-                else 
+                else
                     item.parent->right = q;
             }
             else
             {
-                // "item" was root node, so update the "s" node 
+                // "item" was root node, so update the "s" node
                 //  backpointer to "q" instead of "item"
                 ASSERT(s != NULL);
                 ASSERT(s != &item);
@@ -530,7 +1048,7 @@ void ProtoTree::Remove(ProtoTree::Item& item)
                     s->right = q;
                 root = q;
             }
-              
+
             // E) Finally, "q" gets the pointers of the "item" being removed
             //    (which now _may_ include a pointer to itself)
             if (NULL != item.parent)
@@ -546,20 +1064,20 @@ void ProtoTree::Remove(ProtoTree::Item& item)
             Item* orphan = (q == q->left) ? q->right : q->left;
             if (q == orphan)
             {
-                root = (Item*)NULL; 
+                root = (Item*)NULL;
             }
             else
             {
-                root = orphan; 
+                root = orphan;
                 orphan->parent = NULL;
-                if (orphan->left == q) 
+                if (orphan->left == q)
                     orphan->left = orphan;
-                else 
+                else
                     orphan->right = orphan;
                 orphan->bit = 0;
             }
         }
-    }   
+    }
     item.parent = item.left = item.right = (Item*)NULL;
     UpdateIterators(&item, Iterator::REMOVE);
 }  // end ProtoTree::Remove()
@@ -575,7 +1093,7 @@ ProtoTree::Item* ProtoTree::RemoveRoot()
 /**
  * Find item with exact match to key and keysize
  */
-ProtoTree::Item* ProtoTree::Find(const char*  key, 
+ProtoTree::Item* ProtoTree::Find(const char*  key,
                                  unsigned int keysize) const
 {
     Item* x = root;
@@ -583,13 +1101,13 @@ ProtoTree::Item* ProtoTree::Find(const char*  key,
     {
         Endian keyEndian = x->GetEndian();
         Item* p;
-        do 
-        { 
+        do
+        {
             p = x;
-            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;   
+            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
         } while (x->parent == p);
         return (ItemIsEqual(*x, key, keysize) ? x : NULL);
-    }    
+    }
     else
     {
         return (Item*)NULL;
@@ -599,7 +1117,8 @@ ProtoTree::Item* ProtoTree::Find(const char*  key,
 /**
  * Find item with "closest" match to key and keysize (biggest prefix match?)
  */
-ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key, 
+/*
+ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key,
                                              unsigned int keysize) const
 {
     Item* x = root;
@@ -607,13 +1126,35 @@ ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key,
     {
         Endian keyEndian = x->GetEndian();
         Item* p;
-        do 
-        { 
+        do
+        {
             p = x;
-            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;   
+            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
         } while ((x->parent == p) && (x->bit < keysize));
-        return x;   
-    }    
+        return x;
+    }
+    else
+    {
+        return (Item*)NULL;
+    }
+}  // end ProtoTree::FindClosestMatch()
+*/
+
+ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key,
+                                             unsigned int keysize) const
+{
+    Item* x = root;
+    if (NULL != x)
+    {
+        Endian keyEndian = x->GetEndian();
+        Item* p;
+        do
+        {
+            p = x;
+            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
+        } while (x->parent == p);
+        return x;
+    }
     else
     {
         return (Item*)NULL;
@@ -623,7 +1164,9 @@ ProtoTree::Item* ProtoTree::FindClosestMatch(const char*  key,
 /**
  * Finds longest matching entry that is a prefix to "key"
  */
-ProtoTree::Item* ProtoTree::FindPrefix(const char*  key, 
+
+/*
+ProtoTree::Item* ProtoTree::FindPrefix(const char*  key,
                                        unsigned int keysize) const
 {
     // (TBD) Retest this code with new "size-agnostic" ProtoTree implementation
@@ -632,24 +1175,60 @@ ProtoTree::Item* ProtoTree::FindPrefix(const char*  key,
     {
         Endian keyEndian = x->GetEndian();
         Item* p;
-        do 
-        { 
+        do
+        {
             p = x;
-            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left; 
+            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
         } while ((x->parent == p) && (x->bit < keysize));
-        if (PrefixIsEqual(key, keysize, x->GetKey(), x->GetKeysize(), keyEndian))           
+        if (PrefixIsEqual(key, keysize, x->GetKey(), x->GetKeysize(), keyEndian))
             return x;
     }
     return NULL;
 }  // end ProtoTree::FindPrefix()
+*/
+
+ProtoTree::Item* ProtoTree::FindPrefix(const char*  key,
+                                       unsigned int keysize) const
+{
+    ProtoAddress addr;
+    // (TBD) Retest this code with new "size-agnostic" ProtoTree implementation
+    Item* prefixMatch = NULL;
+    Item* x = root;
+    if (NULL != x)
+    {
+        Endian keyEndian = x->GetEndian();
+        Item* p;
+        do
+        {
+            addr.SetRawHostAddress(ProtoAddress::IPv4, x->GetKey(), 4);
+            //TRACE("  (FindPrefix iterated to %s) endian:%d\n", addr.GetHostString(), keyEndian);
+            if (PrefixIsEqual(key, keysize, x->GetKey(), x->GetKeysize(), keyEndian))
+            {
+                if ((NULL == prefixMatch) || (x->GetKeysize() > prefixMatch->GetKeysize()))
+                    prefixMatch = x;
+            }
+            p = x;
+            x = Bit(key, keysize, x->bit, keyEndian) ? x->right : x->left;
+        } while ((x->parent == p) && (x->bit < keysize));
+        addr.SetRawHostAddress(ProtoAddress::IPv4, x->GetKey(), 4);
+        //TRACE("  (FindPrefix final iteration to %s) endian:%d\n", addr.GetHostString(), keyEndian);
+        if (PrefixIsEqual(key, keysize, x->GetKey(), x->GetKeysize(), keyEndian))
+        {
+            if ((NULL == prefixMatch) || (x->GetKeysize() > prefixMatch->GetKeysize()))
+                prefixMatch = x;
+        }
+    }
+    return prefixMatch;
+}  // end ProtoTree::FindPrefix()
 
 
 /**
- * This finds prefix subtree root, (TBD) add find prefix 
+ * This finds prefix subtree root, (TBD) add find prefix
  * subtree min, and find prefix subtree max methods
  * (e.g. for "min", first find subtree root, and roll left ???)
  */
-ProtoTree::Item* ProtoTree::FindPrefixSubtree(const char*  prefix, 
+/*
+ProtoTree::Item* ProtoTree::FindPrefixSubtree(const char*  prefix,
                                               unsigned int prefixSize) const
 {
     // (TBD) Retest this code more with new "size-agnostic" ProtoTree implementation
@@ -658,17 +1237,187 @@ ProtoTree::Item* ProtoTree::FindPrefixSubtree(const char*  prefix,
     {
         Endian keyEndian = x->GetEndian();
         Item* p;
-        do 
-        { 
+        do
+        {
             p = x;
-            x = Bit(prefix, prefixSize, x->bit, keyEndian) ? x->right : x->left; 
+            x = Bit(prefix, prefixSize, x->bit, keyEndian) ? x->right : x->left;
         } while ((x->parent == p) && (x->bit < prefixSize));
-        if (PrefixIsEqual(x->GetKey(), x->GetKeysize(), prefix, prefixSize, keyEndian)) 
+        if (PrefixIsEqual(x->GetKey(), x->GetKeysize(), prefix, prefixSize, keyEndian))
             return x;
     }
     return (Item*)NULL;
 }  // end ProtoTree::FindPrefixSubtree()
-                
+*/
+
+ProtoTree::Item* ProtoTree::FindPrefixSubtree(const char*  prefix,
+                                              unsigned int prefixSize) const
+{
+    Item* prefixMatch = NULL;
+    Item* x = root;
+    if (NULL != x)
+    {
+        Endian keyEndian = x->GetEndian();
+        Item* p;
+        do
+        {
+            if (PrefixIsEqual(x->GetKey(), x->GetKeysize(), prefix, prefixSize, keyEndian))
+                prefixMatch = x;
+            p = x;
+            x = Bit(prefix, prefixSize, x->bit, keyEndian) ? x->right : x->left;
+        } while (x->parent == p);
+    }
+    return prefixMatch;
+}  // end ProtoTree::FindPrefixSubtree()
+
+
+
+int ProtoTree::CompareKeys(const char*  key1,
+                           unsigned int keysize1,
+                           const char*  key2,
+                           unsigned int keysize2,
+                           Endian       keyEndian)
+{
+    unsigned int keysizeMin =
+        (keysize1 < keysize2) ? keysize1 : keysize2;
+
+    const char* ptr1 = key1;
+    const char* ptr2 = key2;
+
+    if (ENDIAN_LITTLE == keyEndian)
+    {
+        ptr1 += ((keysize1 - 1) >> 3);
+        ptr2 += ((keysize2 - 1) >> 3);
+    }
+
+    unsigned int fullByteBits = keysizeMin & ~0x07;
+    unsigned int fullByteCount = fullByteBits >> 3;
+
+    if (ENDIAN_BIG == keyEndian)
+    {
+#ifdef PROTO_TREE_USE_64BIT_COMPARE
+        while (fullByteCount >= 8)
+        {
+            uint64_t word1;
+            uint64_t word2;
+            memcpy(&word1, ptr1, 8);
+            memcpy(&word2, ptr2, 8);
+            if (word1 != word2)
+            {
+                unsigned int i = FindDiffByte(ptr1, ptr2, 8);
+                unsigned char b1 = (unsigned char)ptr1[i];
+                unsigned char b2 = (unsigned char)ptr2[i];
+                return (b1 > b2) ? 1 : -1;
+            }
+            ptr1 += 8;
+            ptr2 += 8;
+            fullByteCount -= 8;
+        }
+#endif // PROTO_TREE_USE_64BIT_COMPARE
+
+#ifdef PROTO_TREE_USE_32BIT_COMPARE
+        while (fullByteCount >= 4)
+        {
+            uint32_t word1;
+            uint32_t word2;
+            memcpy(&word1, ptr1, 4);
+            memcpy(&word2, ptr2, 4);
+            if (word1 != word2)
+            {
+                unsigned int i = FindDiffByte(ptr1, ptr2, 4);
+                unsigned char b1 = (unsigned char)ptr1[i];
+                unsigned char b2 = (unsigned char)ptr2[i];
+                return (b1 > b2) ? 1 : -1;
+            }
+            ptr1 += 4;
+            ptr2 += 4;
+            fullByteCount -= 4;
+        }
+#endif // PROTO_TREE_USE_32BIT_COMPARE
+    }
+
+    while (fullByteCount > 0)
+    {
+        unsigned char b1 = (unsigned char)*ptr1;
+        unsigned char b2 = (unsigned char)*ptr2;
+        if (b1 != b2)
+            return (b1 > b2) ? 1 : -1;
+
+        if (ENDIAN_BIG == keyEndian)
+        {
+            ptr1++;
+            ptr2++;
+        }
+        else
+        {
+            ptr1--;
+            ptr2--;
+        }
+        fullByteCount--;
+    }
+
+    // Compare any remaining partial-byte bits, then the explicit
+    // end-of-key marker bit at index == keysize.
+    unsigned int indexMax =
+        ((keysize1 > keysize2) ? keysize1 : keysize2) + 1;
+
+    for (unsigned int i = fullByteBits; i < indexMax; i++)
+    {
+        bool bit1 = Bit(key1, keysize1, i, keyEndian);
+        bool bit2 = Bit(key2, keysize2, i, keyEndian);
+        if (bit1 != bit2)
+            return bit1 ? 1 : -1;
+    }
+    return 0;
+}  // end ProtoTree::CompareKeys()
+
+ProtoTree::Item* ProtoTree::FindBound(const char* key,
+                                      unsigned int keysize,
+                                      bool reverse) const
+{
+    if (NULL == root)
+        return NULL;
+
+    Item* match = FindClosestMatch(key, keysize);
+    if (NULL == match)
+        return NULL;
+
+    int cmp = CompareKeyToItem(key, keysize, match->GetEndian(), *match);
+
+    if (0 == cmp)
+    {
+        // exact match is both lower and upper bound
+        return match;
+    }
+    else if (cmp < 0)
+    {
+        // key < match
+        if (reverse)
+        {
+            // want largest item <= key
+            return FindLexicalPredecessor(match);
+        }
+        else
+        {
+            // want smallest item >= key
+            return match;
+        }
+    }
+    else
+    {
+        // key > match
+        if (reverse)
+        {
+            // want largest item <= key
+            return match;
+        }
+        else
+        {
+            // want smallest item >= key
+            return FindLexicalSuccessor(match);
+        }
+    }
+}  // end ProtoTree::FindBound()
+
 
 ProtoTree::Iterator::Iterator(ProtoTree& theTree, bool reverse, ProtoTree::Item* cursor)
  : ProtoIterable::Iterator(theTree), prefix_size(0), prefix_item(NULL)
@@ -682,7 +1431,7 @@ ProtoTree::Iterator::Iterator(ProtoTree& theTree, bool reverse, ProtoTree::Item*
     {
         Reset(reverse);  // Reset() sets all to defaults
     }
-}  
+}
 
 ProtoTree::Iterator::~Iterator()
 {
@@ -693,15 +1442,15 @@ void ProtoTree::Iterator::Reset(bool                reverse,
                                 unsigned int        prefixSize)
 {
     ProtoTree* tree = static_cast<ProtoTree*>(iterable);
-    
+
     prefix_size = 0;
     prefix_item = prev = next = curr_hop = (Item*)NULL;
     if ((NULL == tree) || (NULL == tree->root)) return;
-    
+
     if (0 != prefixSize)
     {
         if (NULL == prefix) return;
-        // Find root of subtree with matching prefix 
+        // Find root of subtree with matching prefix
         // (TBD - there's a better way to find the min/max prefix matches via prefix00000 or prefix11111
         ProtoTree::Item* prefixItem = tree->FindPrefixSubtree(prefix, prefixSize);
         if (NULL == prefixItem) return;
@@ -714,7 +1463,7 @@ void ProtoTree::Iterator::Reset(bool                reverse,
             // Find the maximum value with matching prefix.
             ProtoTree::Item* lastItem;
             while (NULL != (lastItem = GetNextItem()))
-            {   
+            {
                 if (!tree->PrefixIsEqual(lastItem->GetKey(), lastItem->GetKeysize(), prefix, prefixSize, keyEndian))
                     break;  // The "cursor" is set to after the last matching item
             }
@@ -725,7 +1474,7 @@ void ProtoTree::Iterator::Reset(bool                reverse,
             // Find the minimum value with matching prefix.
             ProtoTree::Item* firstItem;
             while (NULL != (firstItem = GetPrevItem()))
-            {   
+            {
                 if (!tree->PrefixIsEqual(firstItem->GetKey(), firstItem->GetKeysize(), prefix, prefixSize, keyEndian))
                     break;  // The "cursor" is set to before the first matching item
             }
@@ -735,7 +1484,7 @@ void ProtoTree::Iterator::Reset(bool                reverse,
         prefix_item = prefixItem;
         return;
     }
-    
+
     if (reverse)
     {
         // This code is basically the same as ProtoTree::GetLastItem()
@@ -753,7 +1502,7 @@ void ProtoTree::Iterator::Reset(bool                reverse,
             prev = x;
         }
         reversed = true;
-    }    
+    }
     else
     {
         // This code is basically the same as ProtoTree::GetFirstItem()
@@ -770,7 +1519,7 @@ void ProtoTree::Iterator::Reset(bool                reverse,
             {
                 // If root has a left side, go as far left as possible
                 // to find the very first item (lexically) in the tree
-                Item* x = (tree->root->left == tree->root) ? tree->root->right : tree->root;   
+                Item* x = (tree->root->left == tree->root) ? tree->root->right : tree->root;
                 while (x->left->parent == x) x = x->left;
                 next = x->left;
                 if (x->right->parent == x)
@@ -794,7 +1543,7 @@ void ProtoTree::Iterator::SetCursor(ProtoTree::Item& item)
     ProtoTree::Item* prefixItem = prefix_item;
     prefix_size = 0;
     prefix_item = NULL;
-    
+
     if ((NULL== tree) || (NULL == tree->root))
     {
         prev = next = curr_hop = NULL;
@@ -818,13 +1567,13 @@ void ProtoTree::Iterator::SetCursor(ProtoTree::Item& item)
     {
         // Setting "cursor" for "reversed" iteration is easy.
         curr_hop = NULL;
-        prev = &item;   
+        prev = &item;
         GetPrevItem();  // note this sets "next"
     }
     else
     {
         // Setting "cursor" for forward iteration is a little more complicated.
-        // Given an "item", we can find the "curr_hop" for the tree 
+        // Given an "item", we can find the "curr_hop" for the tree
         // entry that lexically precedes the "item"
         // (We do a reverse iteration to find that preceding entry)
         reversed = true;
@@ -842,7 +1591,7 @@ void ProtoTree::Iterator::SetCursor(ProtoTree::Item& item)
             // the entry previous of "item" ...
             if ((&item != tree->root) || (item.right != &item))
             {
-                // Find the node's "predecessor" 
+                // Find the node's "predecessor"
                 // (has backpointer to "item"
                 curr_hop = tree->FindPredecessor(item);
             }
@@ -863,8 +1612,8 @@ void ProtoTree::Iterator::SetCursor(ProtoTree::Item& item)
                         x = x->right;
                     else
                         x = x->left;
-                } while (x != &item);  
-                curr_hop = s;       
+                } while (x != &item);
+                curr_hop = s;
             }
             // Move forward two places so "cursor" is correct position
             reversed = false;
@@ -902,14 +1651,14 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
         if (0 != prefix_size)
         {
             // Test "item" against our reference "prefix_item"
-            if ((NULL == prefix_item) || 
+            if ((NULL == prefix_item) ||
                 !tree->PrefixIsEqual(item->GetKey(), item->GetKeysize(), prefix_item->GetKey(), prefix_size, keyEndian))
             {
                 prev = NULL;
                 return NULL;
             }
         }
-        
+
         Item* x;
         // Find node "q" with backpointer to "item"
         if ((NULL == item->parent) && (item->right == item))
@@ -917,15 +1666,15 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
         else
             x = item;
         Item* q;
-        do                      
-        {                       
-            q = x;              
+        do
+        {
+            q = x;
             if (tree->Bit(item->GetKey(), item->GetKeysize(), x->bit, keyEndian))
                 x = x->right;
-            else                
-                x = x->left;    
-        } while (x != prev); 
-        
+            else
+                x = x->left;
+        } while (x != prev);
+
         if (q->right != item)
         {
             // Go up the tree
@@ -943,21 +1692,21 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
                     // root has no left side, so we're done
                     prev = NULL;
                 }
-                else 
+                else
                 {
                     // We've iterated to root from the right side
                     // and root has a left side we should check out
                     // So, find the left-side predecessor to root "q"
                     Item* r = q;
                     x = q->left;
-                    do                      
-                    {                       
-                        q = x;              
+                    do
+                    {
+                        q = x;
                         if (tree->Bit(r->GetKey(), r->GetKeysize(), x->bit, keyEndian))
                             x = x->right;
-                        else                
-                            x = x->left;    
-                    } while (x != r); 
+                        else
+                            x = x->left;
+                    } while (x != r);
                     if (q->left != q)
                     {
                         // Go as far right of "q->left" as possible
@@ -965,7 +1714,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
                         do
                         {
                             x = q;
-                            q = q->right; 
+                            q = q->right;
                         } while (x == q->parent);
                     }
                     prev = q;
@@ -974,7 +1723,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
                 return item;
             }
         }  // end if (q->right != prev)
-        
+
         if (q->left->parent != q)
         {
             if ((NULL == q->left->parent) &&
@@ -987,7 +1736,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
                 do
                 {
                     q = x;
-                    x = x->right; 
+                    x = x->right;
                 } while (q == x->parent);
                 prev = x;
             }
@@ -1004,7 +1753,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
             do
             {
                 q = x;
-                x = x->right; 
+                x = x->right;
             } while (q == x->parent);
             prev = x;
         }
@@ -1014,7 +1763,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetPrevItem()
     else
     {
         return NULL;
-    } 
+    }
 }  // end ProtoTree::Iterator::GetPrevItem()
 
 
@@ -1043,7 +1792,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
             // so we need to turn it around
             reversed = false;
 	        SetCursor(*next);
-	        if (NULL == next) return NULL;  
+	        if (NULL == next) return NULL;
         }
 	    Item* item = next;
         Endian keyEndian = next->GetEndian();
@@ -1066,7 +1815,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
                     if (x->right == x)
                     {
                         next = x;
-                        curr_hop = NULL; 
+                        curr_hop = NULL;
                     }
                     else
                     {
@@ -1100,7 +1849,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
                 // First, check for root node visit
                 if ((NULL == next->parent) &&
                     (next->right != next)  &&
-                    (tree->Bit(x->GetKey(), x->GetKeysize(), 0, keyEndian) != tree->Bit(next->GetKey(), next->GetKeysize(), 0, keyEndian)))   
+                    (tree->Bit(x->GetKey(), x->GetKeysize(), 0, keyEndian) != tree->Bit(next->GetKey(), next->GetKeysize(), 0, keyEndian)))
                 {
                     // Branch right and go as far left as possible
                     x = next->right;
@@ -1144,7 +1893,7 @@ ProtoTree::Item* ProtoTree::Iterator::GetNextItem()
         if (0 != prefix_size)
         {
             // Test "item" against prefix of item last returned
-            if ((NULL == prefix_item) || 
+            if ((NULL == prefix_item) ||
                 !tree->PrefixIsEqual(item->GetKey(), item->GetKeysize(), prefix_item->GetKey(), prefix_size, keyEndian))
                 return NULL;
         }
@@ -1206,7 +1955,7 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
         }
         case REMOVE:
         {
-            // NOTE - This doesn't work quite right for prefix iterators 
+            // NOTE - This doesn't work quite right for prefix iterators
             // (mid-iteration removal of items can break comprehensive prefix iteration)
             // Save our current iterator state
             Item* oldPrev = prev;
@@ -1234,14 +1983,14 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                             Reset(reversed, prefix_item->GetKey(), prefix_size);
                     }
                     else
-                    {   
+                    {
                         SetCursor(*oldNext);
                     }
                 }
                 else
                 {
                     // This puts the iteration to a ambiguous
-                    // state that allows subsequent calls to 
+                    // state that allows subsequent calls to
                     // either GetPrevItem() or GetNextItem() to
                     // work properly even though the "cursor" is
                     // wrong. (Note PeekNextItem() won't be correct)
@@ -1275,7 +2024,7 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                 {
                     if (NULL == oldPrev)
                     {
-                        // tree is now empty?   
+                        // tree is now empty?
                         //ASSERT(NULL == prefix_item);
                         if (NULL == prefix_item)
                             prev = next = NULL;
@@ -1291,7 +2040,7 @@ void ProtoTree::Iterator::Update(ProtoIterable::Item* theItem, Action theAction)
                 {
                     if (NULL == oldNext)
                     {
-                        // tree is now empty?   
+                        // tree is now empty?
                         //ASSERT(NULL == prefix_item);
                         if (NULL == prefix_item)
                             prev = next = NULL;
@@ -1387,7 +2136,7 @@ void ProtoTree::SimpleIterator::Update(ProtoIterable::Item* /*theItem*/, Action 
 {
     // For ProtoTree::SimpleIterator, really the only "sane" thing to do when the associated
     // tree is modified is to "Reset()" the iterator since the logical tree structure
-    // is potentially heavily affected by any change.  This is heavy-handed so it's 
+    // is potentially heavily affected by any change.  This is heavy-handed so it's
     // actually more efficient to do a "GetRoot(), Remove()" loop until GetRoot() returns NULL
     // (see ProtoTree::Destroy()) instead of using this SimpleIterator.  Where it _is_
     // useful is in the ProtoIndexedQueue::Empty() method where it empties the tree without invoking
@@ -1396,6 +2145,7 @@ void ProtoTree::SimpleIterator::Update(ProtoIterable::Item* /*theItem*/, Action 
     // iteration doesn't matter and mid-iteration Item insertion/removal isn't done.
     Reset();
 }  // end ProtoTree::SimpleIterator::Update()
+
 
 
 ProtoSortedTree::ProtoSortedTree(bool uniqueItemsOnly)
@@ -1415,7 +2165,7 @@ bool ProtoSortedTree::Insert(Item& item)
     unsigned int keysize = item.GetKeysize();
     ProtoTree::Endian keyEndian = item.GetEndian();
     Item* match = Find(key, keysize);
-   
+
     if (NULL == match)
     {
         // Insert the item into our "item_tree"
@@ -1464,7 +2214,7 @@ bool ProtoSortedTree::Insert(Item& item)
                         }
                         // Note: (itemSign && !headSign) is impossible here
                     }
-                    else 
+                    else
                     {
                         Item* head = GetHead();
                         bool headSign = item_tree.Bit(head->GetKey(), head->GetKeysize(), 0, keyEndian);
@@ -1523,10 +2273,10 @@ bool ProtoSortedTree::Insert(Item& item)
                         item_list.Append(item);
                     ASSERT(!item_tree.Bit(match->GetKey(), match->GetKeysize(), 0, keyEndian));
                     // Note (!itemSign && matchSign) can't happen
-                    // here since signed "match" (negative value) 
+                    // here since signed "match" (negative value)
                     // _must_ lexically succeed unsigned "item"
                 }
-                else 
+                else
                 {
                     bool useComplement2 = item.UseComplement2();
                     ASSERT(useComplement2 == match->UseComplement2());
@@ -1550,18 +2300,9 @@ bool ProtoSortedTree::Insert(Item& item)
                             // Insert "item" before first equivalent "match"
                             // note "prev" here lexically _succeeds_ this
                             // "item" that was inserted into tree above, so:
-                            
-                            ProtoTree::Iterator iterator(item_tree, false, &item);
-                            Item* prev = static_cast<Item*>(iterator.PeekNextItem());
-                            
-                            /* (Old "while()" loop approach to find prev, in-tree item)
-                            Item* prev = match->GetPrev();
-                            while ((NULL != prev) && !prev->IsInTree())
-                            {
-                                match = prev;
-                                prev = prev->GetPrev();
-                            }
-                            */
+
+                            Item* prev = static_cast<Item*>(item_tree.FindLexicalSuccessor(&item));
+
                             if (NULL != prev)
                             {
                                 Item* next = static_cast<Item*>(item_list.GetNextItem(*prev));
@@ -1635,10 +2376,10 @@ void ProtoSortedTree::Remove(Item& item)
 {
     // 1) Save some state and remove from linked list
     Item* prev = static_cast<Item*>(item_list.GetPrevItem(item));
-    if (&item == positive_min) 
+    if (&item == positive_min)
         positive_min = static_cast<Item*>(item_list.GetNextItem(item));
     item_list.Remove(item);
-    
+
     // 2) Remove from ProtoTree, if applicable
     if (item.IsInTree())
     {
@@ -1657,8 +2398,8 @@ void ProtoSortedTree::Empty()
     {
         item_tree.Empty();
         item_list.Empty();
-        positive_min = NULL;      
-    } 
+        positive_min = NULL;
+    }
 }  // end ProtoSortedTree::Empty()
 
 void ProtoSortedTree::EmptyToPool(ItemPool& itemPool)
@@ -1667,8 +2408,8 @@ void ProtoSortedTree::EmptyToPool(ItemPool& itemPool)
     {
         item_tree.Empty();
         item_list.EmptyToPool(itemPool);
-        positive_min = NULL;      
-    } 
+        positive_min = NULL;
+    }
 }  // end ProtoSortedTree::EmptyToPool()
 
 void ProtoSortedTree::Destroy()
@@ -1677,7 +2418,7 @@ void ProtoSortedTree::Destroy()
     {
         item_tree.Empty();
         item_list.Destroy();
-        positive_min = NULL;      
+        positive_min = NULL;
     }
 }  // end ProtoSortedTree::Destroy()
 
@@ -1689,9 +2430,9 @@ ProtoSortedTree::Item::~Item()
 {
 }
 
-ProtoSortedTree::Iterator::Iterator(ProtoSortedTree&    theTree, 
-                                    bool                reverse, 
-                                    const char*         keyMin, 
+ProtoSortedTree::Iterator::Iterator(ProtoSortedTree&    theTree,
+                                    bool                reverse,
+                                    const char*         keyMin,
                                     unsigned int        keysize)
  : tree(theTree), list_iterator(theTree.item_list, reverse)
 {
@@ -1702,6 +2443,7 @@ ProtoSortedTree::Iterator::~Iterator()
 {
 }
 
+/*
 void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned int keysize)
 {
     list_iterator.Reset(reverse); // put the iterator in the right direction
@@ -1709,14 +2451,14 @@ void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned
     {
         // refine if a "keyMin" start point was provided
         // (note for "reverse" == true, "keyMin" is really a "keyMax"
-        Item* match = tree.Find(keyMin, keysize); 
+        Item* match = tree.Find(keyMin, keysize);
         if (NULL == match)
         {
             // There was no exact match to "keyMin", so look for next item (or prev if reverse == true)
             TempItem tmpItem(keyMin, keysize, tree.GetHead()->GetEndian());
             tree.item_tree.Insert(tmpItem);
             ProtoTree::Iterator iterator(tree.item_tree, reverse, &tmpItem);
-            match = reverse ? static_cast<Item*>(iterator.PeekPrevItem()) : 
+            match = reverse ? static_cast<Item*>(iterator.PeekPrevItem()) :
                               static_cast<Item*>(iterator.PeekNextItem());
             tree.item_tree.Remove(tmpItem);  // it's done its job, so bye-bye
         }
@@ -1726,7 +2468,38 @@ void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned
             ProtoTree::Iterator iterator(tree.item_tree, true, match);
             Item* prev = static_cast<Item*>(iterator.PeekPrevItem());
             if (NULL == prev)
-                match = tree.item_list.GetHead();    
+                match = tree.item_list.GetHead();
+            else
+                match = static_cast<Item*>(tree.item_list.GetNextItem(*prev));
+        }
+        list_iterator.SetCursor(match);
+    }
+}  // end ProtoSortedTree::Iterator::Reset()
+*/
+
+void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned int keysize)
+{
+    list_iterator.Reset(reverse); // put the iterator in the right direction
+    if ((NULL != keyMin) && list_iterator.IsValid() && !tree.IsEmpty())
+    {
+        // refine if a "keyMin" start point was provided
+        // (note for "reverse" == true, "keyMin" is really a "keyMax"
+        Item* match = tree.Find(keyMin, keysize);
+        if (NULL == match)
+        {
+            // There was no exact match to "keyMin", so look for next item (or prev if reverse == true)
+            TempItem tmpItem(keyMin, keysize, tree.GetHead()->GetEndian());
+            tree.item_tree.Insert(tmpItem);
+            match = reverse ? static_cast<Item*>(tree.item_tree.FindLexicalPredecessor(&tmpItem)) :
+                              static_cast<Item*>(tree.item_tree.FindLexicalSuccessor(&tmpItem));
+            tree.item_tree.Remove(tmpItem);  // it's done its job, so bye-bye
+        }
+        if ((NULL != match) && !reverse)
+        {
+            // Make sure we are positioned on _first_ item of equal valued items
+            Item* prev = static_cast<Item*>(tree.item_tree.FindLexicalPredecessor(match));
+            if (NULL == prev)
+                match = tree.item_list.GetHead();
             else
                 match = static_cast<Item*>(tree.item_list.GetNextItem(*prev));
         }
@@ -1734,7 +2507,6 @@ void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned
     }
 }  // end ProtoSortedTree::Iterator::Reset()
 
-                
 ProtoSortedTree::Iterator::TempItem::TempItem(const char* theKey, unsigned int theKeysize, ProtoTree::Endian keyEndian)
  : key(theKey), keysize(theKeysize), key_endian(keyEndian)
 {
@@ -1743,3 +2515,4 @@ ProtoSortedTree::Iterator::TempItem::TempItem(const char* theKey, unsigned int t
 ProtoSortedTree::Iterator::TempItem::~TempItem()
 {
 }
+

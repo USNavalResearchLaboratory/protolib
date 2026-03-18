@@ -1,20 +1,20 @@
 #include <manetGraphML.h>
 #include <protoDebug.h>
 
-ManetGraphMLParser::ManetGraphMLParser() : XMLName(NULL), indexes(0) 
+ManetGraphMLParser::ManetGraphMLParser() : XMLName(NULL), indexes(0)
 {
     xmlInitParser();
 }
 
-ManetGraphMLParser::~ManetGraphMLParser() 
+ManetGraphMLParser::~ManetGraphMLParser()
 {
-    xmlCleanupParser(); 
+    xmlCleanupParser();
     oldindexkeylist.Empty();
     indexkeylist.Empty();
     namedkeylist.Destroy();
-    
+
     attributelist.Destroy();
-    if (NULL != XMLName) 
+    if (NULL != XMLName)
     {
         delete[] XMLName;
         XMLName = NULL;
@@ -48,7 +48,7 @@ bool ManetGraphMLParser::AttributeKey::Init(const char* theIndex,const char* the
     }
     index = new char[strlen(theIndex)+1];
     name = new char[strlen(theName)+1];
-    
+
     if((NULL == index) || (NULL == name))
     {
         PLOG(PL_ERROR,"ManetGraphMLParser::AttributeKey::Init: Error allocating space for index or name strings\n");
@@ -101,7 +101,7 @@ bool ManetGraphMLParser::AttributeKey::Set(const char* theIndex,const char* theN
         delete[] oldindex;
     index = new char[strlen(theIndex)+1];
     name = new char[strlen(theName)+1];
-    
+
     if((NULL == index) || (NULL == name))
     {
         PLOG(PL_ERROR,"ManetGraphMLParser::AttributeKey::Set: Error allocating space for index or name strings\n");
@@ -146,14 +146,14 @@ bool ManetGraphMLParser::AttributeKey::Set(const char* theIndex,const char* theN
 
 bool ManetGraphMLParser::AttributeKey::SetType(const char* theType)
 {
-    if((!strcmp(theType,"bool")) || 
+    if((!strcmp(theType,"bool")) ||
        (!strcmp(theType,"Bool")) ||
        (!strcmp(theType,"BOOL")) ||
        (!strcmp(theType,"boolean")) ||
        (!strcmp(theType,"Boolean")) ||
        (!strcmp(theType,"BOOLEAN"))) {
         type = Types::BOOL;
-    } else if 
+    } else if
        ((!strcmp(theType,"int")) ||
         (!strcmp(theType,"Int")) ||
         (!strcmp(theType,"INT")) ||
@@ -161,22 +161,22 @@ bool ManetGraphMLParser::AttributeKey::SetType(const char* theType)
         (!strcmp(theType,"Integer")) ||
         (!strcmp(theType,"INTEGER"))) {
          type = Types::INT;
-    } else if 
+    } else if
        ((!strcmp(theType,"long")) ||
         (!strcmp(theType,"Long")) ||
         (!strcmp(theType,"LONG"))) {
          type = Types::LONG;
-    } else if 
+    } else if
        ((!strcmp(theType,"float")) ||
         (!strcmp(theType,"Float")) ||
         (!strcmp(theType,"FLOAT"))) {
          type = Types::FLOAT;
-    } else if 
+    } else if
        ((!strcmp(theType,"double")) ||
         (!strcmp(theType,"Double")) ||
         (!strcmp(theType,"DOUBLE"))) {
          type = Types::DOUBLE;
-    } else if 
+    } else if
        ((!strcmp(theType,"string")) ||
         (!strcmp(theType,"String")) ||
         (!strcmp(theType,"STRING"))) {
@@ -190,21 +190,21 @@ bool ManetGraphMLParser::AttributeKey::SetType(const char* theType)
 bool
 ManetGraphMLParser::AttributeKey::SetDomain(const char* theDomain)
 {
-    if((!strcmp(theDomain,"graph")) || 
+    if((!strcmp(theDomain,"graph")) ||
        (!strcmp(theDomain,"Graph")) ||
        (!strcmp(theDomain,"GRAPH"))) {
         domain = Domains::GRAPH;
-    } else if 
+    } else if
        ((!strcmp(theDomain,"node")) ||
         (!strcmp(theDomain,"Node")) ||
         (!strcmp(theDomain,"NODE"))) {
          domain = Domains::NODE;
-    } else if 
+    } else if
        ((!strcmp(theDomain,"edge")) ||
         (!strcmp(theDomain,"Edge")) ||
         (!strcmp(theDomain,"EDGE"))) {
          domain = Domains::EDGE;
-    } else if 
+    } else if
        ((!strcmp(theDomain,"all")) ||
         (!strcmp(theDomain,"All")) ||
         (!strcmp(theDomain,"ALL"))) {
@@ -318,7 +318,7 @@ ManetGraphMLParser::SetAttributeKey(const char* theName,const char* theType, con
     return false; //shouldn't get here
 }
 
-bool 
+bool
 ManetGraphMLParser::SetAttribute(const char* theName, const char* theValue)
 {
     PLOG(PL_DETAIL,"ManetGraphMLParser::SetAttribute(name=%s,theValue=%s)\n",theName,theValue);
@@ -338,7 +338,7 @@ ManetGraphMLParser::SetAttribute(const char* theName, const char* theValue)
     {
         PLOG(PL_DETAIL,"ManetGraphMLParser::SetAttribute(name=%s,theValue=%s) making new one\n",theName,theValue);
         return AddAttribute(theName,theValue);
-    } 
+    }
     else
     {
         char tempIndex[20];
@@ -354,7 +354,7 @@ ManetGraphMLParser::SetAttribute(const char* theName, const char* theValue)
     return false; //should never get here
 }
 
-bool 
+bool
 ManetGraphMLParser::SetAttribute(NetGraph::Node& node, const char* theName, const char* theValue)
 {
     PLOG(PL_DETAIL,"ManetGraphMLParser::SetAttribute(Node,name=%s,theValue=%s)\n",theName,theValue);
@@ -374,7 +374,7 @@ ManetGraphMLParser::SetAttribute(NetGraph::Node& node, const char* theName, cons
     {
         PLOG(PL_DETAIL,"ManetGraphMLParser::SetAttribute(Node,name=%s,theValue=%s) making new one\n",theName,theValue);
         return AddAttribute(node,theName,theValue);
-    } 
+    }
     else
     {
         char tempIndex[20];
@@ -400,7 +400,7 @@ bool ManetGraphMLParser::SetAttribute(NetGraph::Link& link, const char* theName,
     }
     char theLookup[250];
     GetLookup(theLookup,250,link);
-    
+
     ManetGraphMLParser::Attribute* theAttribute = attributelist.FindAttribute(theLookup,theIndex);
     if(NULL == theAttribute)
     {
@@ -477,7 +477,7 @@ ManetGraphMLParser::AddAttributeKey(const char* theName,const char* theType, con
         return false;
     }
     char theIndex[20];//this will work as we are only using d%d as our indexes.
-    sprintf(theIndex,"d%d",indexes++);
+    snprintf(theIndex,20, "d%d",indexes++);
     PLOG(PL_DETAIL,"ManetGraphMLParser::AddAttributeKey() made key initing with \"%s\"\n",theIndex);
     if(!newKey->Init(theIndex,theName,theType,theDomain,theOldKey,theDefault))
     {
@@ -508,7 +508,7 @@ bool ManetGraphMLParser::AddAttribute(const char* theName, const char* theValue)
         PLOG(PL_ERROR,"ManetGraphMLParser::AddAttribute(): Error allocating attribute\n");
         return false;
     }
-     
+
     char theLookup[250];    //TBD
     GetLookup(theLookup,250);
     if(!newAttribute->Init(theLookup,theIndex,theValue))
@@ -521,7 +521,7 @@ bool ManetGraphMLParser::AddAttribute(const char* theName, const char* theValue)
         PLOG(PL_ERROR,"ManetGraphMLParser::AddAttribute(): Error inserting the attribute\n");
         return false;
     }
-    DMSG(7,"ManetGraphMLParser::AddAttribute(%s,%s) added successfully\n",theName,theValue); 
+    DMSG(7,"ManetGraphMLParser::AddAttribute(%s,%s) added successfully\n",theName,theValue);
     return true;
 }
 
@@ -539,7 +539,7 @@ bool ManetGraphMLParser::AddAttribute(NetGraph::Node& node, const char* theName,
         PLOG(PL_ERROR,"ManetGraphMLParser::AddAttribute(Node): Error allocating attribute\n");
         return false;
     }
-     
+
     char theLookup[250];    //TBD
     GetLookup(theLookup,250,node);
     if(!newAttribute->Init(theLookup,theIndex,theValue))
@@ -552,7 +552,7 @@ bool ManetGraphMLParser::AddAttribute(NetGraph::Node& node, const char* theName,
         PLOG(PL_ERROR,"ManetGraphMLParser::AddAttribute(Node): Error inserting the attribute\n");
         return false;
     }
-    DMSG(7,"ManetGraphMLParser::AddAttribute(node,%s,%s) added successfully\n",theName,theValue); 
+    DMSG(7,"ManetGraphMLParser::AddAttribute(node,%s,%s) added successfully\n",theName,theValue);
     return true;
 }
 bool ManetGraphMLParser::AddAttribute(NetGraph::Link& link, const char* theName, const char* theValue)
@@ -582,7 +582,7 @@ bool ManetGraphMLParser::AddAttribute(NetGraph::Link& link, const char* theName,
         PLOG(PL_ERROR,"ManetGraphMLParser::AddAttribute(Link): Error inserting the attribute\n");
         return false;
     }
-    return true; 
+    return true;
 }
 bool ManetGraphMLParser::AddAttribute(NetGraph::Interface& interface, const char* theName, const char* theValue)
 {
@@ -600,7 +600,7 @@ bool ManetGraphMLParser::AddAttribute(NetGraph::Interface& interface, const char
     }
     char theLookup[250];
 
-    GetLookup(theLookup,250,interface);    
+    GetLookup(theLookup,250,interface);
     if(!newAttribute->Init(theLookup,theIndex,theValue))
     {
         PLOG(PL_ERROR,"ManetGraphMLParser::AddAttribute(Interface): Error init the attribute\n");
@@ -616,7 +616,7 @@ bool ManetGraphMLParser::AddAttribute(NetGraph::Interface& interface, const char
 
 bool ManetGraphMLParser::GetLookup(char* theLookup,unsigned int maxlen)
 {
-    sprintf(theLookup,"thisGraph");//don't name interfaces/links/nodes thisGraph!
+    snprintf(theLookup, maxlen, "thisGraph");//don't name interfaces/links/nodes thisGraph!
     return true;
 }
 
@@ -627,7 +627,7 @@ bool ManetGraphMLParser::GetLookup(char* theLookup,unsigned int maxlen,NetGraph:
         PLOG(PL_ERROR,"ManetGraphMLParser::GetLookup(node) node string is longer than max leng\n");
         return false;
     }
-    sprintf(theLookup,"node:%s",GetString(node));
+    snprintf(theLookup, maxlen, "node:%s",GetString(node));
     return true;
 }
 bool ManetGraphMLParser::GetLookup(char* theLookup,unsigned int maxlen,NetGraph::Link& link)
@@ -653,13 +653,13 @@ bool ManetGraphMLParser::GetLookup(char* theLookup,unsigned int maxlen,NetGraph:
         delete[] targetPortName;
         return false;
     }
-    sprintf(theLookup,"edge:source:%s:%s:dest:%s:%s",sourceName,sourcePortName,targetName,targetPortName);
+    snprintf(theLookup,maxlen, "edge:source:%s:%s:dest:%s:%s",sourceName,sourcePortName,targetName,targetPortName);
 
     delete[] sourceName;
     delete[] sourcePortName;
     delete[] targetName;
     delete[] targetPortName;
-     
+
     return true;
 }
 bool ManetGraphMLParser::GetLookup(char* theLookup,unsigned int maxlen,NetGraph::Interface& interface)
@@ -673,7 +673,7 @@ bool ManetGraphMLParser::GetLookup(char* theLookup,unsigned int maxlen,NetGraph:
         delete[] portName;
         return false;
     }
-    sprintf(theLookup,"node:%s:port:%s",GetString(interface.GetNode()),portName);
+    snprintf(theLookup,maxlen, "node:%s:port:%s",GetString(interface.GetNode()),portName);
     delete[] portName;
     return true;
 }
@@ -694,7 +694,7 @@ const char* ManetGraphMLParser::FindAttributeIndex(const char* theName)
 ManetGraphMLParser::AttributeKey* ManetGraphMLParser::FindAttributeKey(const char* theName)
 {
     return namedkeylist.Find(theName,strlen(theName)*8);
-} 
+}
 ManetGraphMLParser::AttributeKey* ManetGraphMLParser::FindAttributeKeyByOldIndex(const char* theOldIndex)
 {
     return oldindexkeylist.Find(theOldIndex,strlen(theOldIndex)*8);
@@ -715,7 +715,7 @@ ManetGraphMLParser::Attribute::Set(const char* theLookupvalue, const char* theIn
     }
     if(NULL != index)
     {
-        delete[] index; 
+        delete[] index;
         index = NULL;
     }
     if(NULL != value)
@@ -759,9 +759,9 @@ ManetGraphMLParser::Attribute::~Attribute()
     delete[] index;
     delete[] value;
 }
-bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr, 
-                                       NetGraph&        graph, 
-                                       char*            parentXMLNodeID, 
+bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
+                                       NetGraph&        graph,
+                                       char*            parentXMLNodeID,
                                        bool&            isDuplex)
 {
     //const xmlChar *name, *value;
@@ -777,7 +777,7 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
       name = BAD_CAST "--";
     //value = xmlTextReaderConstValue(readerPtr);
     //depth = xmlTextReaderDepth(readerPtr);
-    //isempty = xmlTextReaderIsEmptyElement(readerPtr); 
+    //isempty = xmlTextReaderIsEmptyElement(readerPtr);
     //count = xmlTextReaderAttributeCount(readerPtr);
     //printf("processsing depth=%d, type=%d, name=%s, isempty=%d, value=%s, attributes=%d\n",depth,type,name,isempty,value,count);
     if(!strcmp("graph",(const char*)name))
@@ -826,17 +826,17 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
             PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode: Error the node id value of \"%s\" is too large\n",nodeId);
             return false;
         }
-        memset(parentXMLNodeID, 0, MAXXMLIDLENGTH+1);       
+        memset(parentXMLNodeID, 0, MAXXMLIDLENGTH+1);
         strcpy(parentXMLNodeID,(const char*)nodeId);
-        
+
         NetGraph::Interface* interface;
         ProtoAddress addr;
         addr.ConvertFromString((const char*)nodeId);
         if(addr.IsValid())
         {
             interface = graph.FindInterface(addr);
-        } 
-        else 
+        }
+        else
         {
             interface = graph.FindInterfaceByName((const char*)nodeId);
         }
@@ -844,17 +844,17 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
         {
             //Create new node and associated interface
             NetGraph::Node* node = CreateNode();
-            
+
             if(NULL == node)
             {
                 PLOG(PL_ERROR, "NetGraph::ProcessXMLNode: error Creating new node!\n");
                 return -1;
-            }    
+            }
             if(addr.IsValid())
             {
                 interface = CreateInterface(*node,addr);
-            } 
-            else 
+            }
+            else
             {
                 interface = CreateInterface(*node);
                 interface->SetName((const char*)nodeId);
@@ -894,14 +894,14 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
                 PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode: Error finding the parent \"%s\" interface in the graph for port \"%s\"!\n",parentXMLNodeID,portname);
                 return false;
             }
-            
+
             NetGraph::Node& node = interface->GetNode();
             //NetGraph::Node *node = &interface->GetNode();
             if(portAddr.IsValid())
             {
                 portinterface = new NetGraph::Interface(node,portAddr);
-            } 
-            else 
+            }
+            else
             {
                 portinterface = CreateInterface(node);
                 portinterface->SetName((const char*)portname);
@@ -1027,30 +1027,34 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
 
         if(!strcmp((const char*)myxmlnode->parent->name,"node"))
         {
-            sprintf(newlookup,"node:%s",parentXMLNodeID);
-        } else if(!strcmp((const char*)myxmlnode->parent->name,"port")) {
+            snprintf(newlookup,250, "node:%s",parentXMLNodeID);
+        } 
+        else if(!strcmp((const char*)myxmlnode->parent->name,"port")) 
+        {
             xmlAttr* tempattribute = myxmlnode->parent->properties;
             const xmlChar *portName = NULL;
-            while(NULL != tempattribute) 
+            while(NULL != tempattribute)
             {
-                if(!strcmp((const char*)tempattribute->name,"name")) 
+                if(!strcmp((const char*)tempattribute->name,"name"))
                     portName = tempattribute->children->content;
                 tempattribute= tempattribute->next;
             }
-            sprintf(newlookup,"node:%s:port:%s",parentXMLNodeID,portName);
-            
-        } else if(!strcmp((const char*)myxmlnode->parent->name,"edge")) {
+            snprintf(newlookup,250, "node:%s:port:%s",parentXMLNodeID,portName);
+
+        } 
+        else if(!strcmp((const char*)myxmlnode->parent->name,"edge")) 
+        {
             xmlAttr* tempattribute = myxmlnode->parent->properties;
             const xmlChar *targetPortName(NULL), *sourcePortName(NULL), *targetName(NULL), *sourceName(NULL);
             while(NULL != tempattribute)
             {
-                if(!strcmp((const char*)tempattribute->name,"sourceport")) 
+                if(!strcmp((const char*)tempattribute->name,"sourceport"))
                     sourcePortName = tempattribute->children->content;
-                if(!strcmp((const char*)tempattribute->name,"targetport")) 
+                if(!strcmp((const char*)tempattribute->name,"targetport"))
                     targetPortName = tempattribute->children->content;
-                if(!strcmp((const char*)tempattribute->name,"source")) 
+                if(!strcmp((const char*)tempattribute->name,"source"))
                     sourceName = tempattribute->children->content;
-                if(!strcmp((const char*)tempattribute->name,"target")) 
+                if(!strcmp((const char*)tempattribute->name,"target"))
                     targetName = tempattribute->children->content;
                 tempattribute= tempattribute->next;
             }
@@ -1067,8 +1071,10 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
             {
                 targetPortName = targetName;
             }
-            sprintf(newlookup,"edge:source:%s:%s:dest:%s:%s",sourceName,sourcePortName,targetName,targetPortName);
-        } else {
+            snprintf(newlookup,250, "edge:source:%s:%s:dest:%s:%s",sourceName,sourcePortName,targetName,targetPortName);
+        } 
+        else 
+        {
             PLOG(PL_WARN,"ManetGraphMLParser::ReadXMLNode(): Ignoring data for unknown node type\n");
         }
         oldIndex = xmlTextReaderGetAttribute(readerPtr,(xmlChar*)"key");
@@ -1077,7 +1083,9 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
         {
             PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode(): found data with key type %s but it wasn't listed at one of the keys\n",oldIndex);
             return false;
-        } else {
+        } 
+        else 
+        {
             newIndex = tempakey->GetIndex();
             //printf("newIndex =%s\n",newIndex);
         }
@@ -1085,7 +1093,7 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
             return false;
         newValue = xmlTextReaderValue(readerPtr);
         //printf("found data for \"%s\" with key %s with value %s\n",newlookup,oldIndex,newValue);
-        
+
         Attribute* newAttribute = new Attribute();
         newAttribute->Init(newlookup,(const char*)newIndex,(const char*)newValue);
         //newAttribute->Init(newlookup,newIndex,(const char*)newValue);
@@ -1114,10 +1122,10 @@ bool ManetGraphMLParser::Read(const char* path, NetGraph& graph)
         PLOG(PL_ERROR,"ManetGraphMLParser::Read() xmlReaderForFile(%s) error: %s\n",path, GetErrorString());
         return false;
     }
-    
+
     bool isDuplex = true;
     char parentXMLNodeID[MAXXMLIDLENGTH+1];
-    memset(parentXMLNodeID, 0, MAXXMLIDLENGTH+1);       
+    memset(parentXMLNodeID, 0, MAXXMLIDLENGTH+1);
     int result = xmlTextReaderRead(readerPtr);
     while (1 == result)
     {
@@ -1127,7 +1135,7 @@ bool ManetGraphMLParser::Read(const char* path, NetGraph& graph)
             break;
         }
         result = xmlTextReaderRead(readerPtr);
-    } 
+    }
     xmlFreeTextReader(readerPtr);
     if (0 != result)
         PLOG(PL_ERROR,"ManetGraphMLParser::Read() error: invalid XML file %s\n", path);
@@ -1170,7 +1178,7 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
     if (returnvalue < 0) {
         PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error at xmlTextWriterWriteAttribute\n");
         return false;
-    } 
+    }
     if(!UpdateKeys(graph))
     {
         PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error updating key elements in the header\n");
@@ -1186,19 +1194,19 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
         PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error at writing graph attributes in header\n");
         return false;
     }
-    
+
     /* We are done with the header so now we go through the actual graph and add each node and edge */
     /* We are adding each node */
     returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "graph");
-    if (returnvalue < 0) 
+    if (returnvalue < 0)
     {
-        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error starting XML graph element\n"); 
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error starting XML graph element\n");
         return false;
     }
     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id",BAD_CAST XMLName);
-    if (returnvalue < 0) 
+    if (returnvalue < 0)
     {
-        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error setting XML graph attribute id\n"); 
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error setting XML graph attribute id\n");
         return false;
     }
     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "edgedefault",BAD_CAST "directed");
@@ -1215,9 +1223,9 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
         {
             //Node& node = static_cast<Node&>(iface->GetNode());
             returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "node");
-            if (returnvalue < 0) 
+            if (returnvalue < 0)
             {
-               PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding XML node\n"); 
+               PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding XML node\n");
                return false;
             }
             if(iface->GetAddress().IsValid())
@@ -1225,19 +1233,19 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                 returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id", BAD_CAST iface->GetAddress().GetHostString());
                 //printf("writing node %s\n",iface->GetAddress().GetHostString());
             }
-            else 
+            else
             {
                 returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id", BAD_CAST iface->GetName());
                 //printf("writing node %s\n",iface->GetName());
             }
             if (returnvalue < 0) { PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding setting node id\n"); return false;}
-            
+
             //update the node attributes using the virtual function
             if(!UpdateNodeAttributes(iface->GetNode()))
             {
                 PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the node attributes\n");
                 return false;
-            } 
+            }
             //call the local function write the attributes out
             if(!WriteLocalNodeAttributes(writerPtr,iface->GetNode()))
             {
@@ -1262,24 +1270,24 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
 //                if(portIface->IsPort())
                 {
                     returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "port");
-                    if (returnvalue < 0) 
+                    if (returnvalue < 0)
                     {
-                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding XML node\n"); 
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding XML node\n");
                         return false;
                     }
                     if(portIface->GetAddress().IsValid())
                     {
                         returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "name", BAD_CAST portIface->GetAddress().GetHostString());
                         //printf("writing interface %s\n",iface->GetAddress().GetHostString());
-                    } 
-                    else 
+                    }
+                    else
                     {
                         returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "name", BAD_CAST portIface->GetName());
                         //printf("writing node %s\n",iface->GetName());
-                    } 
-                    if (returnvalue < 0) 
+                    }
+                    if (returnvalue < 0)
                     {
-                         PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding setting node id\n"); 
+                         PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding setting node id\n");
                          return false;
                     }
                     //update attributes to the port/interface using the virutal function
@@ -1287,7 +1295,7 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                     {
                         PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the interface attributes\n");
                         return false;
-                    } 
+                    }
                     //write the attributes to the port/interface
                     if(!WriteLocalInterfaceAttributes(writerPtr,*portIface))
                     {
@@ -1301,18 +1309,18 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                         return false;
                     }*/
                     returnvalue = xmlTextWriterEndElement(writerPtr);
-                    if (returnvalue < 0) 
+                    if (returnvalue < 0)
                     {
-                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error ending node element\n"); 
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error ending node element\n");
                         return false;
                     }
                 }
             }
             //close up the node node element
             returnvalue = xmlTextWriterEndElement(writerPtr);
-            if (returnvalue < 0) 
+            if (returnvalue < 0)
             {
-                PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error ending node element\n"); 
+                PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error ending node element\n");
                 return false;
             }
         }
@@ -1329,36 +1337,36 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
             while (NULL != (nbrIface = iteratorN1.GetNextAdjacency()))
             {
                 returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "edge");
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
                     PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding edge\n"); return false;
                 }
-                if(iface->GetAddress().IsValid()) 
+                if(iface->GetAddress().IsValid())
                 {
                     //printf("writing connection %s ->",iface->GetAddress().GetHostString());
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetAddress().GetHostString());
-                }else 
-                { 
+                }else
+                {
                     //printf("writing connection %s ->",iface->GetName());
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetName());
                 }
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
                     return false;
                 }
                 if(nbrIface->GetAddress().IsValid()) {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetAddress().GetHostString());
                     ////printf("%s\n",nbrIface->GetAddress().GetHostString());
-                } 
-                else 
+                }
+                else
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetName());
                     ////printf("%s\n",nbrIface->GetName());
                 }
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
                     return false;
                 }
                 NetGraph::Link* link = iface->GetLinkTo(*nbrIface);
@@ -1372,7 +1380,7 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                 {
                     PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the link attributes\n");
                     return false;
-                } 
+                }
                 //actually write the attributes out
                 if(!WriteLocalLinkAttributes(writerPtr,*link))
                 {
@@ -1380,12 +1388,12 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                     return false;
                 }
                 returnvalue = xmlTextWriterEndElement(writerPtr);
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error ending node element\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error ending node element\n");
                     return false;
                 }
-            } 
+            }
         }
         else //it is a port interface so we need to find the "node" interface
         {
@@ -1397,7 +1405,7 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                 PLOG(PL_ERROR,"ManetGraphMLParser::Write Error the default interface was not the \"node\" interface for the src.  You should iterate over them all and find the right one\n");
                 return false;
             }
-            
+
             NetGraph::AdjacencyIterator iteratorN1(*iface);
             NetGraph::Interface* nbrIface, *nbrNodeIface;
             while (NULL != (nbrIface = iteratorN1.GetNextAdjacency()))
@@ -1411,61 +1419,61 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                     return false;
                 }
                 returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "edge");
-                if (returnvalue < 0) 
-                { 
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding edge\n"); 
+                if (returnvalue < 0)
+                {
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding edge\n");
                     return false;
                 }
-                if(nodeIface->GetAddress().IsValid()) 
+                if(nodeIface->GetAddress().IsValid())
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST nodeIface->GetAddress().GetHostString());
-                } 
-                else 
-                { 
+                }
+                else
+                {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST nodeIface->GetName());
                 }
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
                     return false;
                 }
-                if(nbrNodeIface->GetAddress().IsValid()) 
+                if(nbrNodeIface->GetAddress().IsValid())
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrNodeIface->GetAddress().GetHostString());
-                } 
-                else 
+                }
+                else
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrNodeIface->GetName());
                 }
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
                     return false;
                 }
-                if(iface->GetAddress().IsValid()) 
+                if(iface->GetAddress().IsValid())
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "sourceport", BAD_CAST iface->GetAddress().GetHostString());
-                } 
-                else 
-                { 
+                }
+                else
+                {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "sourceport", BAD_CAST iface->GetName());
                 }
                 if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
                     return false;
                 }
                 if(nbrIface->GetAddress().IsValid())
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "targetport", BAD_CAST nbrIface->GetAddress().GetHostString());
                 }
-                else 
+                else
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "targetport", BAD_CAST nbrIface->GetName());
                 }
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
                     return false;
                 }
 
@@ -1481,22 +1489,22 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                     PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the link attributes\n");
                     return false;
                 }
-                //actually write the attributes out 
+                //actually write the attributes out
                 if(!WriteLocalLinkAttributes(writerPtr,*link))
                 {
                     PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing link attributes\n");
                     return false;
                 }
                 returnvalue = xmlTextWriterEndElement(writerPtr);
-                if (returnvalue < 0) 
+                if (returnvalue < 0)
                 {
-                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error ending node element\n"); 
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write Error ending node element\n");
                     return false;
                 }
-            } 
+            }
         }
     }
- 
+
     returnvalue = xmlTextWriterEndDocument(writerPtr);
     if (returnvalue < 0) { PLOG(PL_ERROR,"ManetGraphMLParser::Write:testXmlwriterPtrDoc: Error at xmlTextWriterEndDocument\n"); return false;}
 
@@ -1512,7 +1520,7 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
         //xmlSaveFormatFileTo(&xmlbuff,docPtr,MY_GRAPHML_ENCODING,1);
         //if (xmlbuff.written > (int)*len_ptr){
         //    DMSG(0,"bunny in buffer section\n");
-        
+
         xmlChar* tempout;
         int size;
         xmlDocDumpFormatMemoryEnc(docPtr,&tempout,&size,MY_GRAPHML_ENCODING,1);
@@ -1527,11 +1535,11 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
         xmlCleanupParser();
     }
     xmlFreeDoc(docPtr);
- 
+
     return true;
 }  // end ManetGraphMLParser::Write()
 
-ManetGraphMLParser::Attribute* 
+ManetGraphMLParser::Attribute*
 ManetGraphMLParser::AttributeList::FindAttribute(const char *theLookup,const char* theIndex)
 {
     AttributeList::Iterator it(*this,false,theLookup,strlen(theLookup)*8);
@@ -1543,8 +1551,8 @@ ManetGraphMLParser::AttributeList::FindAttribute(const char *theLookup,const cha
         {
             attr = NULL;
             //we didn't find the entry
-        } 
-        else 
+        }
+        else
         {
             if(strcmp(attr->GetIndex(),theIndex))
             {
@@ -1626,7 +1634,7 @@ bool  ManetGraphMLParser::WriteLocalNodeAttributes(xmlTextWriter* writerPtr,NetG
     PLOG(PL_DETAIL,"ManetGraphMLParser::WriteLocalNodeAttributes: Enter\n");
     bool rv = true;
     char key[255];//this should be dynamic or checks added TBD
-    sprintf(key,"node:%s",GetString(theNode));
+    snprintf(key,255, "node:%s",GetString(theNode));
     AttributeList::Iterator it(attributelist,false,key,strlen(key)*8);
     Attribute* attr(NULL);
     //iterate over items which have the matching keys
@@ -1638,8 +1646,8 @@ bool  ManetGraphMLParser::WriteLocalNodeAttributes(xmlTextWriter* writerPtr,NetG
             //PLOG(PL_DETAIL,"ManetGraphMLParser::WriteLocalNodeAttributes():mykey=\"%s\",lookup=\"%s\",key=\"%s\",value=\"%s\"\n",key,attr->GetLookup(),attr->GetIndex(),attr->GetValue());
             attr = NULL;
             //attr = it.GetNextItem();
-        } 
-        else 
+        }
+        else
         {
             rv += xmlTextWriterStartElement(writerPtr, BAD_CAST "data");
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "key",BAD_CAST attr->GetIndex());
@@ -1657,12 +1665,12 @@ bool  ManetGraphMLParser::WriteLocalAttributes(xmlTextWriter* writerPtr)
     PLOG(PL_DETAIL,"ManetGraphMLParser::WriteLocalAttributes: Enter\n");
     bool rv = true;
     char key[255];//this should be dynamic or checks added TBD
-    sprintf(key,"thisGraph");
+    snprintf(key,255, "thisGraph");
     AttributeList::Iterator it(attributelist,false,key,strlen(key)*8);
     //AttributeList::Iterator it(attributelist);
-    
+
     Attribute* attr(NULL);
-    
+
     //iterate over items which have the matching keys
     attr = it.GetNextItem();
     while(NULL != attr)
@@ -1672,8 +1680,8 @@ bool  ManetGraphMLParser::WriteLocalAttributes(xmlTextWriter* writerPtr)
             //PLOG(PL_DETAIL,"ManetGraphMLParser::WriteLocalAttributes():mykey=\"%s\",lookup=\"%s\",key=\"%s\",value=\"%s\"\n",key,attr->GetLookup(),attr->GetIndex(),attr->GetValue());
             attr = NULL;
             //attr = it.GetNextItem();
-        } 
-        else 
+        }
+        else
         {
             rv += xmlTextWriterStartElement(writerPtr, BAD_CAST "data");
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "key",BAD_CAST attr->GetIndex());
@@ -1690,8 +1698,8 @@ bool ManetGraphMLParser::WriteLocalInterfaceAttributes(xmlTextWriter* writerPtr,
 {
     bool rv = true;
     char key[255];//this should be dynamic or checks added TBD
-    sprintf(key,"node:%s",GetString(theInterface.GetNode()));
-    sprintf(key,"%s:port:%s",key,GetString(theInterface));
+    snprintf(key,255, "node:%s",GetString(theInterface.GetNode()));
+    snprintf(key,255, "%s:port:%s",key,GetString(theInterface));
     AttributeList::Iterator it(attributelist,false,key,strlen(key)*8);
     Attribute* attr(NULL);
     attr = it.GetNextItem();
@@ -1700,8 +1708,8 @@ bool ManetGraphMLParser::WriteLocalInterfaceAttributes(xmlTextWriter* writerPtr,
         if(strcmp(attr->GetLookup(),key))
         {
             attr = NULL;
-        } 
-        else 
+        }
+        else
         {
             rv += xmlTextWriterStartElement(writerPtr, BAD_CAST "data");
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "key",BAD_CAST attr->GetIndex());
@@ -1718,11 +1726,11 @@ bool ManetGraphMLParser::WriteLocalLinkAttributes(xmlTextWriter* writerPtr,NetGr
     PLOG(PL_DETAIL,"ManetGraphMLParser::WriteLocalLinkAttributes()\n");
     bool rv = true;
     char key[255];//this should be dynamic or checkes added TBD
-    sprintf(key,"edge:source:%s",GetString(theLink.GetSrc()->GetNode()));
-    sprintf(key,"%s:%s",key,GetString(*theLink.GetSrc()));
-    sprintf(key,"%s:dest:%s",key,GetString(theLink.GetDst()->GetNode()));
-    sprintf(key,"%s:%s",key,GetString(*theLink.GetDst()));
-    
+    snprintf(key,255, "edge:source:%s",GetString(theLink.GetSrc()->GetNode()));
+    snprintf(key,255, "%s:%s",key,GetString(*theLink.GetSrc()));
+    snprintf(key,255, "%s:dest:%s",key,GetString(theLink.GetDst()->GetNode()));
+    snprintf(key,255, "%s:%s",key,GetString(*theLink.GetDst()));
+
     AttributeList::Iterator it(attributelist,false,key,strlen(key)*8);
     Attribute* attr(NULL);
     attr = it.GetNextItem();
@@ -1731,8 +1739,8 @@ bool ManetGraphMLParser::WriteLocalLinkAttributes(xmlTextWriter* writerPtr,NetGr
         if(strcmp(attr->GetLookup(),key))
         {
             attr = NULL;
-        } 
-        else 
+        }
+        else
         {
             rv += xmlTextWriterStartElement(writerPtr, BAD_CAST "data");
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "key",BAD_CAST attr->GetIndex());
