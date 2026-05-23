@@ -19,23 +19,23 @@
 // in "src/common/protoNet.cpp"
 
 
-// This class wraps around a netlink socket to provide methods for 
+// This class wraps around a netlink socket to provide methods for
 // sending/receiving netlink messages for different purposes.
 class ProtoNetlink
 {
     public:
         ProtoNetlink();
         ~ProtoNetlink();
-        
+
         bool Open();
         void Close();
-        
+
         UINT32 GetPortId() const
             {return port_id;}
-        
+
         bool SendRequest(void* req, size_t len);
         bool RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int* msgSize);
-        
+
     private:
         int     descriptor;
         UINT32  port_id;  // aka netlink pid (not process id)
@@ -75,8 +75,8 @@ bool ProtoNetlink::Open()
     }
     // Get socket name so we know our port number (i.e. netlink pid)
     socklen_t addrLen = sizeof(localAddr);
-    if (getsockname(descriptor, (struct sockaddr*)&localAddr, &addrLen) < 0) 
-    {    
+    if (getsockname(descriptor, (struct sockaddr*)&localAddr, &addrLen) < 0)
+    {
         PLOG(PL_ERROR, "ProtoNetlink::Open()  getsockname() error: %s\n", GetErrorString());
         Close();
         return false;
@@ -129,8 +129,8 @@ bool ProtoNetlink::SendRequest(void* req, size_t len)
         else
         {
             return true;
-        } 
-    }  
+        }
+    }
 }  // end ProtoNetlink::SendRequest()
 
 bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int* msgSize)
@@ -160,7 +160,7 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
         {
             PLOG(PL_ERROR, "ProtoNetlink::RecvResponse() new nlmsghdr[] error: %s\n", GetErrorString());
             return false;
-        }   
+        }
         for (;;)
         {
             // init iovec struct
@@ -168,7 +168,7 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
             io.iov_base = buffer;
             io.iov_len = bufsize*sizeof(struct nlmsghdr);
             struct sockaddr_nl addr;
-            // init msghdr struct for recvmsg() 
+            // init msghdr struct for recvmsg()
             struct msghdr msg;
             msg.msg_iov = &io;
             msg.msg_iovlen = 1;
@@ -177,7 +177,7 @@ bool ProtoNetlink::RecvResponse(UINT32 seq, struct nlmsghdr** bufferHandle, int*
             msg.msg_control = NULL;
             msg.msg_controllen = 0;
             msg.msg_flags = 0;
-               
+
             ssize_t result = recvmsg(descriptor, &msg, 0);
             if (result < 0)
             {
@@ -298,12 +298,12 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() ioctl(SIOCGIFHWADDR) error: %s\n",
                     GetErrorString());
             close(socketFd);
-            return false;   
-        }  
+            return false;
+        }
         else
         {
             close(socketFd);
-            if (NULL != interfaceIndex) 
+            if (NULL != interfaceIndex)
                 *interfaceIndex = req.ifr_ifindex;
             ProtoAddress ethAddr;
             if (!ethAddr.SetRawHostAddress(ProtoAddress::ETH,
@@ -312,16 +312,16 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             {
                 PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: invalid ETH addr?\n");
                 return false;
-            }   
+            }
             if (!addrList.Insert(ethAddr))
             {
                 PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unable to add ETH addr to list.\n");
                 return false;
             }
-            return true;            
+            return true;
         }
     }
-    
+
     unsigned int ifIndex = GetInterfaceIndex(interfaceName);
     if (0 == ifIndex)
     {
@@ -343,39 +343,39 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: unable to open netlink socket\n");
         return false;
     }
-    
+
     // Construct request for interface addresses
     struct
     {
         struct nlmsghdr     msg;
-        struct ifaddrmsg    ifa;   
+        struct ifaddrmsg    ifa;
     } req;
     memset(&req, 0, sizeof(req));
-    
+
     // fixed sequence number for single request
     UINT32 seq = 1;
-    
+
     // netlink message header
     req.msg.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
     req.msg.nlmsg_type = RTM_GETADDR;
     req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_MATCH ;
     req.msg.nlmsg_seq = seq; // fixed sequence number for single request
     req.msg.nlmsg_pid = nlink.GetPortId();
-    
+
     // route dump request for given addressType and interface index
     unsigned int addrLength = 0;
     unsigned char addrFamily = AF_UNSPEC;
     switch (addressType)
     {
         case ProtoAddress::IPv4:
-            
+
             addrFamily = req.ifa.ifa_family = AF_INET;
             req.ifa.ifa_prefixlen = 32;
             addrLength = 4;
             break;
 #ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
-            
+
             addrFamily = req.ifa.ifa_family = AF_INET6;
             req.ifa.ifa_prefixlen = 128;
             addrLength = 16;
@@ -403,12 +403,12 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
         if (nlink.RecvResponse(seq, &buffer, &msgLen))
         {
             struct nlmsghdr* msg = buffer;
-            // Parse response, adding matching addresses for "addressType" and "ifIndex"  
+            // Parse response, adding matching addresses for "addressType" and "ifIndex"
             for (; 0 != NLMSG_OK(msg, (unsigned int)msgLen); msg = NLMSG_NEXT(msg, msgLen))
             {
                 // only pay attention to matching netlink responses received
                 if ((msg->nlmsg_pid != nlink.GetPortId()) || (msg->nlmsg_seq != seq))
-                    continue;  
+                    continue;
                 switch (msg->nlmsg_type)
                 {
                     case NLMSG_NOOP:
@@ -424,7 +424,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                         }
                         else
                         {
-                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
+                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n",
                                            msg->nlmsg_seq, errorMsg->error);
                             delete[] buffer;
                             return false;
@@ -446,12 +446,12 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                             {
                                 case IFA_ADDRESS:
                                 case IFA_LOCAL:
-                                {   
+                                {
                                     if ((ifa->ifa_index == ifIndex) && (ifa->ifa_family == addrFamily))
                                     {
                                         switch (ifa->ifa_scope)
                                         {
-                                            case RT_SCOPE_UNIVERSE: 
+                                            case RT_SCOPE_UNIVERSE:
                                             {
                                                 ProtoAddress theAddress;
                                                 theAddress.SetRawHostAddress(addressType, (char*)RTA_DATA(rta), addrLength);
@@ -464,7 +464,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                                                     }
                                                 }
                                                 break;
-                                            }                             
+                                            }
                                             case RT_SCOPE_SITE:
                                             case RT_SCOPE_LINK:
                                             case RT_SCOPE_HOST:
@@ -494,16 +494,16 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
                                     break;
                                 }
                                 default:
-                                    //TRACE("ProtoNet::GetInterfaceAddressList() unhandled rtattr type:%d len:%d\n", 
+                                    //TRACE("ProtoNet::GetInterfaceAddressList() unhandled rtattr type:%d len:%d\n",
                                     //       rta->rta_type, RTA_PAYLOAD(rta));
                                     break;
-                                
+
                             }  // end switch(rta_type)
                         }  // end for(RTA_NEXT())
                         break;
                     }
                     default:
-                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() matching reply type:%d len:%d bytes\n", 
+                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() matching reply type:%d len:%d bytes\n",
                                 msg->nlmsg_type, msg->nlmsg_len);
                         break;
                 }  // end switch(nlmsg_type)
@@ -526,7 +526,7 @@ bool ProtoNet::GetInterfaceAddressList(const char*         interfaceName,
             PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: couldn't add localAddr to addrList\n");
             break;
         }
-    }    
+    }
     nlink.Close();
     return true;
 }  // end ProtoNet::GetInterfaceAddressList()
@@ -546,7 +546,7 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() error: invalid interface name\n");
         return false;
     }
-    return GetInterfaceAddressMask(ifaceIndex, theAddr);
+    return GetInterfaceAddressMask(ifIndex, theAddr);
 }  // end ProtoNet::GetInterfaceAddressMask()
 
 unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const ProtoAddress& theAddr)
@@ -562,32 +562,32 @@ unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const Pr
     struct
     {
         struct nlmsghdr     msg;
-        struct ifaddrmsg    ifa;   
+        struct ifaddrmsg    ifa;
     } req;
     memset(&req, 0, sizeof(req));
-    
+
     // fixed sequence number for single request
     UINT32 seq = 1;
-    
+
     // netlink message header
     req.msg.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
     req.msg.nlmsg_type = RTM_GETADDR;
     req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_MATCH ;
     req.msg.nlmsg_seq = seq; // fixed sequence number for single request
     req.msg.nlmsg_pid = nlink.GetPortId();
-    
+
     // route dump request for given addressType and interface index
     unsigned char addrFamily = AF_UNSPEC;
     switch (theAddr.GetType())
     {
         case ProtoAddress::IPv4:
-            
+
             addrFamily = req.ifa.ifa_family = AF_INET;
             req.ifa.ifa_prefixlen = 32;
             break;
 #ifdef HAVE_IPV6
         case ProtoAddress::IPv6:
-            
+
             addrFamily = req.ifa.ifa_family = AF_INET6;
             req.ifa.ifa_prefixlen = 128;
             break;
@@ -614,12 +614,12 @@ unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const Pr
         if (nlink.RecvResponse(seq, &buffer, &msgLen))
         {
             struct nlmsghdr* msg = buffer;
-            // Parse response, adding matching addresses for "addressType" and "ifIndex"  
+            // Parse response, adding matching addresses for "addressType" and "ifIndex"
             for (; 0 != NLMSG_OK(msg, (unsigned int)msgLen); msg = NLMSG_NEXT(msg, msgLen))
             {
                 // only pay attention to matching netlink responses received
                 if ((msg->nlmsg_pid != nlink.GetPortId()) || (msg->nlmsg_seq != seq))
-                    continue;  
+                    continue;
                 switch (msg->nlmsg_type)
                 {
                     case NLMSG_NOOP:
@@ -634,7 +634,7 @@ unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const Pr
                         }
                         else
                         {
-                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
+                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() recvd NLMSG_ERROR error seq:%d code:%d...\n",
                                        msg->nlmsg_seq, errorMsg->error);
                             delete[] buffer;
                             return false;
@@ -658,7 +658,7 @@ unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const Pr
                                 case IFA_ADDRESS:
                                 case IFA_LOCAL:
                                 case IFA_BROADCAST:
-                                {   
+                                {
                                     if ((ifa->ifa_index == ifIndex) && (ifa->ifa_family == addrFamily))
                                     {
                                         ProtoAddress addr;
@@ -675,16 +675,16 @@ unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const Pr
                                     break;
                                 }
                                 default:
-                                    //TRACE("ProtoNet::GetInterfaceAddressList() unhandled rtattr type:%d len:%d\n", 
+                                    //TRACE("ProtoNet::GetInterfaceAddressList() unhandled rtattr type:%d len:%d\n",
                                     //       rta->rta_type, RTA_PAYLOAD(rta));
                                     break;
-                                
+
                             }  // end switch(rta_type)
                         }  // end for(RTA_NEXT())
                         break;
                     }
                     default:
-                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() matching reply type:%d len:%d bytes\n", 
+                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceAddressList() matching reply type:%d len:%d bytes\n",
                                 msg->nlmsg_type, msg->nlmsg_len);
                         break;
                 }  // end switch(nlmsg_type)
@@ -743,13 +743,13 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
                 PLOG(PL_ERROR, "ProtoNet::GetGroupMemberships() error: /proc/net/igmp line length exceeds max expected!\n");
                 fclose(filePtr);
                 return false;
-            }     
+            }
             if (0 != skipCount)
             {
                 skipCount--;
                 continue;
             }
-            buffer[len+1] = '\0';  // apply NULL terminator    
+            buffer[len+1] = '\0';  // apply NULL terminator
             if (seekingIface)
             {
                 ProtoTokenator tk(buffer);
@@ -796,7 +796,7 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
                         }
                     }
                     index++;
-                }      
+                }
                 if (index < 3)
                 {
                     PLOG(PL_ERROR, "ProtoNet::GetGroupMemberships() error: no 'Count' for iface %s?\n", ifaceName);
@@ -804,7 +804,7 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
                     return false;
                 }
             }
-            else 
+            else
             {
                 ASSERT(0 != numGroups);
                 ProtoTokenator tk(buffer);
@@ -830,7 +830,7 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
                     fclose(filePtr);
                     return true;
                 }
-            } 
+            }
         }
         fclose(filePtr);
         if (0 != numGroups)
@@ -841,7 +841,7 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
         else if (seekingIface)
         {
             PLOG(PL_WARN, "ProtoNet::GetGroupMemberships() warning: requested interface %s not listed?!\n", ifaceName);
-        }       
+        }
         else
         {
             ASSERT(0);  // shouldn't get here
@@ -874,13 +874,13 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
                         match = true;
                     else
                         break;
-                }             
+                }
                 else if (2 == index)
                 {
                     ASSERT(match);
                     break;  // 'next' points to address string
-                }    
-                index++;      
+                }
+                index++;
             }  // end while (tk.GetNextItem())
             if (match)
             {
@@ -943,30 +943,30 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: unable to open netlink socket\n");
         return IFACE_INVALID_TYPE;
     }
-    
+
     // Construct request for interface information
-    struct 
+    struct
     {
         struct nlmsghdr  nlh;
         struct ifinfomsg ifi;
     } req;
     memset(&req, 0, sizeof(req));
-    
+
     // fixed sequence number for single request
     UINT32 seq = 1;
-    
+
     req.nlh.nlmsg_len   = NLMSG_LENGTH(sizeof(struct ifinfomsg));
     req.nlh.nlmsg_type  = RTM_GETLINK;
     req.nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
     req.nlh.nlmsg_seq   = seq;
     req.ifi.ifi_index   = ifaceIndex;
-    
+
     if (!nlink.SendRequest(&req, sizeof(req)))
     {
         PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() error: unable to send netlink request\n");
         return IFACE_INVALID_TYPE;
     }
-    
+
     bool done = false;
     while (!done)
     {
@@ -975,12 +975,12 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
         if (nlink.RecvResponse(seq, &buffer, &msgLen))
         {
             struct nlmsghdr* msg = buffer;
-            // Parse response, adding matching addresses for "addressType" and "ifIndex"  
+            // Parse response, adding matching addresses for "addressType" and "ifIndex"
             for (; 0 != NLMSG_OK(msg, (unsigned int)msgLen); msg = NLMSG_NEXT(msg, msgLen))
             {
                 // only pay attention to matching netlink responses received
                 if ((msg->nlmsg_pid != nlink.GetPortId()) || (msg->nlmsg_seq != seq))
-                    continue;  
+                    continue;
                 switch (msg->nlmsg_type)
                 {
                     case NLMSG_NOOP:
@@ -995,7 +995,7 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                         }
                         else
                         {
-                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() recvd NLMSG_ERROR error seq:%d code:%d...\n", 
+                            PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() recvd NLMSG_ERROR error seq:%d code:%d...\n",
                                            msg->nlmsg_seq, errorMsg->error);
                             delete[] buffer;
                             return IFACE_INVALID_TYPE;
@@ -1014,17 +1014,17 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                         struct rtattr* attr;
                         for (attr = IFLA_RTA(ifi); RTA_OK(attr, rtalen); attr = RTA_NEXT(attr, rtalen))
                         {
-                            if (attr->rta_type == IFLA_LINKINFO) 
+                            if (attr->rta_type == IFLA_LINKINFO)
                             {
                                 /* tunnel info lives here */
                                 int infolen = RTA_PAYLOAD(attr);
                                 struct rtattr* linkinfo;
-                                for (linkinfo = (struct rtattr*)RTA_DATA(attr); RTA_OK(linkinfo, infolen); linkinfo = RTA_NEXT(linkinfo, infolen)) 
+                                for (linkinfo = (struct rtattr*)RTA_DATA(attr); RTA_OK(linkinfo, infolen); linkinfo = RTA_NEXT(linkinfo, infolen))
                                 {
                                     if (IFLA_INFO_KIND == linkinfo->rta_type)
                                     {
                                         const char* kind = (const char*)RTA_DATA(linkinfo);
-                                        if (0 == strcmp("gre", kind)) 
+                                        if (0 == strcmp("gre", kind))
                                         {
                                             ifaceType = IFACE_GRE;
                                         }
@@ -1043,12 +1043,12 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                                             break;
                                         }
                                     }
-                                    else if (IFLA_INFO_DATA == linkinfo->rta_type) 
+                                    else if (IFLA_INFO_DATA == linkinfo->rta_type)
                                     {
-                                        // nested tunnel parameters 
+                                        // nested tunnel parameters
                                         struct rtattr *a;
                                         int l = RTA_PAYLOAD(linkinfo);
-                                        for (a = (struct rtattr*)RTA_DATA(linkinfo); RTA_OK(a, l); a = RTA_NEXT(a, l)) 
+                                        for (a = (struct rtattr*)RTA_DATA(linkinfo); RTA_OK(a, l); a = RTA_NEXT(a, l))
                                         {
                                             int alen = RTA_PAYLOAD(a);
                                             if ((IFLA_GRE_LOCAL == a->rta_type) && (NULL != localAddr))
@@ -1089,10 +1089,10 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                         break;
                     }
                     default:
-                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() matching reply type:%d len:%d bytes\n", 
+                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceType() matching reply type:%d len:%d bytes\n",
                                 msg->nlmsg_type, msg->nlmsg_len);
                         break;
-                    
+
                 }  // end switch()
                 if (done) break;
             }  // end for NLMSG_NEXT()
@@ -1112,42 +1112,42 @@ class LinuxNetMonitor : public ProtoNet::Monitor
     public:
         LinuxNetMonitor();
         ~LinuxNetMonitor();
-        
+
         bool Open();
         void Close();
         bool GetNextEvent(Event& theEvent);
-        
+
     private:
-        // Since a Linux netlink message may have multiple 
+        // Since a Linux netlink message may have multiple
         // network interface events, we cache them in a linked
-        // list for retrieval by the GetNextEvent() method    
+        // list for retrieval by the GetNextEvent() method
         class EventItem : public Event, public ProtoList::Item
         {
             public:
                 EventItem();
                 ~EventItem();
-        };  // end class LinuxNetMonitor::EventItem         
-        class EventList : public ProtoListTemplate<EventItem> {};  
-        
+        };  // end class LinuxNetMonitor::EventItem
+        class EventList : public ProtoListTemplate<EventItem> {};
+
         class Interface : public ProtoTree::Item
         {
             public:
                 Interface(unsigned int index, const char* name);
                 ~Interface();
-                
+
                 void SetName(const char* ifName)
-                    {strncpy(iface_name, ifName, IFNAMSIZ);} 
+                    {strncpy(iface_name, ifName, IFNAMSIZ);}
                 const char* GetName() const
                     {return iface_name;}
                 unsigned int GetIndex() const
                     {return iface_index;}
-                
+
             private:
                 const char* GetKey() const
-                    {return ((const char*)&iface_index);}   
+                    {return ((const char*)&iface_index);}
                 unsigned int GetKeysize() const
-                    {return (sizeof(unsigned int) << 3);} 
-                    
+                    {return (sizeof(unsigned int) << 3);}
+
                 char            iface_name[IFNAMSIZ+1];
                 unsigned int    iface_name_bits;
                 unsigned int    iface_index;
@@ -1158,11 +1158,11 @@ class LinuxNetMonitor : public ProtoNet::Monitor
                 Interface* FindInterface(unsigned int ifIndex)
                     {return Find((char*)&ifIndex, sizeof(unsigned int) << 3);}
         };
-        
+
         InterfaceList   iface_list;
         EventList       event_list;
         EventList       event_pool;
-            
+
 };  // end class LinuxNetMonitor
 
 
@@ -1183,7 +1183,7 @@ ProtoNet::Monitor* ProtoNet::Monitor::Create()
 {
     return static_cast<ProtoNet::Monitor*>(new LinuxNetMonitor);
 }  // end ProtoNet::Monitor::Create()
-        
+
 LinuxNetMonitor::LinuxNetMonitor()
 {
 }
@@ -1197,13 +1197,13 @@ bool LinuxNetMonitor::Open()
     if (IsOpen()) Close();
     if (0 > (descriptor = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE)))
     {
-        PLOG(PL_ERROR, "LinuxNetMonitor::Open() socket() error: %s\n", 
+        PLOG(PL_ERROR, "LinuxNetMonitor::Open() socket() error: %s\n",
                 GetErrorString());
         return false;
-    }    
-    
+    }
+
     // Send a netlink request message to subscribe to the
-    // RTMGRP_IPV4_IFADDR and RTMGRP_IPV6_IFADDR groups for 
+    // RTMGRP_IPV4_IFADDR and RTMGRP_IPV6_IFADDR groups for
     // network interface status update messages
     struct sockaddr_nl localAddr;
     localAddr.nl_family = AF_NETLINK;
@@ -1211,7 +1211,7 @@ bool LinuxNetMonitor::Open()
 	localAddr.nl_groups |= RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR;// | RTMGRP_IPV6_IFINFO;
 	if (0 > bind(descriptor, (struct sockaddr*) &localAddr, sizeof(localAddr)))
     {
-        PLOG(PL_ERROR, "LinuxNetMonitor::Open() bind() error: %s\n", 
+        PLOG(PL_ERROR, "LinuxNetMonitor::Open() bind() error: %s\n",
                 GetErrorString());
         Close();
         return false;
@@ -1242,7 +1242,7 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
     theEvent.SetType(Event::UNKNOWN_EVENT);
     theEvent.SetInterfaceIndex(0);
     theEvent.AccessAddress().Invalidate();
-    
+
     // 1) Get next event from list or recv() from netlink
     EventItem* eventItem = event_list.RemoveHead();
     if (NULL == eventItem)
@@ -1361,8 +1361,8 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
                 default:
                     //TRACE("OTHER message type %d\n", nlh->nlmsg_type);
                     break;
-            }  // end switch(nlh->nlmsg_type) 
-            
+            }  // end switch(nlh->nlmsg_type)
+
             if (NULL != eventItem)
             {
                 // We enqueued and event, we need to set its interface name if possible
@@ -1389,7 +1389,7 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
                     {
                         if (NULL != iface) eventItem->SetInterfaceName(iface->GetName());
                         PLOG(PL_ERROR, "LinuxNetMonitor::GetNextEvent() warning: unable to get interface name for index %d\n", ifIndex);
-                    }                    
+                    }
                 }
                 if ((Event::IFACE_DOWN == eventItem->GetType()) && (NULL != iface))
                 {
@@ -1398,8 +1398,8 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
                     delete iface;
                 }
             }
-            
-            
+
+
         }  // end for NLMSG_OK ...
         eventItem = event_list.RemoveHead();
     }  // end if (NULL == eventItem)
@@ -1408,7 +1408,7 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
         theEvent.SetType(Event::NULL_EVENT);
     }
     else
-    {    
+    {
         theEvent = static_cast<Event&>(*eventItem);
         event_pool.Append(*eventItem);
     }
