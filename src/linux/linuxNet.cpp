@@ -549,7 +549,7 @@ unsigned int ProtoNet::GetInterfaceAddressMask(const char* ifaceName, const Prot
     return GetInterfaceAddressMask(ifIndex, theAddr);
 }  // end ProtoNet::GetInterfaceAddressMask()
 
-unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifaceIndex, const ProtoAddress& theAddr)
+unsigned int ProtoNet::GetInterfaceAddressMask(unsigned int ifIndex, const ProtoAddress& theAddr)
 {
     // Instantiate a netlink socket and open it
     ProtoNetlink nlink;
