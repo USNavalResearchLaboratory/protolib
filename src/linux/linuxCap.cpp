@@ -3,7 +3,6 @@
 #include "protoDebug.h"
 #include "protoSocket.h"
 #include "protoNet.h"
-
 #include "protoPktIP.h"
 #include "protoPktETH.h"
 #include "protoPktGRE.h"

@@ -27,7 +27,7 @@
 #include <errno.h>   // for errno
 #endif // if/else WIN32/UNIX
 
-enum ProtoDebugLevel {PL_FATAL, PL_ERROR, PL_WARN, PL_INFO, PL_DEBUG, PL_TRACE, PL_DETAIL, PL_MAX, PL_ALWAYS}; 
+enum ProtoDebugLevel {PL_FATAL = 0, PL_ERROR, PL_WARN, PL_INFO, PL_DEBUG, PL_TRACE, PL_DETAIL, PL_MAX, PL_ALWAYS}; 
 
 #if defined(PROTO_DEBUG) || defined(PROTO_MSG)
 void SetDebugLevel(unsigned int level);

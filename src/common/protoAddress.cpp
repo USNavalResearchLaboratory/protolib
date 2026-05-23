@@ -698,7 +698,7 @@ unsigned int ProtoAddress::SetCommonTail(const ProtoAddress& theAddr)
 }  // end ProtoAddress::SetCommonTail()
 
 
-bool ProtoAddress::PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixLen) const
+bool ProtoAddress::PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixSize) const
 {
     // Compare address "type" and "prefixLen" bits of address
     if (!IsValid() && !theAddr.IsValid()) return true;
@@ -706,10 +706,10 @@ bool ProtoAddress::PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixLen) c
     {
         const char* ptr1 = GetRawHostAddress();
         const char* ptr2 = theAddr.GetRawHostAddress();
-        size_t nbyte = prefixLen >> 3;
+        size_t nbyte = prefixSize >> 3;
         if ((0 == nbyte) || (0 == memcmp(ptr1, ptr2, nbyte)))
         {
-            UINT8 nbit = prefixLen & 0x07;
+            UINT8 nbit = prefixSize & 0x07;
             if (0 == nbit) return true;
             char mask = 0xff << (8 - nbit);
             if ((mask & ptr1[nbyte]) == (mask & ptr2[nbyte]))

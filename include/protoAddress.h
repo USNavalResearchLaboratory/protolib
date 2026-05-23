@@ -174,7 +174,7 @@ class ProtoAddress
         unsigned int SetCommonTail(const ProtoAddress &theAddr);
 
         
-        bool PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixLen) const;
+        bool PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixSize) const;  // 'prefixSize' is in bits
         UINT8 GetPrefixLength() const;  // finds length (in bits) of non-zero prefix
         void GeneratePrefixMask(ProtoAddress::Type theType, UINT8 prefixLen);
         void ApplyPrefixMask(UINT8 prefixLen);        

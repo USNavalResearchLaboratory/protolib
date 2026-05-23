@@ -229,7 +229,7 @@ const unsigned char ProtoBitmask::BITLOCS[256][8] =
 
 
 ProtoBitmask::ProtoBitmask()
-    : mask(NULL), mask_len(0), 
+    : mask(NULL), mask_len(0),
       num_bits(0), first_set(0)
 {
 }
@@ -255,12 +255,12 @@ bool ProtoBitmask::Init(UINT32 numBits)
     {
         return false;
     }
-   
+
 }  // end ProtoBitmask::Init()
 
 void ProtoBitmask::Destroy()
 {
-    if (mask) 
+    if (mask)
     {
         delete[] mask;
         mask = (unsigned char*)NULL;
@@ -648,7 +648,7 @@ bool ProtoSlidingMask::CanSet(UINT32 index) const
                    if ((pos <= end) && (pos >= start)) return false;
                 }
                 return true;
-            } 
+            }
         }
         else if ((UINT32)Difference(index, offset) < num_bits)
         {
@@ -665,14 +665,14 @@ bool ProtoSlidingMask::CanSet(UINT32 index) const
     }
 }  // end ProtoSlidingMask::CanSet()
 
-bool ProtoSlidingMask::Set(UINT32 index)
+bool ProtoSlidingMask::SetIndex(UINT32 index)
 {
     ASSERT((0 == range_mask) || (index <= range_mask));
     if (IsSet())
-    {        
+    {
         // Determine position with respect to current start
         // and end, given the "offset" of the current start   
-        UINT32 pos;            
+        UINT32 pos;
         if (Compare(index, offset) < 0)
         {
             // Precedes start.
@@ -698,9 +698,9 @@ bool ProtoSlidingMask::Set(UINT32 index)
                 // Ok for new "start" && "offset"
                 start = pos;
                 offset = index;
-            } 
+            }
         }
-        else 
+        else
         {
             pos = Difference(index, offset);
             if (pos < num_bits)
@@ -709,7 +709,7 @@ bool ProtoSlidingMask::Set(UINT32 index)
                 if (pos >= num_bits) pos -= num_bits;
                 if (end < start)
                 {
-                    if ((pos < start) && (pos > end)) end = pos;  
+                    if ((pos < start) && (pos > end)) end = pos;
                 }
                 else
                 {
@@ -728,11 +728,209 @@ bool ProtoSlidingMask::Set(UINT32 index)
     else
     {
         start = end = 0;
-        offset = index;   
+        offset = index;
         mask[0] = 0x80;
     }
     return true;
-}  // end ProtoSlidingMask::Set()
+}  // end ProtoSlidingMask::SetIndex()
+
+bool ProtoSlidingMask::Force(UINT32 index, bool forward, UINT32 rangeMax)
+{
+    ASSERT(0 != num_bits);
+    ASSERT((0 == range_mask) || (index <= range_mask));
+
+    // Normal case: the existing sliding-mask Set() logic can already
+    // accommodate this index.
+    if (SetIndex(index))
+        return true;
+
+    UINT32 firstIndex;
+    if (!GetFirstSet(firstIndex))
+        return false;
+
+    UINT32 lastIndex;
+    if (!GetLastSet(lastIndex))
+        return false;
+
+    /*
+     * Optional forward-only policy.
+     *
+     * This is intended for receive duplicate detection where we should not
+     * move the window backwards for an old packet.
+     *
+     * rangeMax only applies when forward == true.
+     *
+     * If rangeMax == 0, then we trust the existing half-range modular
+     * Difference() result and do not apply a stricter application limit.
+     */
+    bool forwardResync = false;
+
+    if (forward)
+    {
+        INT32 delta = Difference(index, lastIndex);
+
+        if (delta < 0)
+        {
+            UINT32 absDelta = (UINT32)(-(delta + 1)) + 1;  // avoids INT32_MIN
+            if ((0 == rangeMax) || (absDelta <= rangeMax))
+            {
+                // Definitely older, within the trusted comparison range.
+                return false;
+            }
+            // This is a 'newer' index (either by range_mask 'half range' 
+            // or exceeds optional rangeMask limit
+            forwardResync = true;
+        }
+    }
+
+    /*
+     * Determine the currently represented span.  This is the number of
+     * index positions from firstIndex through lastIndex, inclusive.
+     */
+    INT32 spanDelta = Difference(lastIndex, firstIndex);
+    if (spanDelta < 0)
+    {
+        ASSERT(0); 
+        return false;
+    }
+    UINT32 spanCount = (UINT32)spanDelta + 1;
+
+    /*
+     * Case 1:
+     *
+     * Forward-only resync where the distance exceeded rangeMax.
+     *
+     * Since we are explicitly overriding the normal modular ordering, do
+     * not try to preserve overlap.  The safe behavior is to clear the
+     * currently represented span and start from the new index.
+     */
+    if (forwardResync)
+    {
+        if (!UnsetBits(firstIndex, spanCount))
+            return false;
+        return SetIndex(index);
+    }
+
+    /*
+     * Case 2:
+     *
+     * Either:
+     *
+     *   - forward == true and index is trusted-newer than lastIndex, or
+     *   - forward == false and we are forcing the mask to include index,
+     *     while preserving any state within range of index.
+     *
+     * We need to adjust the represented range so that index can be set.
+     *
+     * For a sliding mask of num_bits, if index is the new upper end of the
+     * window, the retained range is:
+     *
+     *     [index - (num_bits - 1), index]
+     *
+     * For a non-forward force where index is older than firstIndex, index
+     * becomes the new lower end of the window, and the retained range is:
+     *
+     *     [index, index + (num_bits - 1)]
+     */
+
+    INT32 deltaFromLast = Difference(index, lastIndex);
+    INT32 deltaFromFirst = Difference(index, firstIndex);
+
+    if (deltaFromLast > 0)
+    {
+        /*
+         * index is after the current lastIndex.
+         *
+         * Clear enough from the front so that first retained state is no
+         * older than index - (num_bits - 1).
+         */
+        if (deltaFromFirst < 0)
+            return false;
+
+        if ((UINT32)deltaFromFirst < num_bits)
+        {
+            // If index is already within span/range, SetIndex() should
+            // have succeeded.  Avoid corrupting state.
+            return false;
+        }
+
+        UINT32 clearCount = (UINT32)deltaFromFirst - (num_bits - 1);
+
+        if (clearCount >= spanCount)
+        {
+            if (!UnsetBits(firstIndex, spanCount))
+                return false;
+        }
+        else if (clearCount > 0)
+        {
+            if (!UnsetBits(firstIndex, clearCount))
+                return false;
+        }
+    }
+    else if (deltaFromFirst < 0)
+    {
+        /*
+         * index is before the current firstIndex.
+         *
+         * In forward-only mode this should not be allowed, except for the
+         * forwardResync case already handled above.
+         */
+        if (forward)
+            return false;
+
+        /*
+         * Clear enough from the back so that last retained state is no
+         * newer than index + (num_bits - 1).
+         *
+         * old span:
+         *
+         *     [firstIndex, lastIndex]
+         *
+         * new desired span:
+         *
+         *     [index, index + (num_bits - 1)]
+         *
+         * The amount to remove from the back is:
+         *
+         *     clearCount = (firstIndex - index) distance
+         *
+         * because that is how far the window is shifted backward.
+         */
+        UINT32 backwardShift = (UINT32)(-(deltaFromFirst + 1)) + 1;
+
+        if (backwardShift >= spanCount)
+        {
+            if (!UnsetBits(firstIndex, spanCount))
+                return false;
+        }
+        else if (backwardShift > 0)
+        {
+            /*
+             * Clear the trailing portion:
+             *
+             *     start clearing at firstIndex + (spanCount - backwardShift)
+             */
+            UINT32 clearStart = firstIndex + (spanCount - backwardShift);
+            if (range_mask)
+                clearStart &= range_mask;
+
+            if (!UnsetBits(clearStart, backwardShift))
+                return false;
+        }
+    }
+    else
+    {
+        /*
+         * index is between firstIndex and lastIndex according to Difference(),
+         * but SetIndex(index) failed.  This should normally not happen.
+         */
+        ASSERT(0);
+        return false;
+    }
+    bool result = SetIndex(index);
+    ASSERT(result);
+    return result;
+}  // end ProtoSlidingMask::Force()
 
 bool ProtoSlidingMask::Unset(UINT32 index)
 {
