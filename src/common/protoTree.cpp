@@ -734,7 +734,10 @@ ProtoTree::Item* ProtoTree::FindPredecessor(ProtoTree::Item& item) const
             x = x->right;
         else
             x = x->left;
-    } while (x != &item);
+    } while (q == x->parent);
+
+    if (x != &item) return NULL;
+
     return q;
 }  // end ProtoTree::FindPredecessor()
 
@@ -984,7 +987,13 @@ void ProtoTree::Remove(ProtoTree::Item& item)
                 x = x->right;
             else
                 x = x->left;
-        } while (x != &item);
+        } while (q == x->parent);
+
+        if (x != &item)
+        {
+            PLOG(PL_ERROR, "ProtoTree::Remove() error: item not found in tree (corrupted)!\n");
+            return;
+        }
 
         if (NULL != q->parent)
         {
@@ -1004,7 +1013,13 @@ void ProtoTree::Remove(ProtoTree::Item& item)
                         x = x->right;
                     else
                         x = x->left;
-                } while (x != &item);
+                } while (s == x->parent);
+
+                if (x != &item)
+                {
+                    PLOG(PL_ERROR, "ProtoTree::Remove() error: item not found in tree (corrupted)!\n");
+                    return;
+                }
             }
 
             // A) Set bit index of "q" to that of "item"
@@ -1612,8 +1627,8 @@ void ProtoTree::Iterator::SetCursor(ProtoTree::Item& item)
                         x = x->right;
                     else
                         x = x->left;
-                } while (x != &item);
-                curr_hop = s;
+                } while (s == x->parent);
+                curr_hop = (x == &item) ? s : NULL;
             }
             // Move forward two places so "cursor" is correct position
             reversed = false;
@@ -2515,4 +2530,3 @@ ProtoSortedTree::Iterator::TempItem::TempItem(const char* theKey, unsigned int t
 ProtoSortedTree::Iterator::TempItem::~TempItem()
 {
 }
-
