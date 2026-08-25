@@ -8,6 +8,10 @@
 #include <netinet/in.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <linux/neighbour.h>
+#ifndef NDA_RTA
+#define NDA_RTA(r) ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
+#endif
 #include <net/if.h>
 #include <linux/if_tunnel.h>  // for IFLA_GRE_LOCAL, etc
 #include <unistd.h>  // for getpid()
@@ -1107,6 +1111,133 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
     return ifaceType;
 }  // end ProtoNet::GetInterfaceType()
 
+static bool ParseNeighNlMsg(struct nlmsghdr* msg, unsigned int& ifIndex,
+                            ProtoAddress& dst, ProtoAddress& lladdr, unsigned short& state)
+{
+    dst.Invalidate();
+    lladdr.Invalidate();
+    struct ndmsg* ndm = (struct ndmsg*)NLMSG_DATA(msg);
+    if ((AF_INET != ndm->ndm_family) && (AF_INET6 != ndm->ndm_family))
+        return false;
+    ifIndex = ndm->ndm_ifindex;
+    state = ndm->ndm_state;
+    struct rtattr* rta = NDA_RTA(ndm);
+    int rtl = (int)NLMSG_PAYLOAD(msg, sizeof(struct ndmsg));
+    for (; rtl && RTA_OK(rta, rtl); rta = RTA_NEXT(rta, rtl))
+    {
+        unsigned int alen = RTA_PAYLOAD(rta);
+        if (NDA_DST == rta->rta_type)
+        {
+            if (4 == alen)
+                dst.SetRawHostAddress(ProtoAddress::IPv4, (char*)RTA_DATA(rta), 4);
+            else if (16 == alen)
+                dst.SetRawHostAddress(ProtoAddress::IPv6, (char*)RTA_DATA(rta), 16);
+        }
+        else if (NDA_LLADDR == rta->rta_type)
+        {
+            // GRE stores the underlay IP in lladdr (4 or 16 bytes), not a MAC
+            if (4 == alen)
+                lladdr.SetRawHostAddress(ProtoAddress::IPv4, (char*)RTA_DATA(rta), 4);
+            else if (16 == alen)
+                lladdr.SetRawHostAddress(ProtoAddress::IPv6, (char*)RTA_DATA(rta), 16);
+        }
+    }
+    return dst.IsValid();
+}
+
+bool ProtoNet::GetInterfaceNeighbors(unsigned int ifIndex, NeighborHandler handler, void* userData)
+{
+    if (NULL == handler)
+        return false;
+    ProtoNetlink nlink;
+    if (!nlink.Open())
+    {
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceNeighbors() error: unable to open netlink socket\n");
+        return false;
+    }
+    struct
+    {
+        struct nlmsghdr msg;
+        struct ndmsg    ndm;
+    } req;
+    memset(&req, 0, sizeof(req));
+    UINT32 seq = 1;
+    req.msg.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+    req.msg.nlmsg_type = RTM_GETNEIGH;
+    req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    req.msg.nlmsg_seq = seq;
+    req.msg.nlmsg_pid = nlink.GetPortId();
+    req.ndm.ndm_family = AF_UNSPEC;
+    req.ndm.ndm_ifindex = ifIndex;
+    if (!nlink.SendRequest(&req, sizeof(req)))
+    {
+        PLOG(PL_ERROR, "ProtoNet::GetInterfaceNeighbors() error: unable to send netlink request\n");
+        return false;
+    }
+    bool done = false;
+    bool ok = true;
+    while (!done)
+    {
+        struct nlmsghdr* buffer;
+        int msgLen;
+        if (!nlink.RecvResponse(seq, &buffer, &msgLen))
+        {
+            PLOG(PL_ERROR, "ProtoNet::GetInterfaceNeighbors() error: invalid netlink response\n");
+            ok = false;
+            break;
+        }
+        struct nlmsghdr* msg = buffer;
+        for (; 0 != NLMSG_OK(msg, (unsigned int)msgLen); msg = NLMSG_NEXT(msg, msgLen))
+        {
+            if ((msg->nlmsg_pid != nlink.GetPortId()) || (msg->nlmsg_seq != seq))
+                continue;
+            switch (msg->nlmsg_type)
+            {
+                case NLMSG_NOOP:
+                    break;
+                case NLMSG_ERROR:
+                {
+                    struct nlmsgerr* errorMsg = (struct nlmsgerr*)NLMSG_DATA(msg);
+                    if (0 != errorMsg->error)
+                    {
+                        PLOG(PL_ERROR, "ProtoNet::GetInterfaceNeighbors() recvd NLMSG_ERROR code:%d\n",
+                             errorMsg->error);
+                        ok = false;
+                    }
+                    done = true;
+                    break;
+                }
+                case NLMSG_DONE:
+                    done = true;
+                    break;
+                case RTM_NEWNEIGH:
+                {
+                    unsigned int neighIndex = 0;
+                    ProtoAddress dst, lladdr;
+                    unsigned short state = 0;
+                    if (!ParseNeighNlMsg(msg, neighIndex, dst, lladdr, state))
+                        break;
+                    if ((0 != ifIndex) && (neighIndex != ifIndex))
+                        break;
+                    if (!handler(neighIndex, dst, lladdr, state, userData))
+                    {
+                        done = true;
+                        break;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+            if (done && (NLMSG_DONE != msg->nlmsg_type) && (NLMSG_ERROR != msg->nlmsg_type))
+                break;
+        }
+        delete[] buffer;
+    }
+    nlink.Close();
+    return ok;
+}  // end ProtoNet::GetInterfaceNeighbors()
+
 class LinuxNetMonitor : public ProtoNet::Monitor
 {
     public:
@@ -1208,7 +1339,7 @@ bool LinuxNetMonitor::Open()
     struct sockaddr_nl localAddr;
     localAddr.nl_family = AF_NETLINK;
 	localAddr.nl_pid = 0;  // system will assign us a unique netlink port id
-	localAddr.nl_groups |= RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR;// | RTMGRP_IPV6_IFINFO;
+	localAddr.nl_groups |= RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR | RTMGRP_NEIGH;
 	if (0 > bind(descriptor, (struct sockaddr*) &localAddr, sizeof(localAddr)))
     {
         PLOG(PL_ERROR, "LinuxNetMonitor::Open() bind() error: %s\n",
@@ -1242,6 +1373,8 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
     theEvent.SetType(Event::UNKNOWN_EVENT);
     theEvent.SetInterfaceIndex(0);
     theEvent.AccessAddress().Invalidate();
+    theEvent.AccessAuxAddress().Invalidate();
+    theEvent.SetFlags(0);
 
     // 1) Get next event from list or recv() from netlink
     EventItem* eventItem = event_list.RemoveHead();
@@ -1356,6 +1489,33 @@ bool LinuxNetMonitor::GetNextEvent(Event& theEvent)
                             }
                         }
                     }
+                    break;
+                }
+                case RTM_NEWNEIGH:
+                case RTM_DELNEIGH:
+                {
+                    unsigned int ifIndex = 0;
+                    ProtoAddress dst, lladdr;
+                    unsigned short state = 0;
+                    if (!ParseNeighNlMsg(nlh, ifIndex, dst, lladdr, state))
+                        break;
+                    eventItem = event_pool.RemoveHead();
+                    if (NULL == eventItem) eventItem = new EventItem();
+                    if (NULL == eventItem)
+                    {
+                        PLOG(PL_ERROR, "LinuxNetMonitor::GetNextEvent() new EventItem error: %s\n", GetErrorString());
+                        theEvent.SetType(Event::NULL_EVENT);
+                        return false;
+                    }
+                    if (RTM_NEWNEIGH == nlh->nlmsg_type)
+                        eventItem->SetType(Event::IFACE_NEIGH_NEW);
+                    else
+                        eventItem->SetType(Event::IFACE_NEIGH_DELETE);
+                    eventItem->SetInterfaceIndex(ifIndex);
+                    eventItem->SetAddress(dst);
+                    eventItem->SetAuxAddress(lladdr);
+                    eventItem->SetFlags(state);
+                    event_list.Append(*eventItem);
                     break;
                 }
                 default:
