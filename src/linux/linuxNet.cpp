@@ -938,9 +938,11 @@ bool ProtoNet::GetGroupMemberships(const char* ifaceName, ProtoAddress::Type add
     }
 }  // end ProtoNet::GetGroupMemberships()
 
-ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, ProtoAddress* localAddr, ProtoAddress* remoteAddr)
+ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, ProtoAddress* localAddr, ProtoAddress* remoteAddr, bool* collectMetadata)
 {
     InterfaceType ifaceType = IFACE_ETH;  // assume physical Ethernet device by default
+    if (NULL != collectMetadata)
+        *collectMetadata = false;
     ProtoNetlink nlink;
     if (!nlink.Open())
     {
@@ -1082,7 +1084,8 @@ ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex, Prot
                                             }
                                             else if (IFLA_GRE_COLLECT_METADATA == a->rta_type)
                                             {
-                                                //TRACE("IFLA_GRE_COLLECT_METADATA ...\n");
+                                                if (NULL != collectMetadata)
+                                                    *collectMetadata = true;
                                             }
                                             // TBD - support other parameters or tunnel types?
                                         }  // end for (a = RTA_DATA() ...)

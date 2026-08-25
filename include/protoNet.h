@@ -219,10 +219,12 @@ namespace ProtoNet
     InterfaceStatus GetInterfaceStatus(const char* ifaceName);
     InterfaceStatus GetInterfaceStatus(unsigned int ifaceIndex);
     
-    // Will optionally retrieve tunnel endpoint address for GRE tunnel interfaces
+    // Will optionally retrieve tunnel endpoint address for GRE tunnel interfaces.
+    // collectMetadata is set when IFLA_GRE_COLLECT_METADATA is present (type gre external).
     InterfaceType GetInterfaceType(unsigned int  ifaceIndex,
                                    ProtoAddress* localAddr = NULL,
-                                   ProtoAddress* remoteAddr = NULL);
+                                   ProtoAddress* remoteAddr = NULL,
+                                   bool*         collectMetadata = NULL);
 
     // Dump kernel neighbor entries for ifIndex (overlay dst + lladdr).
     // handler is invoked once per entry; return false to stop.
