@@ -233,7 +233,18 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
         addr.sll_family   = AF_PACKET;
         addr.sll_ifindex  = if_index;
         addr.sll_halen = 0;
-        
+        // SOCK_DGRAM sendto() always passes sll_addr to GRE header_ops, even
+        // when sll_halen is 0. A zero dest overwrites a configured remote
+        // (including a multicast one) with 0.0.0.0 and the packet is dropped.
+        // Use the remote already learned from netlink at Open().
+        if (tunnel_remote_addr.IsValid() &&
+            !tunnel_remote_addr.IsUnspecified() &&
+            (ProtoAddress::IPv4 == tunnel_remote_addr.GetType()))
+        {
+            memcpy(addr.sll_addr, tunnel_remote_addr.GetRawHostAddress(), 4);
+            addr.sll_halen = 4;
+        }
+
        // Check IP header version (first nybble)
         switch ((buffer[0] & 0xf0) >> 4)
         {
