@@ -42,6 +42,7 @@ class LinuxCap : public ProtoCap
 
         int  gre_raw_fd;
         bool tunnel_collect_md;
+        ProtoAddress device_remote_addr;  // kernel GRE remote from Open(); not per-packet dest
 };  // end class LinuxCap
 
 ProtoCap* ProtoCap::Create()
@@ -161,20 +162,38 @@ bool LinuxCap::Open(const char* interfaceName)
         setsockopt(descriptor, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, strlen(interfaceName)+1);
     }
 
-    if (tunnel_collect_md)
+    if (ProtoNet::IFACE_GRE == if_type)
     {
-        // collect-md GRE has no header_ops; PF_PACKET dest never becomes
-        // tunnel metadata. Encapsulate GRE here and sendto() the mapped remote.
-        gre_raw_fd = socket(AF_INET, SOCK_RAW, IPPROTO_GRE);
-        if (gre_raw_fd < 0)
+        device_remote_addr = tunnel_remote_addr;
+        // Raw GRE: collect-md (no header_ops), and multicast dests on
+        // wildcard/unicast mGRE (PF_PACKET cannot xmit multicast sll_addr).
+        // A GRE device whose kernel remote is already a multicast group
+        // (multicast-underlay mGRE) keeps PF_PACKET sendto on the tunnel.
+        const bool needRawFd = tunnel_collect_md ||
+            !device_remote_addr.IsValid() ||
+            device_remote_addr.IsUnspecified() ||
+            device_remote_addr.IsUnicast();
+        if (needRawFd)
         {
-            PLOG(PL_ERROR, "LinuxCap::Open() socket(IPPROTO_GRE) error: %s\n", GetErrorString());
-            Close();
-            return false;
+            gre_raw_fd = socket(AF_INET, SOCK_RAW, IPPROTO_GRE);
+            if (gre_raw_fd < 0)
+            {
+                PLOG(PL_ERROR, "LinuxCap::Open() socket(IPPROTO_GRE) error: %s\n", GetErrorString());
+                Close();
+                return false;
+            }
+            shutdown(gre_raw_fd, SHUT_RD);
+            int ttl = 64;
+            setsockopt(gre_raw_fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
+            setsockopt(gre_raw_fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
+            if (tunnel_local_addr.IsValid() &&
+                (ProtoAddress::IPv4 == tunnel_local_addr.GetType()))
+            {
+                struct in_addr ifaddr;
+                memcpy(&ifaddr, tunnel_local_addr.GetRawHostAddress(), 4);
+                setsockopt(gre_raw_fd, IPPROTO_IP, IP_MULTICAST_IF, &ifaddr, sizeof(ifaddr));
+            }
         }
-        shutdown(gre_raw_fd, SHUT_RD);
-        int ttl = 64;
-        setsockopt(gre_raw_fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
     }
     
     // Explicitly call ProtoCap::Open so that ProtoChannel stuff is properly set up
@@ -206,6 +225,7 @@ void LinuxCap::Close()
         if_type = ProtoNet::IFACE_INVALID_TYPE;
         tunnel_local_addr.Invalidate();
         tunnel_remote_addr.Invalidate();
+        device_remote_addr.Invalidate();
     }  
 }  // end LinuxCap::Close()
 
@@ -257,6 +277,13 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
     else
     {
         if (tunnel_collect_md)
+            return SendCollectMdGre(buffer, numBytes);
+        // Wildcard/unicast mGRE cannot xmit a multicast sll_addr.
+        // A device whose kernel remote is already the group uses PF_PACKET.
+        if (tunnel_remote_addr.IsValid() && tunnel_remote_addr.IsMulticast() &&
+            (!device_remote_addr.IsValid() ||
+             device_remote_addr.IsUnspecified() ||
+             device_remote_addr.IsUnicast()))
             return SendCollectMdGre(buffer, numBytes);
         // Use sendto() to denote IP/IPv6 properly 
         // (ensures GRE protocol type is correct)
@@ -356,7 +383,7 @@ bool LinuxCap::SendCollectMdGre(const char* buffer, unsigned int& numBytes)
         tunnel_remote_addr.IsUnspecified() ||
         (ProtoAddress::IPv4 != tunnel_remote_addr.GetType()))
     {
-        PLOG(PL_WARN, "LinuxCap::SendCollectMdGre() error: unicast IPv4 remote required\n");
+        PLOG(PL_WARN, "LinuxCap::SendCollectMdGre() error: IPv4 remote required\n");
         return false;
     }
 
