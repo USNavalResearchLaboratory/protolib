@@ -82,7 +82,7 @@ ProtoList::Item::~Item()
 }
 
 ProtoList::ProtoList()
- : head(NULL), tail(NULL)
+ : head(NULL), tail(NULL), item_count(0)
 {
 }
 
@@ -100,6 +100,7 @@ void ProtoList::Prepend(Item& item)
         tail = &item;
     item.plist_next = head;
     head = &item;
+    item_count += 1;
 }  // end ProtoList::Prepend()
 
 void ProtoList::Append(Item& item)
@@ -112,6 +113,7 @@ void ProtoList::Append(Item& item)
         head = &item;
     item.plist_prev = tail;
     tail = &item;
+    item_count += 1;
 }  // end ProtoList::Append()
 
 void ProtoList::Insert(Item& theItem, Item& nextItem)
@@ -123,6 +125,7 @@ void ProtoList::Insert(Item& theItem, Item& nextItem)
     else
         nextItem.plist_prev->plist_next = &theItem;
     nextItem.plist_prev = &theItem;
+    item_count += 1;
     UpdateIterators(&theItem, Iterator::INSERT);
 }  // end ProtoList::Insert()
 
@@ -135,6 +138,7 @@ void ProtoList::InsertAfter(Item& theItem, Item& prevItem)
     else
         prevItem.plist_next->plist_prev = &theItem;
     prevItem.plist_next = &theItem;
+    item_count += 1;
     UpdateIterators(&theItem, Iterator::INSERT);
 }  // end ProtoList::ProtoList::InsertAfter()
 
@@ -145,12 +149,13 @@ void ProtoList::Remove(Item& item)
         head = item.plist_next;
     else
         item.plist_prev->plist_next = item.plist_next;
-    
     if (NULL == item.plist_next)
         tail = item.plist_prev;
     else
         item.plist_next->plist_prev = item.plist_prev;
     item.plist_prev = item.plist_next = NULL;
+    ASSERT(item_count > 0);
+    item_count -= 1;
 }  // end ProtoList::Remove()
 
 ProtoList::Item* ProtoList::RemoveHead()
@@ -171,6 +176,7 @@ void ProtoList::Empty()
 {
     UpdateIterators(NULL, Iterator::EMPTY);
     head = tail = NULL;
+    item_count = 0;
 }  // end ProtoList::Empty()
 
 void ProtoList::EmptyToPool(ItemPool& pool)
@@ -192,6 +198,7 @@ void ProtoList::Destroy()
         delete item;
         item = head;
     }
+    item_count = 0;
 }  // end ProtoList::Destroy()
 
 

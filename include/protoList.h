@@ -107,6 +107,9 @@ class ProtoList : private ProtoIterable
         bool IsEmpty() const
             {return (NULL == head);}
 
+        unsigned int GetCount() const
+            {return item_count;}
+
         Item* GetHead() const
             {return head;}
         Item* GetTail() const
@@ -221,8 +224,9 @@ class ProtoList : private ProtoIterable
             {return item.plist_prev;}
 
     private:
-        Item*       head;
-        Item*       tail;
+        Item*        head;
+        Item*        tail;
+        unsigned int item_count;
 
 };  // end class ProtoList
 
@@ -255,7 +259,7 @@ class ProtoListTemplate : public ProtoList
         ITEM_TYPE* GetNextItem(ITEM_TYPE& item)
                     {return static_cast<ITEM_TYPE*>(ProtoList::GetNextItem(item));}
         ITEM_TYPE* GetPrevItem(ITEM_TYPE& item)
-                    {return  static_cast<ITEM_TYPE*>(ProtoList::GetNextItem(item));}
+                    {return  static_cast<ITEM_TYPE*>(ProtoList::GetPrevItem(item));}
 
         class Iterator : public ProtoList::Iterator
         {

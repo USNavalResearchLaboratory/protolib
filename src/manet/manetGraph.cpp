@@ -1,5 +1,5 @@
 #include "manetGraph.h"
-#include <protoDebug.h>
+#include "protoDebug.h"
 #include <new>
 
 NetGraph::Cost::Cost()
@@ -26,7 +26,7 @@ void NetGraph::Link::SetCost(const Cost& cost)
 NetGraph::Interface::Interface(Node& theNode, const ProtoAddress& addr)
  : node(&theNode),graph(NULL),default_addr_item(addr), name_ptr(NULL)
 {
-    addr_list.InsertItem(default_addr_item); 
+    addr_list.InsertItem(default_addr_item);
 }
 
 NetGraph::Interface::Interface(Node& theNode)
@@ -62,7 +62,7 @@ bool NetGraph::Interface::SetName(const char* theName)
         PLOG(PL_ERROR,"NetGraph::Interface::SetName(): new name_ptr error: %s\n", GetErrorString());
         return false;
     }
-    if (NULL != name_ptr) 
+    if (NULL != name_ptr)
     {
         if (addr_list.IsEmpty())
         {
@@ -96,7 +96,7 @@ bool NetGraph::Interface::SetName(const char* theName)
             name_ptr = NULL;
             return false;
         }
-    }    
+    }
     return true;
 }  // end NetGraph::Interface::SetName()
 
@@ -123,8 +123,8 @@ bool NetGraph::Interface::AddAddress(const ProtoAddress& theAddress)
         if (NULL != name_ptr)
         {
             // We're adding an address to a "name-only" interface,
-            // so we need to remove/reinsert this iface from the Node & Graph   
-            // so that is properly indexed. 
+            // so we need to remove/reinsert this iface from the Node & Graph
+            // so that is properly indexed.
             node->RemoveInterface(*this);
             if (NULL != graph)
                 graph->SuspendInterface(*this); // temporarily remove from ProtoGraph::vertice_list
@@ -185,10 +185,10 @@ bool NetGraph::Interface::AddAddress(const ProtoAddress& theAddress)
 bool NetGraph::Interface::RemoveAddress(const ProtoAddress& theAddress)
 {
 #ifdef PROTO_DEBUG
-    ASSERT(Contains(theAddress));  // not good practice to call RemoveAddress()  
+    ASSERT(Contains(theAddress));  // not good practice to call RemoveAddress()
 #else
     if (!Contains(theAddress)) return false;
-#endif     
+#endif
     if (theAddress.HostIsEqual(default_addr_item.GetAddress()))
     {
         // This is the address used for Node/Graph indices, so do some extra work here
@@ -273,7 +273,7 @@ bool NetGraph::Interface::RemoveAddress(const ProtoAddress& theAddress)
         node->RemoveExtraInterfaceAddress(theAddress);
         if (NULL != graph) graph->RemoveInterfaceAddress(theAddress);
     }
-    return true; 
+    return true;
 }  // end NetGraph::Interface::RemoveAddress()
 
 bool NetGraph::Interface::ChangeNode(Node& theNode)
@@ -406,7 +406,7 @@ bool NetGraph::Interface::PriorityQueue::AdjustDownward(Interface& iface, const 
         item->SetCost(newCost);
         InsertItem(*item);
         return true;
-    } 
+    }
     else
     {
         return false;
@@ -497,9 +497,9 @@ NetGraph::Node::~Node()
     {
         delete iface;
     }
-}    
-   
-// Remove interfaces from target node ("foodNode") 
+}
+
+// Remove interfaces from target node ("foodNode")
 // and append to this node
 void NetGraph::Node::Consume(Node& foodNode)
 {
@@ -540,7 +540,7 @@ void NetGraph::Node::RemoveInterface(Interface& iface)
     iface_list.Remove(iface);
     ProtoAddressList::Iterator iterator(iface.GetAddressList());
     ProtoAddress addr;
-    while(iterator.GetNextAddress(addr)) 
+    while(iterator.GetNextAddress(addr))
         extra_addr_list.Remove(addr);
     //check to see if was the default and reassign a default if it was
     if (&iface == default_interface_ptr)
@@ -563,7 +563,7 @@ bool NetGraph::Node::IsSymmetricNeighbor(Node& node)
                 return true;
             }
             interface2 = it2.GetNextInterface();
-        }   
+        }
         interface = it.GetNextInterface();
     }
     return false;
@@ -590,7 +590,7 @@ NetGraph::Interface* NetGraph::Node::FindInterfaceByName(const char* theName)
         while (NULL != (iface = iterator.GetNextInterface()))
         {
             const char* ifaceName = iface->GetName();
-            if ((NULL != ifaceName) && (0 ==  strcmp(ifaceName, theName))) 
+            if ((NULL != ifaceName) && (0 ==  strcmp(ifaceName, theName)))
                 break;
         }
     }
@@ -667,7 +667,7 @@ NetGraph::Interface* NetGraph::Node::NeighborIterator::GetNextNeighborInterface(
     Interface* iface = adj_iterator.GetNextAdjacency();
     if (NULL == iface)
     {
-        Interface* nextLocalInterface; 
+        Interface* nextLocalInterface;
         while (NULL != (nextLocalInterface = iface_iterator.GetNextInterface()))
         {
             // use in-place new operator to instantiate adj_iterator for next local interface
@@ -687,7 +687,7 @@ NetGraph::Link* NetGraph::Node::NeighborIterator::GetNextNeighborLink()
     Link* link = adj_iterator.GetNextAdjacencyLink();
     if (NULL == link)
     {
-        Interface* nextLocalInterface; 
+        Interface* nextLocalInterface;
         while (NULL != (nextLocalInterface = iface_iterator.GetNextInterface()))
         {
             // use in-place new operator to instate adj_iterator for next local interface
@@ -716,7 +716,7 @@ bool NetGraph::InsertNode(Node& node, Interface* iface)
         // Insert just the specified interface
         if (node.Contains(*iface))
         {
-            return InsertInterface(*iface); 
+            return InsertInterface(*iface);
         }
         else
         {
@@ -724,7 +724,7 @@ bool NetGraph::InsertNode(Node& node, Interface* iface)
             return false;
         }
     }
-    else 
+    else
     {
         // Insert all of the interfaces
         bool hasIface = false;
@@ -743,7 +743,7 @@ bool NetGraph::InsertNode(Node& node, Interface* iface)
         {
             PLOG(PL_ERROR, "NetGraph::InsertNode() error: node has no interfaces?!\n");
             return false;
-        } 
+        }
         return true;
     }
 }  // end NetGraph::InsertNode()
@@ -761,10 +761,10 @@ void NetGraph::RemoveNode(Node& node, Interface* iface)
         }
     }
     else
-    {   
+    {
         // Remove only the interface specified
         RemoveInterface(*iface);
-    }                                  
+    }
 }  // end NetGraph::RemoveNode()
 
 bool NetGraph::InsertInterface(Interface& iface)
@@ -798,7 +798,7 @@ void NetGraph::RemoveInterface(Interface& iface)
 {
     ProtoAddressList::Iterator iterator(iface.GetAddressList());
     ProtoAddress addr;
-    while(iterator.GetNextAddress(addr)) addr_list.Remove(addr); 
+    while(iterator.GetNextAddress(addr)) addr_list.Remove(addr);
     if (vertice_list.Contains(iface)) RemoveVertice(iface);
     iface.graph = NULL;
 }  // end NetGraph::RemoveInterface()
@@ -879,7 +879,7 @@ bool NetGraph::Connect(Interface& srcIface, Interface& dstIface, const Cost& cos
         Disconnect(srcIface, dstIface, true);
         return false;
     }
-    return true;   
+    return true;
 }  // end NetGraph::Connect(duplex option)
 
 NetGraph::Link* NetGraph::Reconnect(Interface& srcIface, Interface& dstIface, const Cost& cost)
@@ -919,7 +919,6 @@ bool NetGraph::Reconnect(Interface& srcIface, Interface& dstIface, const Cost& c
     }
     return true;
 }  // end NetGraph::Reconnect()
-            
 
 NetGraph::InterfaceIterator::InterfaceIterator(NetGraph& theGraph)
   : ProtoGraph::VerticeIterator(static_cast<ProtoGraph&>(theGraph))
@@ -930,12 +929,12 @@ NetGraph::InterfaceIterator::~InterfaceIterator()
 {
 }
 
-NetGraph::SimpleTraversal::SimpleTraversal(const NetGraph& theGraph, 
+NetGraph::SimpleTraversal::SimpleTraversal(const NetGraph& theGraph,
                                            Interface&      startIface,
                                            bool            traverseNodes,
                                            bool            collapseNodes,
                                            bool            depthFirst)
- : ProtoGraph::SimpleTraversal(theGraph, startIface, depthFirst), 
+ : ProtoGraph::SimpleTraversal(theGraph, startIface, depthFirst),
    traverse_nodes(traverseNodes), collapse_nodes(collapseNodes)
 {
     Reset(true);
@@ -949,7 +948,7 @@ bool NetGraph::SimpleTraversal::Reset(bool constructor)
 {
     if (!constructor)
     {
-        if (!ProtoGraph::SimpleTraversal::Reset())    
+        if (!ProtoGraph::SimpleTraversal::Reset())
         {
             PLOG(PL_ERROR, "NetGraph::SimpleTraversal::Reset() error: couldn't enqueue start_vertice\n");
             return false;
@@ -1005,7 +1004,7 @@ NetGraph::Interface* NetGraph::SimpleTraversal::GetNextInterface(unsigned int* l
                     else
                     {
                         queue_pending.Append(*nextIface);
-                        if (NULL == transAdjacency) 
+                        if (NULL == transAdjacency)
                             transAdjacency = nextIface;
                     }
                 }
@@ -1030,14 +1029,14 @@ NetGraph::Interface* NetGraph::SimpleTraversal::GetNextInterface(unsigned int* l
                 else
                 {
                     queue_pending.Append(*nextIface);
-                    if (NULL == transAdjacency) 
+                    if (NULL == transAdjacency)
                         transAdjacency = nextIface;
                 }
                 if (traverse_nodes && collapse_nodes)
                 {
                     // Here co-interfaces are treated as equivalent adjacencies
                     Node::InterfaceIterator ifaceIterator(nextIface->GetNode());
-                    Interface* nextCoface;    
+                    Interface* nextCoface;
                     while (NULL != (nextCoface = ifaceIterator.GetNextInterface()))
                     {
                         if (nextCoface == nextIface) continue;
@@ -1062,7 +1061,7 @@ NetGraph::Interface* NetGraph::SimpleTraversal::GetNextInterface(unsigned int* l
         if (NULL != level) *level = current_level;
     }
     return currentIface;
-    
+
 }  // end NetGraph::SimpleTraversal::GetNextInterface()
 
 /*
@@ -1120,7 +1119,7 @@ NetGraph::Interface* NetGraph::SimpleTraversal::GetNextInterface(unsigned int* l
         }
         queue_pending.TransferVertice(*currentIface, queue_visited);
         if (NULL != level) *level = current_level;
-        return currentIface;  
+        return currentIface;
     }
     else
     {
@@ -1129,23 +1128,23 @@ NetGraph::Interface* NetGraph::SimpleTraversal::GetNextInterface(unsigned int* l
     }
 }  // end NetGraph::SimpleTraversal::GetNextInterface()
 */
-        
 
-NetGraph::DijkstraTraversal::DijkstraTraversal(NetGraph&    theGraph,   
+
+NetGraph::DijkstraTraversal::DijkstraTraversal(NetGraph&    theGraph,
                                                Interface*   startIface)
  : manet_graph(theGraph), start_iface(startIface),
-   queue_pending(static_cast<ItemFactory&>(*this)), 
+   queue_pending(static_cast<ItemFactory&>(*this)),
    queue_visited(static_cast<ItemFactory&>(*this)),
    trans_iface(NULL), current_level(0), dijkstra_completed(false), in_update(false), traverse_nodes(false), reset_required(false)
 {
 
 }
 
-NetGraph::DijkstraTraversal::DijkstraTraversal(NetGraph&    theGraph,   
-                                               Node&        startNode,  
+NetGraph::DijkstraTraversal::DijkstraTraversal(NetGraph&    theGraph,
+                                               Node&        startNode,
                                                Interface*   startIface)
  : manet_graph(theGraph), start_iface((NULL != startIface) ? startIface : startNode.GetDefaultInterface()),
-   queue_pending(static_cast<ItemFactory&>(*this)), 
+   queue_pending(static_cast<ItemFactory&>(*this)),
    queue_visited(static_cast<ItemFactory&>(*this)),
    trans_iface(NULL), current_level(0), dijkstra_completed(false), in_update(false), traverse_nodes(false), reset_required(false)
 {
@@ -1166,7 +1165,7 @@ NetGraph::DijkstraTraversal::TraverseNodes(bool traverse)
 
 bool NetGraph::DijkstraTraversal::Reset(Interface* startIface)
 {
-    // (TBD) use a dual queue approach so that we can avoid 
+    // (TBD) use a dual queue approach so that we can avoid
     //      visiting every iface twice everytime we run the Dijkstra.
     //      I.e., we could maintain "visited" & "unvisited" queue, removing ifaces
     //      from that queue as they are visited, and then at the end of
@@ -1178,10 +1177,10 @@ bool NetGraph::DijkstraTraversal::Reset(Interface* startIface)
     queue_pending.Empty();
     Cost& startCost = AccessCostTemp();
     startCost.Minimize();
-    
+
     if (NULL != startIface)
         start_iface = startIface;
-    
+
     if (NULL != start_iface)
     {
         if(traverse_nodes)
@@ -1194,10 +1193,10 @@ bool NetGraph::DijkstraTraversal::Reset(Interface* startIface)
                 {
                     PLOG(PL_ERROR, "NetGraph::DijkstraTraversal::Reset() error: couldn't enqueue a start_iface (traverse_nodes)\n");
                     return false;
-                }   
+                }
             }
-        } 
-        else 
+        }
+        else
         {
             if (!queue_pending.Insert(*start_iface, startCost))
             {
@@ -1239,7 +1238,7 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
             Cost& nextCost = AccessCostTemp();
             nextCost = linkCost;
             nextCost += *currentCost;
-            
+
             Node::InterfaceIterator ifaceIterator(nextDst->GetNode());
             if(traverse_nodes)
                 nextDst = ifaceIterator.GetNextInterface();
@@ -1269,7 +1268,7 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                     {
                         saveState = false;
                     }
-                } 
+                }
                 else  // in_update
                 {
                     // visited queue nodes may not have been updated yet...we need a different way to check.
@@ -1281,13 +1280,13 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                     {
                         isInVisited = true;
                         queuePtr = &queue_visited;
-                    } 
-                    else if (!nextDst->IsInQueue(queue_pending)) 
+                    }
+                    else if (!nextDst->IsInQueue(queue_pending))
                     {
                         //new interface so just go ahead and add it
                         isNewIface = true;
                     }
-                    
+
                     if(isNewIface)
                     {
                         if (!queue_pending.Insert(*nextDst, nextCost))
@@ -1295,8 +1294,8 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                             PLOG(PL_ERROR, "NetGraph::DijkstraTraversal::GetNextInterface() error: couldn't enqueue iface\n");
                             return NULL;
                         }
-                        
-                    } 
+
+                    }
                     else if (queuePtr->AdjustDownward(*nextDst, nextCost, currentIface)) // try and move it down
                     {
                         //TRACE(" %s moved downward\n",nextDst->GetAddress().GetHostString());
@@ -1332,12 +1331,12 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                             if(queuePtr->AdjustUpward(*nextDst, nextCost))
                             {
                                 //TRACE("link we are bailing out and setting the required reset bool true!\n");
-                                //we need to verify that this is the currently shortest path and if not fix it! 
+                                //we need to verify that this is the currently shortest path and if not fix it!
                                 //New function required or expand AdjustUpward to take care of this.
-                                
+
                                 //using class variable to tell update to do a full reset...
                                 //Fixing AdjustingUpward and putting the some queue update stuff will then we can remove this
-                                reset_required = true; 
+                                reset_required = true;
                                 saveState = false;
                                 return NULL;
                                 //queue_visited.TransferInterface(*nextDst, queue_pending);
@@ -1348,26 +1347,26 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                                 //TRACE("link was same length as before not saving state\n");
                                 saveState = false;
                             }
-                        } 
-                        else 
+                        }
+                        else
                         {
                             //TRACE("link wasn't used not saving\n");
                             saveState = false;
                         }
-                    } 
-                    else 
+                    }
+                    else
                     {
                         //TRACE("no prev hop\n");
                         //no previous hop this can happen if currentIface is on the root node
                         saveState = false;
                     }
-                    // I _think_ this is currently broken?  It seems we would need to shuffle nodes 
+                    // I _think_ this is currently broken?  It seems we would need to shuffle nodes
                     // from "queue_visited" to "queue_pending" here to work properly? ... Note that
                     // it depends heavily on "Update()" being called with a proper "startIface"
                     // This checks for shorter path to a "visited" iface
                     // (must be in "Update()" mode! (i.e. "in_update == true")
                     /*{
-                        // Update the routing tree state 
+                        // Update the routing tree state
                         if (currentIface == start_iface)
                             queue_visited.SetRouteInfo(*nextDst, nextLink, currentIface);
                         else
@@ -1393,8 +1392,8 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                         if(nextLink==NULL)
                         {
                             //TRACE("nextLink is null!\n");
-                        } 
-                        else 
+                        }
+                        else
                         {
                             //TRACE("nextLink src is %s dst is ",nextLink->GetSrc()->GetAddress().GetHostString());
                             //TRACE("%s\n",nextLink->GetDst()->GetAddress().GetHostString());
@@ -1402,8 +1401,8 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::GetNextInterface()
                         if(currentIface==NULL)
                         {
                             //TRACE("currentIface is null!\n");
-                        } 
-                        else 
+                        }
+                        else
                         {
                             //TRACE("currentIface is %s\n",currentIface->GetAddress().GetHostString());
                         }
@@ -1439,8 +1438,8 @@ bool NetGraph::DijkstraTraversal::PrevHopIsValid(Interface& currentIface)
     {
         if (&currentIface == start_iface)
             return true;
-    } 
-    else 
+    }
+    else
     {
         if(currentIface.GetNode().Contains(*start_iface))
             return true;
@@ -1454,7 +1453,7 @@ bool NetGraph::DijkstraTraversal::PrevHopIsValid(Interface& currentIface)
         const Cost* prevCostPtr = GetCost(*prevHopIface);
         if(prevCostPtr == NULL)
             return false;
-        
+
         if(!traverse_nodes)
         {
             Link* linkPtr = prevHopIface->GetLinkTo(currentIface);
@@ -1469,25 +1468,25 @@ bool NetGraph::DijkstraTraversal::PrevHopIsValid(Interface& currentIface)
                     {
                         // cost has increased and is no longer valid
                         return false;
-                    } 
-                    else if (sumCost < *currCostPtr) 
+                    }
+                    else if (sumCost < *currCostPtr)
                     {
                         // we could return false here but the link has only gotten "better" so should still be a valid prev hop just with the wrong value
                         return true;
-                    } 
-                    else 
+                    }
+                    else
                     {
                         return true;
                     }
                 }
-            } 
-            else 
+            }
+            else
             {
                 // no link exists from my previous hop, returning null
                 return false;
             }
-        } 
-        else 
+        }
+        else
         {
             ManetNode::NeighborIterator nbIt(prevHopIface->GetNode());
             Link* linkPtr = NULL;
@@ -1506,15 +1505,15 @@ bool NetGraph::DijkstraTraversal::PrevHopIsValid(Interface& currentIface)
                         sumCost += *prevCostPtr;
                         if(sumCost <= *currCostPtr)
                             return true;
-                        if (sumCost == *currCostPtr) 
+                        if (sumCost == *currCostPtr)
                             return true;
                     }
                 }
             }
             return false;
-        }   
-    } 
-    else 
+        }
+    }
+    else
     {
         // previous hop is null, returning false;
         return false;
@@ -1545,7 +1544,7 @@ void NetGraph::DijkstraTraversal::Update(Interface& startIface)
     ASSERT(queue_pending.IsEmpty());
 
     //set up the initial state for walking through the graph stub.
-    in_update = true; 
+    in_update = true;
     Interface* origStartIfacePtr = start_iface;
     start_iface=&startIface;
     if(startIface.IsInQueue(queue_visited))
@@ -1557,8 +1556,8 @@ void NetGraph::DijkstraTraversal::Update(Interface& startIface)
             Interface* nextIface = NULL;
             while (NULL !=(nextIface = ifaceIterator.GetNextInterface()))
                 queue_visited.TransferInterface(*nextIface, queue_pending);
-        } 
-        else 
+        }
+        else
         {
             queue_visited.TransferInterface(startIface, queue_pending);
         }
@@ -1618,13 +1617,13 @@ void NetGraph::DijkstraTraversal::Update(Interface& ifaceA, Interface& ifaceB)
                 {
                     //the link isn't allowed and if the link was on the shortest path this will cause a full rest otherwise nothing will be updated
                     Update(ifaceA);
-                } 
-                else 
+                }
+                else
                 {
                     Update(ifaceB);
                 }
-            } 
-            else 
+            }
+            else
             {
                 //the link doesn't exists and if the link was on shortest path this will cause a full reset otherwise nothing will be updated
                 Update(ifaceA);
@@ -1632,7 +1631,7 @@ void NetGraph::DijkstraTraversal::Update(Interface& ifaceA, Interface& ifaceB)
         }
         else
         {
-            //a's cost is less than b's 
+            //a's cost is less than b's
             Link* linkPtr = ifaceA.GetLinkTo(ifaceB);
             if(NULL != linkPtr)
             {
@@ -1640,25 +1639,25 @@ void NetGraph::DijkstraTraversal::Update(Interface& ifaceA, Interface& ifaceB)
                 {
                     //the link isn't allowed and if the link was on the shortest path this will cause a full reset otherwise nothing will be updated
                     Update(ifaceB);
-                } 
-                else 
+                }
+                else
                 {
                     //there is a link so lets try and update A without doing a full update
                     Update(ifaceA);
                 }
-            } 
-            else 
+            }
+            else
             {
                 //the link doesn't exists and if the link was on shortest path this will cause a full rest otherwise nothing will be updated
                 Update(ifaceB);
             }
         }
-    } 
-    else if(aCostPtr != NULL) 
+    }
+    else if(aCostPtr != NULL)
     {
         Update(ifaceA);
-    } 
-    else if (bCostPtr != NULL) 
+    }
+    else if (bCostPtr != NULL)
     {
         Update(ifaceB);
     }
@@ -1693,7 +1692,7 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::TreeWalkNext(unsigned int* lev
     if (NULL != currentIface)
     {
         // Find selected links
-        
+
         Link* nextLink;
         Link* firstLink = NULL;
         if(traverse_nodes)
@@ -1709,8 +1708,8 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::TreeWalkNext(unsigned int* lev
                     queue_pending.Append(*nextDst);
                 }
             }
-        } 
-        else 
+        }
+        else
         {
             AdjacencyIterator linkIterator(*currentIface);
             while ((nextLink = linkIterator.GetNextAdjacencyLink()))
@@ -1731,8 +1730,8 @@ NetGraph::Interface* NetGraph::DijkstraTraversal::TreeWalkNext(unsigned int* lev
         }
         else if (trans_iface == currentIface)
         {
-            trans_iface = firstLink ? firstLink->GetDst() : NULL; 
-            current_level++;  
+            trans_iface = firstLink ? firstLink->GetDst() : NULL;
+            current_level++;
         }
         if (NULL != level) *level = current_level;
     }

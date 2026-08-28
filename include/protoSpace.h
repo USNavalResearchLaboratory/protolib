@@ -15,36 +15,36 @@ class ProtoSpace
 {
     public:
         ProtoSpace();
-        ~ProtoSpace();    
-        
+        ~ProtoSpace();
+
         unsigned int GetDimensions() const
             {return num_dimensions;}
-            
+
         /**
          * @class Node
          *
-         * @brief This base class let's us associate ordinate position 
+         * @brief This base class let's us associate ordinate position
          * information with any class that derives from it.
          */
         class Node
         {
             public:
                 virtual ~Node();
-            
+
                 virtual unsigned int GetDimensions() const = 0;
                 virtual double GetOrdinate(unsigned int dim) const = 0;
-                
+
             protected:
                 Node();
-                
+
         };  // end class ProtoSpace::Node
-    
+
         bool InsertNode(Node& node);
         bool RemoveNode(Node& node); // returns false if Node not in space
         bool ContainsNode(Node& node); // returns false if Node not in space
         void Empty();
         void Destroy();  // also deletes Nodes contained
-        
+
         unsigned int GetNodeCount() const
             {return node_count;}
 
@@ -53,12 +53,12 @@ class ProtoSpace
             public:
                 Ordinate();
                 ~Ordinate();
-                
-                const char* GetKey() const 
+
+                const char* GetKey() const
                         {return key;}
                 enum {KEYBYTES = (sizeof(double)+sizeof(Node*))};
                 enum {KEYBITS = 8*KEYBYTES};
-                
+
                 // ProtoSortedTree::Item overrides
                 unsigned int GetKeysize() const
                     {return KEYBITS;}
@@ -66,8 +66,8 @@ class ProtoSpace
                     {return true;}
                 bool UseComplement2() const
                     {return false;}
-                
-#if BYTE_ORDER == LITTLE_ENDIAN  
+
+#if BYTE_ORDER == LITTLE_ENDIAN
                 ProtoTree::Endian GetEndian() const
                     {return ProtoTree::ENDIAN_LITTLE;}
                 void SetNode(Node* theNode)
@@ -86,7 +86,7 @@ class ProtoSpace
                     memcpy(&value, key+sizeof(Node*), sizeof(double));
                     return value;
                 }
-#else               
+#else
                 ProtoTree::Endian GetEndian() const
                     {return ProtoTree::ENDIAN_BIG;}
                 void SetNode(Node* theNode)
@@ -105,17 +105,17 @@ class ProtoSpace
                     memcpy(&value, key, sizeof(double));
                     return value;
                 }
-#endif  // end if/else (BYTE_ORDER == LITTLE_ENDIAN)                
-                
+#endif  // end if/else (BYTE_ORDER == LITTLE_ENDIAN)
+
             private:
                 char   key[sizeof(double)+sizeof(Node*)];
         };  // end class ProtoSpace::Ordinate
-        
-        
+
+
         /**
          * @class Iterator
          *
-         * @brief This class starts at a origin point in the "space" and 
+         * @brief This class starts at a origin point in the "space" and
          * iterates through the nodes from the closest node(s)
          * to the farthest
          */
@@ -124,43 +124,43 @@ class ProtoSpace
             public:
                 Iterator(ProtoSpace& theSpace);
                 ~Iterator();
-                
+
                 bool Init(const double* originOrdinates = NULL);
                 void Destroy();
-                
+
                 void Reset(const double* originOrdinates = NULL);
-                
+
                 Node* GetNextNode(double* distance = NULL);
-                
+
             private:
                 ProtoSpace& space;
-                
-                // This array contains the ordinates 
+
+                // This array contains the ordinates
                 // of the "origin"
                 double*                      orig;
                 double                       bbox_radius;
                 double                       x_factor;
-                // The iterations define an expanding 
+                // The iterations define an expanding
                 // bounding n-dimensional sub-space.
                 ProtoSortedTree::Iterator**  pos_it;
                 ProtoSortedTree::Iterator**  neg_it;
                 ProtoSortedTree              ord_tree;
-                
+
         };  // end class Iterator()
         friend class Iterator;
-        
-            
+
+
     private:
-        Ordinate* GetOrdinateFromPool() 
-            {return static_cast<Ordinate*>(ord_pool.Get());}   
+        Ordinate* GetOrdinateFromPool()
+            {return static_cast<Ordinate*>(ord_pool.Get());}
         void ReturnOrdinateToPool(Ordinate& ord)
-            {ord_pool.Put(ord);} 
-            
-        unsigned int              num_dimensions;    
+            {ord_pool.Put(ord);}
+
+        unsigned int              num_dimensions;
         ProtoSortedTree*          ord_tree;
         ProtoSortedTree::ItemPool ord_pool;
         unsigned                  node_count;
-            
+
 };  // end class ProtoSpace
 
 

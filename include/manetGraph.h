@@ -904,7 +904,6 @@ class NetGraph : public ProtoGraph
                         SortedList(ItemPool* itemPool = NULL) : NetGraph::Interface::SortedList(itemPool) {}
                         virtual ~SortedList() {}
 
-
                         MY_TYPE* FindInterface(const ProtoAddress& addr) const
                             {return static_cast<MY_TYPE*>(FindVertice(addr.GetRawHostAddress(), addr.GetLength() << 3));}
 

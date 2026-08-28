@@ -1,6 +1,6 @@
 /**
 * @file protoGraph.cpp
-* 
+*
 * @brief
 */
 #include "protoGraph.h"
@@ -12,12 +12,12 @@ ProtoGraph::VerticeQueue::VerticeQueue()
 }
 
 ProtoGraph::VerticeQueue::~VerticeQueue()
-{    
+{
     // Note the original plan was to call the Empty()
     // method here so that when a VerticeQueue is deleted
     // it removes any queued Vertices so they aren't left
     // with a bad pointer.  But, you can't call virtual methods
-    // from a destructor in C++. So, the derived classes 
+    // from a destructor in C++. So, the derived classes
     // MUST call Empty() in their destructors!
 }
 
@@ -27,7 +27,7 @@ ProtoGraph::VerticeQueue::~VerticeQueue()
 void ProtoGraph::VerticeQueue::Associate(Vertice& vertice, QueueState& queueState)
 {
     queueState.Associate(vertice, *this);
-    vertice.Reference(queueState); 
+    vertice.Reference(queueState);
 }  // end ProtoGraph::VerticeQueue::Associate()
 
 /**
@@ -38,20 +38,20 @@ void ProtoGraph::VerticeQueue::Disassociate(Vertice& vertice, QueueState& queueS
     vertice.Dereference(queueState);
     queueState.Disassociate();
 }  // end ProtoGraph::VerticeQueue::Disassociate()
-        
+
 ProtoGraph::Vertice::Vertice()
  : adjacency_queue(*this)
 {
 }
 
 /**
- * Make sure no queues still refer to us by 
+ * Make sure no queues still refer to us by
  * removing ourself from any queues that do)
  *
- * @note If were in an "AdjacencyQueue" the call to 
- * VerticeQueue::Remove() will _delete_ the associated 
+ * @note If were in an "AdjacencyQueue" the call to
+ * VerticeQueue::Remove() will _delete_ the associated
  * "Edge" since we don't provide a pointer to
- * "EdgeFactory" here.  ("Edges" that aren't dynamically 
+ * "EdgeFactory" here.  ("Edges" that aren't dynamically
  *  allocated would cause a problem here!)
  */
 ProtoGraph::Vertice::~Vertice()
@@ -60,17 +60,17 @@ ProtoGraph::Vertice::~Vertice()
     // it is likely the case that the derived VerticeQueue depends
     // upon some extension of the base Vertice class for its data
     // organization.  So, derived Vertice types SHOULD/MUST call
-    // Cleanup() themselves so the Cleanup() call doesn't do 
+    // Cleanup() themselves so the Cleanup() call doesn't do
     // anything harmful.  In fact, perhaps it would be better to
     // not call Cleanup() here and require programmers that create
     // derived Vertice subclasses to call Cleanup().  The way to force
     // this may be to make the Cleanup() a pure virtual function in
     // the base class so that subclasses must implement it?  There is still
     // some leftover safety issue here where further derivations are performed ...
-    // Anyway the result here is that a virtual function may end up indirectly 
+    // Anyway the result here is that a virtual function may end up indirectly
     // called from this destructor which can have bad behavior
     Cleanup();
-} 
+}
 
 void ProtoGraph::Vertice::Cleanup()
 {
@@ -124,10 +124,10 @@ ProtoGraph::VerticeQueue::QueueState::~QueueState()
 
 void ProtoGraph::VerticeQueue::QueueState::Cleanup()
 {
-    if (NULL != vertice) 
+    if (NULL != vertice)
     {
         ASSERT(NULL != queue);
-        queue->Remove(*vertice);   
+        queue->Remove(*vertice);
     }
 }  // end ProtoGraph::VerticeQueue::QueueState::Cleanup()
 
@@ -206,7 +206,7 @@ void ProtoGraph::Vertice::SimpleList::Remove(Vertice& vertice)
 {
     // 1) Retrieve "Item*" from "vertice" queue state
     Item* item = static_cast<Item*>(vertice.GetQueueState(*this));
-    // 2) Remove "item" from our linked list 
+    // 2) Remove "item" from our linked list
     ASSERT(NULL != item);
     RemoveItem(*item);
     Disassociate(vertice, *item);
@@ -230,12 +230,12 @@ ProtoGraph::Vertice* ProtoGraph::Vertice::SimpleList::RemoveHead()
             item_pool->Put(*item);
         else
             delete item;
-        return vertice; 
+        return vertice;
     }
     else
     {
         return NULL;
-    }  
+    }
 }  // end ProtoGraph::Vertice::SimpleList::RemoveHead()
 
 void ProtoGraph::Vertice::SimpleList::Empty()
@@ -341,7 +341,7 @@ ProtoGraph::Vertice::SortedList::SortedList(ItemPool* itemPool)
 ProtoGraph::Vertice::SortedList::~SortedList()
 {
     // Note that Empty() here invokes the Item's
-    // virtual methods GetKey(), etc ... 
+    // virtual methods GetKey(), etc ...
     Empty();
 }
 
@@ -432,25 +432,25 @@ const char* ProtoGraph::Vertice::SortedList::Item::GetKey() const
 unsigned int ProtoGraph::Vertice::SortedList::Item::GetKeysize() const
 {
     ASSERT(NULL != GetVertice());
-    return GetVertice()->GetVerticeKeysize(); 
+    return GetVertice()->GetVerticeKeysize();
 }  // end ProtoGraph::Vertice::SortedList::Item::GetKeysize()
 
 ProtoTree::Endian ProtoGraph::Vertice::SortedList::Item::GetEndian() const
 {
     ASSERT(NULL != GetVertice());
-    return GetVertice()->GetVerticeKeyEndian(); 
+    return GetVertice()->GetVerticeKeyEndian();
 }  // end ProtoGraph::Vertice::SortedList::Item::GetEndian()
 
 bool ProtoGraph::Vertice::SortedList::Item::UseSignBit() const
 {
     ASSERT(NULL != GetVertice());
-    return GetVertice()->GetVerticeKeySigned(); 
+    return GetVertice()->GetVerticeKeySigned();
 }  // end ProtoGraph::Vertice::SortedList::Item::UseSignBit()
 
 bool ProtoGraph::Vertice::SortedList::Item::UseComplement2() const
 {
     ASSERT(NULL != GetVertice());
-    return GetVertice()->GetVerticeKeyComplement2(); 
+    return GetVertice()->GetVerticeKeyComplement2();
 }  // end ProtoGraph::Vertice::SortedList::Item::UseComplement2()
 
 
@@ -551,7 +551,7 @@ void ProtoGraph::AdjacencyQueue::Reconnect(Vertice& dstVertice, Edge& edge)
 /**
  *  Remove all edges to "dstVertice"
  */
-void ProtoGraph::AdjacencyQueue::Disconnect(Vertice&   dstVertice, 
+void ProtoGraph::AdjacencyQueue::Disconnect(Vertice&   dstVertice,
                                             EdgePool*  edgePool)
 {
     Edge* edge;
@@ -562,13 +562,13 @@ void ProtoGraph::AdjacencyQueue::Disconnect(Vertice&   dstVertice,
     }
 }  // end ProtoGraph::AdjacencyQueue::Disconnect()
 
-void ProtoGraph::AdjacencyQueue::RemoveEdge(Vertice&   dstVertice, 
-                                            Edge&      edge, 
+void ProtoGraph::AdjacencyQueue::RemoveEdge(Vertice&   dstVertice,
+                                            Edge&      edge,
                                             EdgePool*  edgePool)
 {
     if (static_cast<VerticeQueue*>(this) == edge.GetQueue())
     {
-        SuspendEdge(dstVertice, edge); 
+        SuspendEdge(dstVertice, edge);
         if (NULL != edgePool){
             edgePool->Put(edge);
         }
@@ -582,7 +582,7 @@ void ProtoGraph::AdjacencyQueue::RemoveEdge(Vertice&   dstVertice,
     }
 }  // end ProtoGraph::AdjacencyQueue::RemoveEdge()
 
-void ProtoGraph::AdjacencyQueue::SuspendEdge(Vertice&   dstVertice, 
+void ProtoGraph::AdjacencyQueue::SuspendEdge(Vertice&   dstVertice,
                                              Edge&      edge)
 {
     if (static_cast<VerticeQueue*>(this) == edge.GetQueue())
@@ -635,7 +635,7 @@ ProtoGraph::Edge::Tracker::Tracker(const Edge& theEdge)
  : edge(theEdge)
 {
 }
-        
+
 ProtoGraph::Edge::Edge()
  : tracker(*this)
 {
@@ -663,7 +663,7 @@ unsigned int ProtoGraph::Edge::GetKeysize() const
     return 0;
 }  // end ProtoGraph::Edge::GetKeysize()
 
-        
+
 ProtoTree::Endian ProtoGraph::Edge::GetEndian() const
 {
     return ProtoSortedTree::Item::GetEndian();
@@ -701,14 +701,14 @@ ProtoGraph::EdgePool::~EdgePool()
 }
 
 // begin "class ProtoGraph::SimpleTraversal" implementation
-ProtoGraph::SimpleTraversal::SimpleTraversal(const ProtoGraph& theGraph, 
+ProtoGraph::SimpleTraversal::SimpleTraversal(const ProtoGraph& theGraph,
                                              Vertice&          startVertice,
                                              bool              depthFirst)
- : graph(theGraph), start_vertice(startVertice), depth_first(depthFirst), 
+ : graph(theGraph), start_vertice(startVertice), depth_first(depthFirst),
    queue_pending(&item_pool), queue_visited(&item_pool)
 {
     Reset();
-}  
+}
 
 ProtoGraph::SimpleTraversal::~SimpleTraversal()
 {
@@ -757,7 +757,7 @@ ProtoGraph::Vertice* ProtoGraph::SimpleTraversal::GetNextVertice(unsigned int* l
                 else
                 {
                     queue_pending.Append(*nextVertice);
-                    if (NULL == transAdjacency) 
+                    if (NULL == transAdjacency)
                         transAdjacency = nextVertice;
                 }
             }
@@ -847,7 +847,7 @@ void ProtoGraph::RemoveVertice(Vertice& vertice)
     // b) Remove all edges from any "connector" vertices to this vertice
     while (NULL != (next = it.GetNextConnector()))
         Disconnect(*next, vertice);
-    
+
     // 2) Remove "vertice" from the graph "vertice_list"
     vertice_list.Remove(vertice);
 }  // end ProtoGraph::RemoveVertice()

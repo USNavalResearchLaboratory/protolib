@@ -335,8 +335,8 @@ graphExample:    $(GRAPH_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
 
-GRAPH_RIDER_SRC = $(EXAMPLES)/graphRider.cpp $(COMMON)/protoGraph.cpp \
-		$(MANET)/manetGraph.cpp $(MANET)/manetGraphML.cpp
+GRAPH_RIDER_SRC = $(EXAMPLES)/graphRider.cpp $(COMMON)/protoGraph.cpp $(COMMON)/protoXml.cpp \
+		$(COMMON)/protoLocation.cpp $(MANET)/manetGraph.cpp $(MANET)/manetGraphML.cpp
 GRAPH_RIDER_OBJ = $(GRAPH_RIDER_SRC:.cpp=.o)
 graphRider:    $(GRAPH_RIDER_OBJ) libprotokit.a
 	$(CC) $(CFLAGS) -o $@ $(GRAPH_RIDER_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a

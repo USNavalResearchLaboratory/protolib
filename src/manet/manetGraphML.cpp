@@ -200,6 +200,11 @@ ManetGraphMLParser::AttributeKey::SetDomain(const char* theDomain)
         (!strcmp(theDomain,"NODE"))) {
          domain = Domains::NODE;
     } else if
+       ((!strcmp(theDomain,"port")) ||
+        (!strcmp(theDomain,"Port")) ||
+        (!strcmp(theDomain,"PORT"))) {
+         domain = Domains::PORT;
+    } else if
        ((!strcmp(theDomain,"edge")) ||
         (!strcmp(theDomain,"Edge")) ||
         (!strcmp(theDomain,"EDGE"))) {
@@ -760,9 +765,9 @@ ManetGraphMLParser::Attribute::~Attribute()
     delete[] value;
 }
 bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
-                                       NetGraph&        graph,
-                                       char*            parentXMLNodeID,
-                                       bool&            isDuplex)
+                                     NetGraph&        graph,
+                                     char*            parentXMLNodeID,
+                                     bool&            isDuplex)
 {
     //const xmlChar *name, *value;
     //int count, depth, type, isempty;
@@ -943,13 +948,13 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
             sourcePortInterface = graph.FindInterfaceByString((const char*)sourcePortName);
             if((NULL == sourcePortInterface) || (NULL == targetPortInterface))
             {
-                PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode: Error finding the source interface \"%s\" or target interface \"%s\" to create an edge!\n",sourcePortName,targetPortName);
+                PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode: Error finding the sourceport interface \"%s\" or target interface \"%s\" to create an edge!\n",sourcePortName,targetPortName);
                 return false;
             }
             NetGraph::Cost* mycost = CreateCost(1.0);
             if(!Connect(*sourcePortInterface,*targetPortInterface,*mycost,isDuplex))
             {
-                PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode: Error connecting the source interface \"%s\" or target interface \"%s\" to create an edge!\n",sourcePortName,targetPortName);
+                PLOG(PL_ERROR,"ManetGraphMLParser::ReadXMLNode: Error connecting the sourceport interface \"%s\" or target interface \"%s\" to create an edge!\n",sourcePortName,targetPortName);
                 return false;
             }
             delete mycost;  //should we have a virtual override on this too? TBD
@@ -1114,6 +1119,7 @@ bool ManetGraphMLParser::ReadXMLNode(xmlTextReader*   readerPtr,
 
 bool ManetGraphMLParser::Read(const char* path, NetGraph& graph)
 {
+    TRACE("enter ManetGraphMLParser::Read() ...\n");
     // Iteratively read the file's XML tree and build up "graph"
     //xmlTextReader* readerPtr = xmlReaderForFile(path, NULL, 1);
     xmlTextReader* readerPtr = xmlReaderForFile(path, "", 0);
@@ -1136,6 +1142,7 @@ bool ManetGraphMLParser::Read(const char* path, NetGraph& graph)
         }
         result = xmlTextReaderRead(readerPtr);
     }
+    TRACE("  post-loop result: %d\n", result);
     xmlFreeTextReader(readerPtr);
     if (0 != result)
         PLOG(PL_ERROR,"ManetGraphMLParser::Read() error: invalid XML file %s\n", path);
@@ -1215,8 +1222,10 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
     NetGraph::InterfaceIterator it(graph);
     NetGraph::Interface* iface;
     //adding the nodes to the xml
+    TRACE("Iterating over graph ifaces ...\n");
     while (NULL != (iface = it.GetNextInterface()))
     {
+        TRACE("write iterated to iface %s\n", iface->GetName());
         //check to see if this is a default "node" interface
         //if(!iface->IsPort())
         if (iface == iface->GetNode().GetDefaultInterface())
@@ -1231,12 +1240,12 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
             if(iface->GetAddress().IsValid())
             {
                 returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id", BAD_CAST iface->GetAddress().GetHostString());
-                //printf("writing node %s\n",iface->GetAddress().GetHostString());
+                TRACE("writing node %s\n",iface->GetAddress().GetHostString());
             }
             else
             {
                 returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id", BAD_CAST iface->GetName());
-                //printf("writing node %s\n",iface->GetName());
+                TRACE("writing node %s\n",iface->GetName());
             }
             if (returnvalue < 0) { PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding setting node id\n"); return false;}
 
@@ -1278,12 +1287,12 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                     if(portIface->GetAddress().IsValid())
                     {
                         returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "name", BAD_CAST portIface->GetAddress().GetHostString());
-                        //printf("writing interface %s\n",iface->GetAddress().GetHostString());
+                        TRACE("writing interface %s\n",iface->GetAddress().GetHostString());
                     }
                     else
                     {
                         returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "name", BAD_CAST portIface->GetName());
-                        //printf("writing node %s\n",iface->GetName());
+                        TRACE("writing node %s\n",iface->GetName());
                     }
                     if (returnvalue < 0)
                     {
@@ -1343,11 +1352,11 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                 }
                 if(iface->GetAddress().IsValid())
                 {
-                    //printf("writing connection %s ->",iface->GetAddress().GetHostString());
+                    TRACE("writing connection %s ->",iface->GetAddress().GetHostString());
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetAddress().GetHostString());
                 }else
                 {
-                    //printf("writing connection %s ->",iface->GetName());
+                    TRACE("writing connection %s ->",iface->GetName());
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetName());
                 }
                 if (returnvalue < 0)
@@ -1357,12 +1366,12 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
                 }
                 if(nbrIface->GetAddress().IsValid()) {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetAddress().GetHostString());
-                    ////printf("%s\n",nbrIface->GetAddress().GetHostString());
+                    //TRACE("%s\n",nbrIface->GetAddress().GetHostString());
                 }
                 else
                 {
                     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetName());
-                    ////printf("%s\n",nbrIface->GetName());
+                    //TRACE("%s\n",nbrIface->GetName());
                 }
                 if (returnvalue < 0)
                 {
@@ -1606,6 +1615,9 @@ bool ManetGraphMLParser::WriteLocalKeys(xmlTextWriter* writerPtr)
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "for",BAD_CAST "graph");
             break;
           case AttributeKey::Domains::NODE:
+            rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "for",BAD_CAST "node");
+            break;
+          case AttributeKey::Domains::PORT:
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "for",BAD_CAST "node");
             break;
           case AttributeKey::Domains::EDGE:

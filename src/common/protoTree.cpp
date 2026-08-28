@@ -2502,22 +2502,190 @@ void ProtoSortedTree::Iterator::Reset(bool reverse, const char* keyMin, unsigned
         Item* match = tree.Find(keyMin, keysize);
         if (NULL == match)
         {
-            // There was no exact match to "keyMin", so look for next item (or prev if reverse == true)
-            TempItem tmpItem(keyMin, keysize, tree.GetHead()->GetEndian());
-            tree.item_tree.Insert(tmpItem);
-            match = reverse ? static_cast<Item*>(tree.item_tree.FindLexicalPredecessor(&tmpItem)) :
-                              static_cast<Item*>(tree.item_tree.FindLexicalSuccessor(&tmpItem));
-            tree.item_tree.Remove(tmpItem);  // it's done its job, so bye-bye
-        }
-        if ((NULL != match) && !reverse)
-        {
-            // Make sure we are positioned on _first_ item of equal valued items
-            Item* prev = static_cast<Item*>(tree.item_tree.FindLexicalPredecessor(match));
-            if (NULL == prev)
-                match = tree.item_list.GetHead();
+            Item* head = tree.GetHead();
+            ASSERT(NULL != head);
+            const ProtoTree::Endian keyEndian = head->GetEndian();
+            const bool useSignBit = head->UseSignBit();
+            const bool useComplement2 = head->UseComplement2();
+            // Insert a temporary key into the raw Patricia tree so that its
+            // lexical predecessor/successor are guaranteed to be the actual
+            // adjacent keys.  A Patricia "closest match" is not necessarily
+            // lexically adjacent and therefore cannot safely implement a
+            // lower/upper-bound query by itself.
+            TempItem tmpItem(keyMin, keysize, keyEndian);
+            bool result = tree.item_tree.Insert(tmpItem);
+            ASSERT(result);
+            Item* lexPrev =
+                static_cast<Item*>(
+                    tree.item_tree.FindLexicalPredecessor(&tmpItem));
+            Item* lexNext =
+                static_cast<Item*>(
+                    tree.item_tree.FindLexicalSuccessor(&tmpItem));
+            tree.item_tree.Remove(tmpItem);
+            if (!useSignBit)
+            {
+                // Ordinary unsigned / lexical ordering.
+                match = reverse ? lexPrev : lexNext;
+            }
             else
-                match = static_cast<Item*>(tree.item_list.GetNextItem(*prev));
+            {
+                const bool keySign =
+                    ProtoTree::Bit(keyMin, keysize, 0, keyEndian);
+                if (!keySign)
+                {
+                    // Non-negative values have ordinary lexical ordering.
+                    match = reverse ? lexPrev : lexNext;
+                    if (NULL != match)
+                    {
+                        const bool matchSign =
+                            ProtoTree::Bit(match->GetKey(),
+                                           match->GetKeysize(),
+                                           0,
+                                           keyEndian);
+                        if (matchSign)
+                            match = NULL;
+                    }
+                    if (reverse && (NULL == match))
+                    {
+                        // There is no non-negative item <= keyMin.  The
+                        // numeric predecessor, if any, is the greatest
+                        // negative item immediately before positive_min in
+                        // the threaded numeric list.
+                        if (NULL != tree.positive_min)
+                        {
+                            const ProtoList::Item* prevBase =
+                                tree.positive_min->ProtoList::Item::GetPrev();
+                            if (NULL != prevBase)
+                            {
+                                match = const_cast<Item*>(
+                                    static_cast<const Item*>(prevBase));
+                            }
+                        }
+                        else
+                        {
+                            // The tree contains only negative values.
+                            match = tree.GetTail();
+                        }
+                    }
+                }
+                else if (useComplement2)
+                {
+                    // Two's-complement negative values have the same
+                    // relative lexical order as their numeric order.
+                    if (reverse)
+                    {
+                        match = lexPrev;
+                        if (NULL != match)
+                        {
+                            const bool matchSign =
+                                ProtoTree::Bit(match->GetKey(),
+                                               match->GetKeysize(),
+                                               0,
+                                               keyEndian);
+                            if (!matchSign)
+                                match = NULL;
+                        }
+                    }
+                    else
+                    {
+                        match = lexNext;
+                        if (NULL != match)
+                        {
+                            const bool matchSign =
+                                ProtoTree::Bit(match->GetKey(),
+                                               match->GetKeysize(),
+                                               0,
+                                               keyEndian);
+                            if (!matchSign)
+                                match = NULL;
+                        }
+                        // If no negative value is >= keyMin, every
+                        // non-negative value is, so use the smallest one.
+                        if (NULL == match)
+                            match = tree.positive_min;
+                    }
+                }
+                else
+                {
+                    // IEEE floating point and similar sign-magnitude-like
+                    // representations have reverse lexical ordering within
+                    // the negative range.
+                    if (reverse)
+                    {
+                        // Numeric <= corresponds to lexical successor.
+                        match = lexNext;
+                        if (NULL != match)
+                        {
+                            const bool matchSign =
+                                ProtoTree::Bit(match->GetKey(),
+                                               match->GetKeysize(),
+                                               0,
+                                               keyEndian);
+                            if (!matchSign)
+                                match = NULL;
+                        }
+                    }
+                    else
+                    {
+                        // Numeric >= corresponds to lexical predecessor.
+                        match = lexPrev;
+                        if (NULL != match)
+                        {
+                            const bool matchSign =
+                                ProtoTree::Bit(match->GetKey(),
+                                               match->GetKeysize(),
+                                               0,
+                                               keyEndian);
+                            if (!matchSign)
+                                match = NULL;
+                        }
+
+                        // No negative value >= keyMin: continue at the
+                        // smallest non-negative value.
+                        if (NULL == match)
+                            match = tree.positive_min;
+                    }
+                }
+            }
         }
+
+        if (NULL != match)
+        {
+            // item_tree holds one representative for duplicate keys while
+            // item_list can hold several. Position on the first equal item
+            // for forward iteration or the last equal item for reverse.
+            if (reverse)
+            {
+                const ProtoList::Item* nextBase =
+                    match->ProtoList::Item::GetNext();
+                while (NULL != nextBase)
+                {
+                    Item* next =
+                        const_cast<Item*>(
+                            static_cast<const Item*>(nextBase));
+                    if (!ProtoTree::ItemsAreEqual(*match, *next))
+                        break;
+                    match = next;
+                    nextBase = match->ProtoList::Item::GetNext();
+                }
+            }
+            else
+            {
+                const ProtoList::Item* prevBase =
+                    match->ProtoList::Item::GetPrev();
+                while (NULL != prevBase)
+                {
+                    Item* prev =
+                        const_cast<Item*>(
+                            static_cast<const Item*>(prevBase));
+                    if (!ProtoTree::ItemsAreEqual(*match, *prev))
+                        break;
+                    match = prev;
+                    prevBase = match->ProtoList::Item::GetPrev();
+                }
+            }
+        }
+
         list_iterator.SetCursor(match);
     }
 }  // end ProtoSortedTree::Iterator::Reset()

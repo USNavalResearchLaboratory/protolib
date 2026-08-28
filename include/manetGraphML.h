@@ -13,12 +13,12 @@ class ManetGraphMLParser
 {
     public:
         virtual ~ManetGraphMLParser();
-        const char* GetString(NetGraph::Interface& iface) const; 
+        const char* GetString(NetGraph::Interface& iface) const;
         const char* GetString(NetGraph::Node& node) const;
-        class AttributeKey : public ProtoQueue::Item 
+        class AttributeKey : public ProtoQueue::Item
         {
             public:
-                struct Domains {enum Domain {INVALID, GRAPH, NODE, EDGE, ALL};};
+                struct Domains {enum Domain {INVALID, GRAPH, NODE, PORT, EDGE, ALL};};
                 struct Types {enum Type { INVALID, BOOL, INT, LONG, FLOAT, DOUBLE, STRING };};
                 //AttributeKey() : index(NULL), name(NULL), oldkey(NULL), domain(Domains::INVALID), type(Types::INVALID){}
                 AttributeKey() : index(NULL), name(NULL), oldindex(NULL), defaultvalue(NULL), domain(Domains::INVALID),type(Types::INVALID){}
@@ -39,7 +39,7 @@ class ManetGraphMLParser
                 char* defaultvalue;
                 Domains::Domain domain;
                 Types::Type type;
-                
+
                 bool SetDomain(const char* theDomain);
                 bool SetType(const char* theType);
                 bool SetDefault(const char* theDefault);
@@ -47,17 +47,17 @@ class ManetGraphMLParser
 
         bool Read(const char* path, NetGraph& graph);   // load graph from GraphML file
         bool Write(NetGraph& graph, const char* path, char* buffer=NULL, unsigned int* len_ptr = NULL);  // make GraphML file from graph
-        
+
         bool SetXMLName(const char* theName);
 
         bool SetAttributeKey(const char* theName,const char* theType, const char* theDomain = NULL, const char* oldIndex = NULL,const char* theDefault = NULL);
-        
+
         bool SetAttribute(const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Node& node, const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Link& link, const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Interface& interface, const char* theName, const char* theValue);
 
-    protected:         
+    protected:
         bool AddAttributeKey(const char* theName,const char* theType, const char* theDomain = NULL, const char* oldIndex = NULL,const char* theDefault = NULL);
         bool AddAttribute(const char* theName, const char* theValue);
         bool AddAttribute(NetGraph::Node& node, const char* theName, const char* theValue);
@@ -98,8 +98,8 @@ class ManetGraphMLParser
             unsigned int GetKeysize(const ProtoQueue::Item& item) const
                 {return 8*strlen(static_cast<const AttributeKey&>(item).GetOldIndex());}
         } oldindexkeylist;
-        
-        class Attribute : public ProtoQueue::Item 
+
+        class Attribute : public ProtoQueue::Item
         {
             public:
                 char* lookupvalue; //this string defines which node/port/edge the value belongs to.
@@ -148,18 +148,18 @@ class ManetGraphMLParser
         virtual bool Connect(NetGraph::Interface& iface1, NetGraph::Interface& iface2, NetGraph::Cost& cost, bool isDuplex) = 0;
 //        virtual bool WriteLinkAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLink) = 0;
         virtual bool UpdateLinkAttributes(NetGraph::Link& theLink) = 0; //this will replace the above so keys will be stored locally
-        bool WriteLocalLinkAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLInk); 
-      
-        bool ReadXMLNode(xmlTextReader*   readerPtr, 
-                         NetGraph&        graph, 
-                         char*            parentXMLNodeID, 
+        bool WriteLocalLinkAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLInk);
+
+        bool ReadXMLNode(xmlTextReader*   readerPtr,
+                         NetGraph&        graph,
+                         char*            parentXMLNodeID,
                          bool&            isDuplex);
-        
-        
+
+
         // Members
         char*   XMLName;
         int     indexes;
-        
+
 };  // end class ManetGraphMLParser
 
 template <class COST_TYPE = ManetGraph::Cost, class IFACE_TYPE = ManetGraph::Interface, class LINK_TYPE = ManetGraph::Link,class NODE_TYPE = ManetGraph::Node>
@@ -169,12 +169,12 @@ class ManetGraphMLTemplate : public ManetGraphMLParser, public NetGraphTemplate<
         ManetGraphMLTemplate() {}
         virtual ~ManetGraphMLTemplate() {}
         //virtual ~ManetGraphMLTemplate(); //we are assuming that all the nodes/interfaces/links in this type of graph were created locally using the parser so we delete them all upon destroy  TBD
-                
+
         bool Read(const char* path)   // load graph from GraphML file
             {return ManetGraphMLParser::Read(path, *this);}
-            
+
         bool Write(const char* path, char* buffer = NULL, unsigned int* len=NULL)  // make GraphML file from graph
-            {return ManetGraphMLParser::Write(*this, path,buffer,len);}
+            {return ManetGraphMLParser::Write(*this, path, buffer, len);}
         bool Connect(NetGraph::Interface& iface1,NetGraph::Interface& iface2,NetGraph::Cost& theCost,bool isDuplex)
             {return NetGraph::Connect(iface1,iface2,theCost,isDuplex);}
         virtual bool InsertInterface(NetGraph::Interface& theIface)
@@ -212,12 +212,12 @@ class ManetGraphMLTemplate : public ManetGraphMLParser, public NetGraphTemplate<
             {return static_cast<NetGraph::Cost*>(new COST_TYPE(value));}
         class NetGraph::Cost* CreateCost()
             {return static_cast<NetGraph::Cost*>(new COST_TYPE());}
-        virtual bool AddInterfaceToNode(NetGraph::Node& theNode,NetGraph::Interface& theIface,bool makeDefault)
-            {return (static_cast<NODE_TYPE&>(theNode)).AddInterface(theIface,makeDefault);}
+        virtual bool AddInterfaceToNode(NetGraph::Node& theNode,NetGraph::Interface& theIface, bool makeDefault)
+            {return (static_cast<NODE_TYPE&>(theNode)).AddInterface(theIface, makeDefault);}
         virtual bool AddInterfaceToGraph(NetGraph& theGraph,NetGraph::Interface& theIface)
             {return (static_cast<ManetGraphMLTemplate&>(theGraph)).InsertInterface(theIface);}
         virtual bool AddNodeToGraph(NetGraph& theGraph, NetGraph::Node& theNode) {return true;} //optional virtual function to allow derived classes to do something upon addition of a new node
-};  // end class ManetGraphMLParser    
+};  // end class ManetGraphMLParser
 
 
 // Example, default ManetGraphML
