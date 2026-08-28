@@ -216,25 +216,41 @@ list(APPEND COMMON_SOURCE_FILES
 list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_LIST_DIR}/include )
 
 # Setup platform dependent libraries, defines, source file and compiler flags
-if(MSVC)
-	list(APPEND PLATFORM_LIBS ws2_32 iphlpapi user32 gdi32 Advapi32 ntdll)
-	list(APPEND PLATFORM_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
-	list(APPEND PLATFORM_SOURCE_FILES src/win32/win32Net.cpp src/win32/win32RouteMgr.cpp)
-	list(APPEND PLATFORM_FLAGS /EHsc)
+if(WIN32)
+    list(APPEND PLATFORM_LIBS
+        ws2_32
+        iphlpapi
+        user32
+        gdi32
+        Advapi32
+        ntdll
+    )
+
+    list(APPEND PLATFORM_SOURCE_FILES
+        src/win32/win32Net.cpp
+        src/win32/win32RouteMgr.cpp
+    )
+    
+    if(MSVC)
+        list(APPEND PLATFORM_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
+        list(APPEND PLATFORM_FLAGS /EHsc)
+    endif()
 elseif(UNIX)
 	list(APPEND PLATFORM_DEFINITIONS UNIX _FILE_OFFSET_BITS=64)
-	list(APPEND PLATFORM_SOURCE_FILES 	src/unix/unixNet.cpp 
-										src/unix/unixSerial.cpp 
-										src/unix/unixVif.cpp
-										src/manet/manetGraph.cpp
-										src/manet/manetMsg.cpp)
+	list(APPEND PLATFORM_SOURCE_FILES
+		src/unix/unixNet.cpp 
+		src/unix/unixSerial.cpp 
+		src/unix/unixVif.cpp
+		src/manet/manetGraph.cpp
+		src/manet/manetMsg.cpp)
 	if(${CMAKE_SYSTEM_NAME} STREQUAL Linux)
 		list(APPEND PLATFORM_DEFINITIONS LINUX )
 		list(APPEND PLATFORM_LIBS dl rt)
-		list(APPEND PLATFORM_SOURCE_FILES 	src/linux/linuxCap.cpp 
-										    src/linux/linuxNet.cpp 
-										    src/linux/linuxRouteMgr.cpp
-										    src/unix/zebraRouteMgr.cpp)
+		list(APPEND PLATFORM_SOURCE_FILES
+		    src/linux/linuxCap.cpp 
+		    src/linux/linuxNet.cpp 
+		    src/linux/linuxRouteMgr.cpp
+		    src/unix/zebraRouteMgr.cpp)
 		
 		check_library_exists(netfilter_queue pktb_alloc "" HAVE_NETFILTER_QUEUE)
 		if(HAVE_NETFILTER_QUEUE)
@@ -244,10 +260,11 @@ elseif(UNIX)
 		endif()
 	elseif(${CMAKE_SYSTEM_NAME} STREQUAL Darwin )
 		list(APPEND PLATFORM_DEFINITIONS MACOSX )
-		list(APPEND PLATFORM_SOURCE_FILES 	src/bsd/bsdDetour.cpp
-											src/bsd/bsdRouteMgr.cpp
-											src/bsd/bsdNet.cpp
-											src/unix/bpfCap.cpp)
+		list(APPEND PLATFORM_SOURCE_FILES
+			src/bsd/bsdDetour.cpp
+			src/bsd/bsdRouteMgr.cpp
+			src/bsd/bsdNet.cpp
+			src/unix/bpfCap.cpp)
             SET(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
             SET(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
             SET(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")

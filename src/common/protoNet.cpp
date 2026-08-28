@@ -1,14 +1,14 @@
 #include "protoNet.h"
 #include "protoDebug.h"
 
-unsigned int ProtoNet::GetInterfaceCount() 
+unsigned int ProtoNet::GetInterfaceCount()
 {
     return GetInterfaceIndices(NULL, 0);
 }  // end ProtoNet::GetInterfaceCount()
 
 unsigned int ProtoNet::GetInterfaceIndex(const ProtoAddress& ifAddr)
 {
-    
+
     char ifName[256];
     ifName[255] = '\0';
     if (GetInterfaceName(ifAddr, ifName, 255))
@@ -63,7 +63,7 @@ bool ProtoNet::GetHostAddressList(ProtoAddress::Type  addrType,
     // Now call with a buffer to get this list of indices
     ifCount =  GetInterfaceIndices(ifIndices, ifCount);
     for (unsigned int i = 0; i < ifCount; i++)
-	{   
+	{
         if (!GetInterfaceAddressList(ifIndices[i], addrType, addrList))
         {
             PLOG(PL_DEBUG, "ProtoNet::GetHostAddressList() error: unable to get addresses for iface index %d\n", ifIndices[i]);
@@ -73,14 +73,14 @@ bool ProtoNet::GetHostAddressList(ProtoAddress::Type  addrType,
     return true;  // all interfaces found & list returned in addrList
 }  // end ProtoNet::GetHostAddressList()
 
-bool ProtoNet::GetInterfaceAddress(const char*         ifName, 
+bool ProtoNet::GetInterfaceAddress(const char*         ifName,
 				                   ProtoAddress::Type  addrType,
 				                   ProtoAddress&       theAddress,
                                    unsigned int*       ifIndex)
 {
     ProtoAddressList addrList;
     GetInterfaceAddressList(ifName, addrType, addrList, ifIndex);
-    return addrList.GetFirstAddress(theAddress);   
+    return addrList.GetFirstAddress(theAddress);
 }  // end ProtoNet::GetInterfaceAddress()
 
 bool ProtoNet::GetInterfaceAddress(unsigned int        ifIndex,
@@ -89,7 +89,7 @@ bool ProtoNet::GetInterfaceAddress(unsigned int        ifIndex,
 {
     ProtoAddressList addrList;
     GetInterfaceAddressList(ifIndex, addrType, addrList);
-    return addrList.GetFirstAddress(theAddress);   
+    return addrList.GetFirstAddress(theAddress);
 }  // end ProtoNet::GetInterfaceAddress()
 
 #ifndef WIN32
@@ -142,7 +142,7 @@ bool ProtoNet::RemoveInterfaceAddress(unsigned int ifIndex, const ProtoAddress& 
         return false;
     }
 }   // end ProtoNet::RemoveInterfaceAddress()
-#endif // !WIN32   
+#endif // !WIN32
 
 ProtoNet::Monitor::Monitor()
 {
