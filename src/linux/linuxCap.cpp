@@ -464,10 +464,21 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
                 PLOG(PL_ERROR, "LinuxCap::Recv() error: %s\n", GetErrorString());
                 break;
         }
+        packet_remote_addr.Invalidate();
         return false;
     }
     else
     {
+        packet_remote_addr.Invalidate();
+        if ((ProtoNet::IFACE_GRE == if_type) && (pktAddr.sll_halen >= 4))
+        {
+            if (4 == pktAddr.sll_halen)
+                packet_remote_addr.SetRawHostAddress(ProtoAddress::IPv4,
+                                                     (const char*)pktAddr.sll_addr, 4);
+            else if (16 == pktAddr.sll_halen)
+                packet_remote_addr.SetRawHostAddress(ProtoAddress::IPv6,
+                                                     (const char*)pktAddr.sll_addr, 16);
+        }
         /*
         void* ipBuffer = (UINT32*)buffer;
         unsigned int ipLen = result;
