@@ -55,7 +55,7 @@ ProtoThread::ProtoThread()
 
 ProtoThread::~ProtoThread()
 {
-    
+
 }
 
 #ifdef WIN32
@@ -80,7 +80,7 @@ bool ProtoThread::StartThread(ThreadId threadId)
 #ifdef WIN32
         if (!(actual_thread_handle = (HANDLE)_beginthreadex(NULL, 0, DoThreadStart, this, 0, (unsigned*)&thread_id)))
 #else
-        if (0 != pthread_create(&thread_id, NULL, DoThreadStart, this))    
+        if (0 != pthread_create(&thread_id, NULL, DoThreadStart, this))
 #endif // if/else WIN32/UNIX
         {
             PLOG(PL_ERROR, "ProtoThread::StartThread() create thread error: %s\n", GetErrorString());
@@ -105,7 +105,7 @@ void ProtoThread::CloseThread(int exitCode)
 {
     exit_code = exitCode;
     if ((ThreadId)NULL != thread_id)
-    { 
+    {
         if (!external_thread)
         {
 #ifdef WIN32
