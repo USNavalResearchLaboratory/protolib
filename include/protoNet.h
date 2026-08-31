@@ -85,6 +85,8 @@ namespace ProtoNet
                         IFACE_ADDR_NEW,
                         IFACE_ADDR_DELETE,
                         IFACE_STATE,  // change in flags, etc
+                        IFACE_NEIGH_NEW,
+                        IFACE_NEIGH_DELETE,
                         UNKNOWN_EVENT
                     };
                         
@@ -99,6 +101,10 @@ namespace ProtoNet
                         {iface_index = ifaceIndex;}
                     void SetAddress(ProtoAddress& addr)
                         {iface_addr = addr;}
+                    void SetAuxAddress(const ProtoAddress& addr)
+                        {aux_addr = addr;}
+                    void SetFlags(unsigned short flags)
+                        {event_flags = flags;}
                     void SetInterfaceName(const char* name)
 					{
 #ifdef WIN32
@@ -116,6 +122,12 @@ namespace ProtoNet
                         {return iface_addr;}
                     ProtoAddress& AccessAddress()
                         {return iface_addr;}
+                    const ProtoAddress& GetAuxAddress() const
+                        {return aux_addr;}
+                    ProtoAddress& AccessAuxAddress()
+                        {return aux_addr;}
+                    unsigned short GetFlags() const
+                        {return event_flags;}
                     const char* GetInterfaceName() const
                         {return iface_name;}
                     
@@ -123,7 +135,9 @@ namespace ProtoNet
                 private:
                     Type            event_type;
                     int             iface_index;
-                    ProtoAddress    iface_addr; 
+                    ProtoAddress    iface_addr;
+                    ProtoAddress    aux_addr;     // neigh lladdr (underlay dest on GRE)
+                    unsigned short  event_flags;  // neigh NUD state
                     char            iface_name[IFNAME_MAX+1];
                      
             };  // end class ProtoNet::Monitor::Event
@@ -205,10 +219,22 @@ namespace ProtoNet
     InterfaceStatus GetInterfaceStatus(const char* ifaceName);
     InterfaceStatus GetInterfaceStatus(unsigned int ifaceIndex);
     
-    // Will optionally retrieve tunnel endpoint address for GRE tunnel interfaces
+    // Will optionally retrieve tunnel endpoint address for GRE tunnel interfaces.
+    // collectMetadata is set when IFLA_GRE_COLLECT_METADATA is present (type gre external).
     InterfaceType GetInterfaceType(unsigned int  ifaceIndex,
                                    ProtoAddress* localAddr = NULL,
-                                   ProtoAddress* remoteAddr = NULL);
+                                   ProtoAddress* remoteAddr = NULL,
+                                   bool*         collectMetadata = NULL);
+
+    // Dump kernel neighbor entries for ifIndex (overlay dst + lladdr).
+    // handler is invoked once per entry; return false to stop.
+    // On GRE, lladdr is the underlay IPv4/IPv6 destination.
+    typedef bool (*NeighborHandler)(unsigned int         ifIndex,
+                                    const ProtoAddress&  dst,
+                                    const ProtoAddress&  lladdr,
+                                    unsigned short       ndmState,
+                                    void*                userData);
+    bool GetInterfaceNeighbors(unsigned int ifIndex, NeighborHandler handler, void* userData);
     //bool GetTunnelEndpoints(unsigned int ifaceIndex, ProtoAddress& localAddr, ProtoAddress& remoteAddr);
 
 #ifdef WIN32
