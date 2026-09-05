@@ -31,6 +31,10 @@ class ProtoPipe : public ProtoSocket
             {return ProtoSocket::Send(buffer, numBytes);}
         bool Recv(char* buffer, unsigned int& numBytes)
             {return ProtoSocket::Recv(buffer, numBytes);}
+        // Unconnected datagram I/O by pipe name (Unix pathname sockets).
+        // RecvFrom() fills srcName with the sender bind path, or empty if unnamed.
+        bool SendTo(const char* buffer, unsigned int& numBytes, const char* dstName);
+        bool RecvFrom(char* buffer, unsigned int& numBytes, char* srcName, unsigned int srcNameMax);
         
     private:
         bool Open(const char* theName);
