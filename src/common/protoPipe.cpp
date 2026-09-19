@@ -498,5 +498,113 @@ bool ProtoPipe::Connect(const char* theName)
     return true;
 }  // end ProtoPipe::Connect()
 
-
 #endif // if/else WIN32/UNIX
+
+bool ProtoPipe::SendTo(const char* buffer, unsigned int& numBytes, const char* dstName)
+{
+    if ((NULL == dstName) || ('\0' == *dstName) || !IsOpen())
+    {
+        PLOG(PL_ERROR, "ProtoPipe::SendTo() error: pipe not open or no destination\n");
+        numBytes = 0;
+        return false;
+    }
+#ifdef WIN32
+    PLOG(PL_ERROR, "ProtoPipe::SendTo() error: named sendto not supported on WIN32\n");
+    numBytes = 0;
+    return false;
+#else
+    struct sockaddr_un dstAddr;
+    memset(&dstAddr, 0, sizeof(dstAddr));
+    dstAddr.sun_family = AF_UNIX;
+    if ('/' != *dstName)
+    {
+#ifdef __ANDROID__
+        strcpy(dstAddr.sun_path, "/data/local/tmp/");
+#else
+        strcpy(dstAddr.sun_path, "/tmp/");
+#endif // if/else __ANDROID__
+        strncat(dstAddr.sun_path, dstName, sizeof(dstAddr.sun_path) - strlen(dstAddr.sun_path) - 1);
+    }
+    else
+    {
+        strncpy(dstAddr.sun_path, dstName, sizeof(dstAddr.sun_path) - 1);
+    }
+#ifdef SCM_RIGHTS  // 4.3BSD Reno and later
+    socklen_t addrLen = (socklen_t)(sizeof(dstAddr.sun_len) + sizeof(dstAddr.sun_family) +
+                                    strlen(dstAddr.sun_path) + 1);
+#else
+    socklen_t addrLen = (socklen_t)(strlen(dstAddr.sun_path) + sizeof(dstAddr.sun_family));
+#endif // SCM_RIGHTS
+    ssize_t result = sendto(handle, buffer, (size_t)numBytes, 0,
+                            (struct sockaddr*)&dstAddr, addrLen);
+    if (result < 0)
+    {
+        numBytes = 0;
+        switch (errno)
+        {
+            case EINTR:
+            case EAGAIN:
+                return true;
+            default:
+                break;
+        }
+        PLOG(PL_ERROR, "ProtoPipe::SendTo(%s) sendto() error: %s\n", dstName, GetErrorString());
+        return false;
+    }
+    numBytes = (unsigned int)result;
+    return true;
+#endif // if/else WIN32
+}  // end ProtoPipe::SendTo()
+
+bool ProtoPipe::RecvFrom(char* buffer, unsigned int& numBytes, char* srcName, unsigned int srcNameMax)
+{
+    if (NULL != srcName && srcNameMax > 0)
+        srcName[0] = '\0';
+#ifdef WIN32
+    return Recv(buffer, numBytes);
+#else
+    if (!IsOpen())
+    {
+        PLOG(PL_ERROR, "ProtoPipe::RecvFrom() error: pipe not open\n");
+        numBytes = 0;
+        return false;
+    }
+    struct sockaddr_un srcAddr;
+    memset(&srcAddr, 0, sizeof(srcAddr));
+    socklen_t addrLen = sizeof(srcAddr);
+    ssize_t result = recvfrom(handle, buffer, (size_t)numBytes, 0,
+                              (struct sockaddr*)&srcAddr, &addrLen);
+    if (result < 0)
+    {
+        numBytes = 0;
+        switch (errno)
+        {
+            case EINTR:
+            case EAGAIN:
+                return true;
+            default:
+                break;
+        }
+        PLOG(PL_ERROR, "ProtoPipe::RecvFrom() recvfrom() error: %s\n", GetErrorString());
+        return false;
+    }
+    numBytes = (unsigned int)result;
+    if (0 == result)
+        OnNotify(NOTIFY_NONE);
+    if ((NULL != srcName) && (srcNameMax > 0) && (AF_UNIX == srcAddr.sun_family))
+    {
+        // Pathname sockets: sun_path[0] != 0. Unnamed/abstract: leave srcName empty.
+        if ((addrLen > (socklen_t)sizeof(srcAddr.sun_family)) && ('\0' != srcAddr.sun_path[0]))
+        {
+            size_t pathLen = 0;
+            while ((pathLen < sizeof(srcAddr.sun_path)) && ('\0' != srcAddr.sun_path[pathLen]))
+                pathLen++;
+            if (pathLen >= srcNameMax)
+                pathLen = srcNameMax - 1;
+            memcpy(srcName, srcAddr.sun_path, pathLen);
+            srcName[pathLen] = '\0';
+        }
+    }
+    return true;
+#endif // if/else WIN32
+}  // end ProtoPipe::RecvFrom()

@@ -1073,3 +1073,13 @@ bool ProtoNet::RemoveInterfaceAddress(const char* ifaceName, const ProtoAddress&
     return true;
 }   // end ProtoNet::RemoveInterfaceAddress()
 
+#ifndef LINUX
+bool ProtoNet::GetInterfaceNeighbors(unsigned int ifIndex, ProtoNet::NeighborHandler handler, void* userData)
+{
+    (void)ifIndex;
+    (void)handler;
+    (void)userData;
+    return true;
+}
+#endif // !LINUX
+
