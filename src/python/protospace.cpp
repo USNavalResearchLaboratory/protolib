@@ -61,7 +61,7 @@ class SpaceItem : public ProtoTree::Item
           }
         virtual ~SpaceItem() {Py_DECREF(py_object);}
 
-        SpaceNode% GetNode()
+        SpaceNode& GetNode()
             {return space_node;}
 
         const char* GetKey() const
@@ -134,6 +134,8 @@ extern "C" {
             return NULL;
         }
 
+        unsigned int numDimensions = (NULL != pList) ? PyList_Size(pList) : 0;
+
         // Is this an update to a Python object (pNode) already inserted
         SpaceItem* spaceItem =  self->item_tree.FindItem(pNode);
         if (NULL != spaceItem)
@@ -149,7 +151,7 @@ extern "C" {
             self->thisptr->RemoveNode(spaceNode);
             // Then, iterate through list of provided ordinates and update
             PyObject* pItem;
-            for (unsigned int i=0; i<numDimensions; i++)
+            for (unsigned int i = 0; i < numDimensions; i++)
             {
                 pItem = PyList_GetItem(pList, i);
                 double value;
@@ -222,7 +224,7 @@ extern "C" {
                 return NULL;
             }
             // Create SpaceItem entry for PyObject -> SpaceNode lookup
-            spaceItem = new SpaceItem(pNode, spaceNode);
+            spaceItem = new SpaceItem(pNode, *spaceNode);
             if (NULL == spaceItem)
             {
                 self->thisptr->RemoveNode(*spaceNode);
@@ -259,8 +261,8 @@ extern "C" {
             return NULL;
         }
         // Remove/delete the SpaceNode
-        self->thisptr->RemoveNode(*spaceItem->GetNode());
-        delete spaceItem->GetNode();
+        self->thisptr->RemoveNode(spaceItem->GetNode());
+        delete &(spaceItem->GetNode());
         // Remove/delete the SpaceItem (TBD - should we maintain an item_pool?)
         self->item_tree.Remove(*spaceItem);
         delete spaceItem;
