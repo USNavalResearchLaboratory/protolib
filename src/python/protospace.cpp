@@ -61,7 +61,7 @@ class SpaceItem : public ProtoTree::Item
           }
         virtual ~SpaceItem() {Py_DECREF(py_object);}
 
-        SpaceNode& GetNode()
+        SpaceNode% GetNode()
             {return space_node;}
 
         const char* GetKey() const
@@ -134,63 +134,107 @@ extern "C" {
             return NULL;
         }
 
-        // Create SpaceNode that references Python object being inserted
-        SpaceNode* spaceNode = new SpaceNode(pNode);
-        if (NULL == spaceNode)
+        // Is this an update to a Python object (pNode) already inserted
+        SpaceItem* spaceItem =  self->item_tree.FindItem(pNode);
+        if (NULL != spaceItem)
         {
-            // TBD - do I need to dereference pNode and plist here?
-            PyErr_SetString(ProtoError, "new SpaceNode error");
-            return NULL;
-        }
-        // Init spaceNode with number of dimensions inferrred from list length
-        unsigned int numDimensions = PyList_Size(pList);
-        if (!spaceNode->Init(numDimensions))
-        {
-            // TBD - do I need to dereference pNode and plist here?
-            PyErr_SetString(ProtoError, "SpaceNode.Init() error");
-            delete spaceNode;
-            return NULL;
-        }
-
-        // Iterate through list of provided ordinates
-        PyObject* pItem;
-        for (unsigned int i=0; i<numDimensions; i++)
-        {
-            pItem = PyList_GetItem(pList, i);
-            double value;
-            if (PyLong_Check(pItem))
+            // Update existing SpaceNode coordinates
+            SpaceNode& spaceNode = spaceItem->GetNode();
+            if (spaceNode.GetDimensions() != numDimensions)
             {
-                value = (double)PyLong_AsLong(pItem);
-            }
-            else if (PyFloat_Check(pItem))
-            {
-                value = PyFloat_AsDouble(pItem);
-            }
-            else
-            {
-                PyErr_SetString(ProtoError, "Space ordinates must be integers or doubles");
+                PyErr_SetString(ProtoError, "ProtoSpace::Insert() error (dimensionality mismatch!)");
                 return NULL;
             }
-            spaceNode->SetOrdinate(i, value);
+            // First, remove from space
+            self->thisptr->RemoveNode(spaceNode);
+            // Then, iterate through list of provided ordinates and update
+            PyObject* pItem;
+            for (unsigned int i=0; i<numDimensions; i++)
+            {
+                pItem = PyList_GetItem(pList, i);
+                double value;
+                if (PyLong_Check(pItem))
+                {
+                    value = (double)PyLong_AsLong(pItem);
+                }
+                else if (PyFloat_Check(pItem))
+                {
+                    value = PyFloat_AsDouble(pItem);
+                }
+                else
+                {
+                    PyErr_SetString(ProtoError, "Space ordinates must be integers or doubles");
+                    return NULL;
+                }
+                spaceNode.SetOrdinate(i, value);
+            }
+            // Finally, reinsert node with new coordinates back into space
+            if (!self->thisptr->InsertNode(spaceNode))
+            {
+                PyErr_SetString(ProtoError, "ProtoSpace::Insert() error (dimensionality mismatch?)");
+                return NULL;
+            }
         }
-        if (!self->thisptr->InsertNode(*spaceNode))
+        else
         {
-            PyErr_SetString(ProtoError, "ProtoSpace::Insert() error (dimensionality mismatch?)");
-            return NULL;
-        }
-        // Create SpaceItem entry for PyObject -> SpaceNode lookup
-        SpaceItem* spaceItem = new SpaceItem(pNode, *spaceNode);
-        if (NULL == spaceItem)
-        {
-            self->thisptr->RemoveNode(*spaceNode);
-            delete spaceNode;
-            PyErr_SetString(ProtoError, "new SpaceItem error");
-            return NULL;
-        }
-        if (!self->item_tree.Insert(*spaceItem))
-        {
-            PyErr_SetString(ProtoError, "SpaceItem insertion error");
-            return NULL;
+            // New insertions so create SpaceNode that references Python object being inserted
+            SpaceNode* spaceNode = new SpaceNode(pNode);
+            if (NULL == spaceNode)
+            {
+                // TBD - do I need to dereference pNode and plist here?
+                PyErr_SetString(ProtoError, "new SpaceNode error");
+                return NULL;
+            }
+            // Init spaceNode with number of dimensions inferrred from list length
+            unsigned int numDimensions = PyList_Size(pList);
+            if (!spaceNode->Init(numDimensions))
+            {
+                // TBD - do I need to dereference pNode and plist here?
+                PyErr_SetString(ProtoError, "SpaceNode.Init() error");
+                delete spaceNode;
+                return NULL;
+            }
+
+            // Iterate through list of provided ordinates
+            PyObject* pItem;
+            for (unsigned int i=0; i<numDimensions; i++)
+            {
+                pItem = PyList_GetItem(pList, i);
+                double value;
+                if (PyLong_Check(pItem))
+                {
+                    value = (double)PyLong_AsLong(pItem);
+                }
+                else if (PyFloat_Check(pItem))
+                {
+                    value = PyFloat_AsDouble(pItem);
+                }
+                else
+                {
+                    PyErr_SetString(ProtoError, "Space ordinates must be integers or doubles");
+                    return NULL;
+                }
+                spaceNode->SetOrdinate(i, value);
+            }
+            if (!self->thisptr->InsertNode(*spaceNode))
+            {
+                PyErr_SetString(ProtoError, "ProtoSpace::Insert() error (dimensionality mismatch?)");
+                return NULL;
+            }
+            // Create SpaceItem entry for PyObject -> SpaceNode lookup
+            spaceItem = new SpaceItem(pNode, spaceNode);
+            if (NULL == spaceItem)
+            {
+                self->thisptr->RemoveNode(*spaceNode);
+                delete spaceNode;
+                PyErr_SetString(ProtoError, "new SpaceItem error");
+                return NULL;
+            }
+            if (!self->item_tree.Insert(*spaceItem))
+            {
+                PyErr_SetString(ProtoError, "SpaceItem insertion error");
+                return NULL;
+            }
         }
         Py_RETURN_NONE;
     }  // end Space_insert()
@@ -215,8 +259,8 @@ extern "C" {
             return NULL;
         }
         // Remove/delete the SpaceNode
-        self->thisptr->RemoveNode(spaceItem->GetNode());
-        delete &spaceItem->GetNode();
+        self->thisptr->RemoveNode(*spaceItem->GetNode());
+        delete spaceItem->GetNode();
         // Remove/delete the SpaceItem (TBD - should we maintain an item_pool?)
         self->item_tree.Remove(*spaceItem);
         delete spaceItem;
