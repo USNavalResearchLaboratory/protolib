@@ -454,8 +454,15 @@ double ProtoLocation::ComputeDistanceTo(const ProtoLocation& p, bool ignoreAltit
     }
 }  // end ProtoLocation::ComputeDistanceTo()
 
+static double dot(double a[3], double b[3])
+{
+    return (a[0]*b[0] + a[1]*b[1] + a[2]*b[2]);
+}
+
 // return azimuth (bearing) angle in radians
-double ProtoLocation::ComputeAzimuthTo(const ProtoLocation& dest) const
+double ProtoLocation::ComputeAzimuthTo(const ProtoLocation&  dest,
+                                       bool                  greatCircle,
+                                       bool                  eccentric) const
 {
     // TBD - copy/convert dest coords to common type???
     if (GetType() != dest.GetType())
@@ -472,14 +479,38 @@ double ProtoLocation::ComputeAzimuthTo(const ProtoLocation& dest) const
             double lon1 = lony * PI/180.0;
             double lat2 = dest.latx * PI/180.0;
             double lon2 = dest.lony * PI/180.0;
-            // 1) Calculate bearing to use
-            double deltaLon = lon2 - lon1;
-            double cosDestLat = cos(lat2);
-            double sinLat = sin(lat1);
-            double cosLat = cos(lat1);
-            double y = sin(deltaLon) * cosDestLat;
-            double x = cosLat * sin(lat2) - sinLat*cosDestLat*cos(deltaLon);
-            return (atan2(y, x));  // bearing in +/- PI
+            if (greatCircle)
+            {
+                // 1) Calculate bearing to use
+                double deltaLon = lon2 - lon1;
+                double cosDestLat = cos(lat2);
+                double sinLat = sin(lat1);
+                double cosLat = cos(lat1);
+                double y = sin(deltaLon) * cosDestLat;
+                double x = cosLat * sin(lat2) - sinLat*cosDestLat*cos(deltaLon);
+                return (atan2(y, x));  // bearing in +/- PI
+            }
+            else
+            {
+                ProtoLocation ecef1 = *this;
+                ecef1.ConvertTo(CART,  eccentric);
+                ProtoLocation ecef2 =  dest;
+                ecef2.ConvertTo(CART,  eccentric);
+                double slat = sin(lat1);
+                double clat = cos(lat1);
+                double slon = sin(lon1);
+                double clon = cos(lon1);
+                double northUnit[3] = {-slat*clon, -slat*slon, clat};
+                double eastUnit[3] = {-slon, clon, 0.0};
+                //double upUnit[3] = {clat*clon, clat*slon, slat};
+                double delta[3] = {ecef2.latx - ecef1.latx,
+                                   ecef2.lony - ecef1.lony,
+                                   ecef2.altz - ecef1.altz};
+                double north = dot(delta, northUnit);
+                double east = dot(delta, eastUnit);
+                //double up = dot(delta, upUnit);
+                return fmod(atan2(east, north), (2.0*PI));
+            }
         }
         case CART :
         {
@@ -498,7 +529,7 @@ double ProtoLocation::ComputeAzimuthTo(const ProtoLocation& dest) const
 }  // end ProtoLocation::ComputeAzimuthTo()
 
 // returns elevation angle in radians
-double ProtoLocation::ComputeElevationTo(const ProtoLocation& dest, bool greatCircle) const
+double ProtoLocation::ComputeElevationTo(const ProtoLocation& dest, bool greatCircle, bool eccentric) const
 {
     // TBD - copy/convert dest coords to common type
     if (GetType() != dest.GetType())
@@ -539,23 +570,25 @@ double ProtoLocation::ComputeElevationTo(const ProtoLocation& dest, bool greatCi
                 ProtoLocation a = *this;
                 ProtoLocation b = dest;
                 // Convert to ECEF coords for dot product
-                a.ConvertTo(CART, true);
-                b.ConvertTo(CART, true);
-                double x = a.latx;
-                double y = a.lony;
-                double z = a.altz;
-                double mag = sqrt(x*x + y*y +z*z);
-                double dx = b.latx - x;
-                double dy = b.lony - y;
-                double dz = b.altz - z;
-                double dmag = sqrt(dx*dx + dy*dy + dz*dz);
-                // This needs to be clamped because of possible roundoff errors
-                double term = (x*dx + y*dy + z*dz) / (mag*dmag);
-                if (term > 1.0)
-                    term = 1.0;
-                else if (term < -1.0)
-                    term = -1.0;
-                return (PI/2.0 - acos(term));
+                a.ConvertTo(CART, eccentric);
+                b.ConvertTo(CART, eccentric);
+                double lat = latx*PI/180.0;
+                double lon = lony*PI/180.0;
+                double slat = sin(lat);
+                double clat = cos(lat);
+                double slon = sin(lon);
+                double clon = cos(lon);
+                double northUnit[3] = {-slat*clon, -slat*slon, clat};
+                double eastUnit[3] = {-slon, clon, 0.0};
+                double upUnit[3] = {clat*clon, clat*slon, slat};
+                double delta[3] = {b.latx - a.latx,
+                                   b.lony - a.lony,
+                                   b.altz - a.altz};
+                double north = dot(delta, northUnit);
+                double east = dot(delta, eastUnit);
+                double up = dot(delta, upUnit);
+                double h = hypot(north, east);
+                return atan2(up, h);
             }
             break;
         case CART:

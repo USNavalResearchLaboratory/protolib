@@ -190,9 +190,13 @@ class ProtoLocation
                                  bool            greatCircle = true) const;
 
         // returns azimuth (bearing) angle  in radians
-        double ComputeAzimuthTo(const ProtoLocation& dest) const;
+        double ComputeAzimuthTo(const ProtoLocation&  dest,
+                                bool                  greatCircle=true,
+                                bool                  eccentric=true) const;
         // returns elevation angle  in radians
-        double ComputeElevationTo(const ProtoLocation& dest, bool greatCircle=true) const;
+        double ComputeElevationTo(const ProtoLocation&  dest,
+                                  bool                  greatCircle=true,
+                                  bool                  eccentric=true) const;
 
         void MoveTowards(const ProtoLocation& dest, double distance, bool greatCircle = false);
 
@@ -225,10 +229,10 @@ class ProtoLocation
                                          double  northing,
                                          double& lat,   // output, in degrees
                                          double& lon);  // output, in degrees
-        
+
         // additional methods
         static double GetArchimedeanSpiralLength(double a, double angle1, double angle2);
-        static void GetArchimedeanSpiralParams(double R, double dist, double elev, 
+        static void GetArchimedeanSpiralParams(double R, double dist, double elev,
                                                double& alpha, double& deltaPhi,
                                                unsigned int iterMax = 4);
 
