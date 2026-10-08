@@ -35,7 +35,8 @@ namespace ManetMsgTypes
         MSG_TLV_VALIDITY_TIME          = 1, //RFC5497
         MSG_TLV_NHDP_SMF               = 128,  //RFC6621
         MSG_TLV_OLSR_MPR_WILLING       = 129, //OLSRv2
-        MSG_TLV_OLSR_CONT_SEQ_NUM      = 130  //OLSRv2
+        MSG_TLV_OLSR_CONT_SEQ_NUM      = 130, //OLSRv2
+        MSG_TLV_OLSR_MORE_METRICS      = 226  //OLSRv2
     };
     enum SubTypeSmfRelayAlgorithmID
     {
@@ -58,7 +59,11 @@ namespace ManetMsgTypes
         ADDR_TLV_OLSR_LINK_METRIC      = 7, //TBD OLSRv2
         ADDR_TLV_NHDP_SMF              = 128, //RFC6621
         ADDR_TLV_LINK_ETX_DF           = 129, //TBD metric/ETX document (Delivery Ratio Forward/Outgoing)
-        ADDR_TLV_LINK_ETX_DR           = 130 //TBD metric/ETX document (Delivery Ratio Reverse/Incoming)
+        ADDR_TLV_LINK_ETX_DR           = 130, //TBD metric/ETX document (Delivery Ratio Reverse/Incoming)
+        ADDR_TLV_LINK_BANDWIDTH        = 131,
+        ADDR_TLV_LINK_LATENCY          = 132,
+        ADDR_TLV_LOCAL_IF_INDEXES      = 133,
+        ADDR_TLV_MERGE                 = 134
     };
 }
 
