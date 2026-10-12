@@ -380,6 +380,7 @@ bool ProtoFile::Read(char* buffer, unsigned int& numBytes)
     }  // end while true
 }  // end ProtoFile::Read()
 
+#if SIZE_MAX > UINT_MAX
 bool ProtoFile::Read(char* buffer, size_t& numBytes)
 {
     ASSERT(IsOpen());
@@ -419,6 +420,7 @@ bool ProtoFile::Read(char* buffer, size_t& numBytes)
         }
     }  // end while true
 }  // end ProtoFile::Read()
+#endif // SIZE_MAX > UINT_MAX
 
 bool ProtoFile::ReadPrivate(char* buffer, unsigned int& numBytes)
 {

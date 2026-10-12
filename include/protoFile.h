@@ -77,9 +77,15 @@ class ProtoFile : public ProtoChannel
             return ((descriptor >= 0) && ProtoChannel::IsOpen());
 #endif // _WIN32_WCE
         }
-        bool Read(char* buffer, unsigned int& numBytes);//numBytes going is is requested amount comming out is amount read.  Note that a return value of true with numBytes =0 means nothing was read.
+        // numBytes going is is requested amount comming out is amount read.  
+        // Note that a return value of true with numBytes =0 means nothing was read.
+        bool Read(char* buffer, unsigned int& numBytes);
+#if SIZE_MAX > UINT_MAX
+        // This method only comes into play on architectures where size_t not same as unsigned int
         bool Read(char* buffer, size_t& numBytes);
-        bool Readline(char* buffer, unsigned int& bufferSize);//uses bufferedRead to read in a line quickly will return false if full line is not available
+#endif
+        // uses buffered Read to read in a line quickly will return false if full line is not available
+        bool Readline(char* buffer, unsigned int& bufferSize);
         size_t Write(const char* buffer, size_t len);
         bool Seek(Offset theOffset);
         ProtoFile::Offset GetOffset() const {return (offset);}
