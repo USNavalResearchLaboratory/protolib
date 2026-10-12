@@ -1296,6 +1296,46 @@ bool ProtoAddress::ResolveFromString(const char* text)
         return false;
     }
 #else
+    // Numeric IPv4/IPv6 addresses are common inputs to the NORM API.  Parse
+    // them directly before calling getaddrinfo(), which may perform DNS
+    // resolution and is considerably more expensive even for numeric input.
+    // Keep the resolver fallback below for hostnames and other address forms.
+#if defined(WIN32)
+    // Use Protolib's platform-specific numeric parser on Windows.  Restrict
+    // the fast path to IP addresses because ConvertFromString() also accepts
+    // Ethernet address notation, which must retain the resolver fallback's
+    // existing behavior here.
+    ProtoAddress numericAddress;
+    if (numericAddress.ConvertFromString(text) &&
+        ((IPv4 == numericAddress.GetType()) ||
+         (IPv6 == numericAddress.GetType())))
+    {
+        *this = numericAddress;
+        SetPort(thePort);  // restore port number
+        return true;
+    }
+#else
+    struct sockaddr_in numericIPv4;
+    memset(&numericIPv4, 0, sizeof(numericIPv4));
+    if (1 == inet_pton(AF_INET, text, &numericIPv4.sin_addr))
+    {
+        numericIPv4.sin_family = AF_INET;
+        SetSockAddr((struct sockaddr&)numericIPv4);
+        SetPort(thePort);  // restore port number
+        return true;
+    }
+#ifdef HAVE_IPV6
+    struct sockaddr_in6 numericIPv6;
+    memset(&numericIPv6, 0, sizeof(numericIPv6));
+    if (1 == inet_pton(AF_INET6, text, &numericIPv6.sin6_addr))
+    {
+        numericIPv6.sin6_family = AF_INET6;
+        SetSockAddr((struct sockaddr&)numericIPv6);
+        SetPort(thePort);  // restore port number
+        return true;
+    }
+#endif // HAVE_IPV6
+#endif // if/else WIN32
    // Use DNS to look it up
    // Get host address, looking up by hostname if necessary      
 #ifdef WIN32
