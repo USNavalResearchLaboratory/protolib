@@ -226,11 +226,11 @@ static bool Tree_EncodeString(const char* utf8,
 
     for (size_t i = 0; i < n; ++i)
     {
-        encoded[2 * i]     = '\\x01';
+        encoded[2 * i]     = '\x01';
         encoded[2 * i + 1] = utf8[i];
     }
 
-    encoded[2 * n] = '\\x00';
+    encoded[2 * n] = '\0';
     return true;
 }
 

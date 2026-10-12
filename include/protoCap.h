@@ -39,6 +39,7 @@ class ProtoCap : public ProtoChannel
         {
             ProtoChannel::Close();
             if_index = -1;
+            packet_remote_addr.Invalidate();
         }
         
         unsigned int GetInterfaceIndex() const 
@@ -53,6 +54,10 @@ class ProtoCap : public ProtoChannel
             {return tunnel_local_addr;}
         const ProtoAddress& GetTunnelRemoteAddr() const
             {return tunnel_remote_addr;}
+        // Per-packet GRE remote from the last Recv() (mGRE wildcard
+        // devices report 0.0.0.0 as the configured remote).
+        const ProtoAddress& GetPacketRemoteAddr() const
+            {return packet_remote_addr;}
         
         void SetTunnelLocalAddr(const ProtoAddress& addr)
             {tunnel_local_addr = addr;}
@@ -79,6 +84,7 @@ class ProtoCap : public ProtoChannel
         ProtoNet::InterfaceType if_type;
         ProtoAddress            tunnel_local_addr;  // local tunnel endpoint address (if applicable)
         ProtoAddress            tunnel_remote_addr; // remote tunnel endpoint address (if applicable)
+        ProtoAddress            packet_remote_addr; // last Recv() GRE outer source (if applicable)
         
     private:
         const void*     user_data;

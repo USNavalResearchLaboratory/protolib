@@ -102,10 +102,34 @@ jobs:
         set(ENV{CC} ${{ matrix.config.cc }})
         set(ENV{CXX} ${{ matrix.config.cxx }})
         if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
+          # windows-latest ships VS 2026 (...\18\Enterprise); the matrix
+          # still names the old 2022 path. vswhere finds the install.
+          # Run the .bat the same way the original workflow did
+          # (COMMAND <vcvars> && set). Do not wrap it in
+          # cmd /c "call \"...\"" — CMake leaves those backslash-quotes
+          # in the command name and cmd.exe reports it is not recognized.
+          set(vswhere "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
           execute_process(
-            COMMAND "${{ matrix.config.environment_script }}" && set
-            OUTPUT_FILE environment_script_output.txt
+            COMMAND "${vswhere}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            OUTPUT_VARIABLE vs_install_path
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE vswhere_result
           )
+          if (NOT vswhere_result EQUAL 0 OR "${vs_install_path}" STREQUAL "")
+            message(FATAL_ERROR "vswhere could not find Visual Studio with C++ tools")
+          endif()
+          set(vcvars "${vs_install_path}/VC/Auxiliary/Build/vcvars64.bat")
+          if (NOT EXISTS "${vcvars}")
+            message(FATAL_ERROR "vcvars64.bat not found at ${vcvars}")
+          endif()
+          execute_process(
+            COMMAND "${vcvars}" && set
+            OUTPUT_FILE environment_script_output.txt
+            RESULT_VARIABLE vcvars_result
+          )
+          if (NOT vcvars_result EQUAL 0)
+            message(FATAL_ERROR "Failed to run ${vcvars}")
+          endif()
           file(STRINGS environment_script_output.txt output_lines)
           foreach(line IN LISTS output_lines)
             if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")

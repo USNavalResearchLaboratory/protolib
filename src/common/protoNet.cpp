@@ -156,7 +156,7 @@ ProtoNet::Monitor::~Monitor()
 }
 
 ProtoNet::Monitor::Event::Event()
- : event_type(UNKNOWN_EVENT), iface_index(0)
+ : event_type(UNKNOWN_EVENT), iface_index(0), event_flags(0)
 {
     strcpy(iface_name, "???");
     iface_name[IFNAME_MAX] = '\0';

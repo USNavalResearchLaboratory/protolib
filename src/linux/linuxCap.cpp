@@ -9,6 +9,8 @@
 
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
+#include <arpa/inet.h>
 #include <features.h>    /* for the glibc version number */
 #if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 1
 #include <netpacket/packet.h>
@@ -34,7 +36,13 @@ class LinuxCap : public ProtoCap
         void Close();
         bool Send(const char* buffer, unsigned int& numBytes);
         bool Recv(char* buffer, unsigned int& numBytes, Direction* direction = NULL);
-        
+
+    private:
+        bool SendCollectMdGre(const char* buffer, unsigned int& numBytes);
+
+        int  gre_raw_fd;
+        bool tunnel_collect_md;
+        ProtoAddress device_remote_addr;  // kernel GRE remote from Open(); not per-packet dest
 };  // end class LinuxCap
 
 ProtoCap* ProtoCap::Create()
@@ -43,6 +51,7 @@ ProtoCap* ProtoCap::Create()
 }  // end ProtoCap::Create()
 
 LinuxCap::LinuxCap()
+ : gre_raw_fd(INVALID_HANDLE), tunnel_collect_md(false)
 {
 }
 
@@ -77,7 +86,7 @@ bool LinuxCap::Open(const char* interfaceName)
         PLOG(PL_ERROR, "LinuxCap::Open() error getting interface index\n");
         return false;   
     }
-    if_type = ProtoNet::GetInterfaceType(ifIndex, &tunnel_local_addr, &tunnel_remote_addr);
+    if_type = ProtoNet::GetInterfaceType(ifIndex, &tunnel_local_addr, &tunnel_remote_addr, &tunnel_collect_md);
     if (ProtoNet::IFACE_INVALID_TYPE == if_type)
     {
         PLOG(PL_WARN, "LinuxCap::Open() GetInterfaceType() error: unknown interface type! (assuming ETH type)\n");
@@ -152,6 +161,40 @@ bool LinuxCap::Open(const char* interfaceName)
     {
         setsockopt(descriptor, SOL_SOCKET, SO_BINDTODEVICE, interfaceName, strlen(interfaceName)+1);
     }
+
+    if (ProtoNet::IFACE_GRE == if_type)
+    {
+        device_remote_addr = tunnel_remote_addr;
+        // Raw GRE: collect-md (no header_ops), and multicast dests on
+        // wildcard/unicast mGRE (PF_PACKET cannot xmit multicast sll_addr).
+        // A GRE device whose kernel remote is already a multicast group
+        // (multicast-underlay mGRE) keeps PF_PACKET sendto on the tunnel.
+        const bool needRawFd = tunnel_collect_md ||
+            !device_remote_addr.IsValid() ||
+            device_remote_addr.IsUnspecified() ||
+            device_remote_addr.IsUnicast();
+        if (needRawFd)
+        {
+            gre_raw_fd = socket(AF_INET, SOCK_RAW, IPPROTO_GRE);
+            if (gre_raw_fd < 0)
+            {
+                PLOG(PL_ERROR, "LinuxCap::Open() socket(IPPROTO_GRE) error: %s\n", GetErrorString());
+                Close();
+                return false;
+            }
+            shutdown(gre_raw_fd, SHUT_RD);
+            int ttl = 64;
+            setsockopt(gre_raw_fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
+            setsockopt(gre_raw_fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
+            if (tunnel_local_addr.IsValid() &&
+                (ProtoAddress::IPv4 == tunnel_local_addr.GetType()))
+            {
+                struct in_addr ifaddr;
+                memcpy(&ifaddr, tunnel_local_addr.GetRawHostAddress(), 4);
+                setsockopt(gre_raw_fd, IPPROTO_IP, IP_MULTICAST_IF, &ifaddr, sizeof(ifaddr));
+            }
+        }
+    }
     
     // Explicitly call ProtoCap::Open so that ProtoChannel stuff is properly set up
     if (!ProtoCap::Open(interfaceName))
@@ -168,6 +211,12 @@ bool LinuxCap::Open(const char* interfaceName)
 void LinuxCap::Close()
 {
     ProtoCap::Close();
+    if (INVALID_HANDLE != gre_raw_fd)
+    {
+        close(gre_raw_fd);
+        gre_raw_fd = INVALID_HANDLE;
+    }
+    tunnel_collect_md = false;
     if (INVALID_HANDLE != descriptor)
     {
         close(descriptor);
@@ -176,6 +225,7 @@ void LinuxCap::Close()
         if_type = ProtoNet::IFACE_INVALID_TYPE;
         tunnel_local_addr.Invalidate();
         tunnel_remote_addr.Invalidate();
+        device_remote_addr.Invalidate();
     }  
 }  // end LinuxCap::Close()
 
@@ -226,6 +276,15 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
     }
     else
     {
+        if (tunnel_collect_md)
+            return SendCollectMdGre(buffer, numBytes);
+        // Wildcard/unicast mGRE cannot xmit a multicast sll_addr.
+        // A device whose kernel remote is already the group uses PF_PACKET.
+        if (tunnel_remote_addr.IsValid() && tunnel_remote_addr.IsMulticast() &&
+            (!device_remote_addr.IsValid() ||
+             device_remote_addr.IsUnspecified() ||
+             device_remote_addr.IsUnicast()))
+            return SendCollectMdGre(buffer, numBytes);
         // Use sendto() to denote IP/IPv6 properly 
         // (ensures GRE protocol type is correct)
         struct sockaddr_ll addr;
@@ -233,7 +292,18 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
         addr.sll_family   = AF_PACKET;
         addr.sll_ifindex  = if_index;
         addr.sll_halen = 0;
-        
+        // SOCK_DGRAM sendto() always passes sll_addr to GRE header_ops, even
+        // when sll_halen is 0. A zero dest overwrites a configured remote
+        // (including a multicast one) with 0.0.0.0 and the packet is dropped.
+        // Use the remote already learned from netlink at Open().
+        if (tunnel_remote_addr.IsValid() &&
+            !tunnel_remote_addr.IsUnspecified() &&
+            (ProtoAddress::IPv4 == tunnel_remote_addr.GetType()))
+        {
+            memcpy(addr.sll_addr, tunnel_remote_addr.GetRawHostAddress(), 4);
+            addr.sll_halen = 4;
+        }
+
        // Check IP header version (first nybble)
         switch ((buffer[0] & 0xf0) >> 4)
         {
@@ -302,6 +372,80 @@ bool LinuxCap::Send(const char* buffer, unsigned int& numBytes)
     return true;
 }  // end LinuxCap::Send()
 
+bool LinuxCap::SendCollectMdGre(const char* buffer, unsigned int& numBytes)
+{
+    if (INVALID_HANDLE == gre_raw_fd)
+    {
+        PLOG(PL_ERROR, "LinuxCap::SendCollectMdGre() error: no IPPROTO_GRE socket\n");
+        return false;
+    }
+    if (!tunnel_remote_addr.IsValid() ||
+        tunnel_remote_addr.IsUnspecified() ||
+        (ProtoAddress::IPv4 != tunnel_remote_addr.GetType()))
+    {
+        PLOG(PL_WARN, "LinuxCap::SendCollectMdGre() error: IPv4 remote required\n");
+        return false;
+    }
+
+    UINT16 greProto;
+    switch ((buffer[0] & 0xf0) >> 4)
+    {
+        case 4:
+            greProto = htons(ETH_P_IP);
+            break;
+        case 6:
+            greProto = htons(ETH_P_IPV6);
+            break;
+        default:
+            PLOG(PL_WARN, "LinuxCap::SendCollectMdGre() error: invalid IP protocol version!\n");
+            return false;
+    }
+
+    // Basic GRE header (no key/seq): flags+version (0) and payload protocol.
+    UINT8 greHdr[4];
+    memset(greHdr, 0, sizeof(greHdr));
+    memcpy(greHdr + 2, &greProto, 2);
+
+    struct sockaddr_in dst;
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    memcpy(&dst.sin_addr, tunnel_remote_addr.GetRawHostAddress(), 4);
+
+    struct iovec iov[2];
+    iov[0].iov_base = greHdr;
+    iov[0].iov_len = sizeof(greHdr);
+    iov[1].iov_base = const_cast<char*>(buffer);
+    iov[1].iov_len = numBytes;
+
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_name = &dst;
+    msg.msg_namelen = sizeof(dst);
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 2;
+
+    for (;;)
+    {
+        ssize_t result = sendmsg(gre_raw_fd, &msg, 0);
+        if (result < 0)
+        {
+            switch (errno)
+            {
+                case EINTR:
+                    continue;
+                case EWOULDBLOCK:
+                    numBytes = 0;
+                default:
+                    PLOG(PL_WARN, "LinuxCap::SendCollectMdGre() sendmsg() error: %s\n", GetErrorString());
+                    break;
+            }
+            return false;
+        }
+        break;
+    }
+    return true;
+}  // end LinuxCap::SendCollectMdGre()
+
 bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
 {
     struct sockaddr_ll pktAddr;
@@ -320,10 +464,21 @@ bool LinuxCap::Recv(char* buffer, unsigned int& numBytes, Direction* direction)
                 PLOG(PL_ERROR, "LinuxCap::Recv() error: %s\n", GetErrorString());
                 break;
         }
+        packet_remote_addr.Invalidate();
         return false;
     }
     else
     {
+        packet_remote_addr.Invalidate();
+        if ((ProtoNet::IFACE_GRE == if_type) && (pktAddr.sll_halen >= 4))
+        {
+            if (4 == pktAddr.sll_halen)
+                packet_remote_addr.SetRawHostAddress(ProtoAddress::IPv4,
+                                                     (const char*)pktAddr.sll_addr, 4);
+            else if (16 == pktAddr.sll_halen)
+                packet_remote_addr.SetRawHostAddress(ProtoAddress::IPv6,
+                                                     (const char*)pktAddr.sll_addr, 16);
+        }
         /*
         void* ipBuffer = (UINT32*)buffer;
         unsigned int ipLen = result;

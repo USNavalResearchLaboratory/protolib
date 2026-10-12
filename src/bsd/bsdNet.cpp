@@ -292,11 +292,13 @@ static void TryGetEndpointsBySysctlRoute(const char* ifname,
 
 ProtoNet::InterfaceType ProtoNet::GetInterfaceType(unsigned int ifaceIndex,
                                                    ProtoAddress* localAddr,
-                                                   ProtoAddress* remoteAddr)
+                                                   ProtoAddress* remoteAddr,
+                                                   bool* collectMetadata)
 {
     // If you have Invalidate() you can call it; otherwise omit.
     if (localAddr)  localAddr->Invalidate();
     if (remoteAddr) remoteAddr->Invalidate();
+    if (collectMetadata) *collectMetadata = false;
 
     char ifname[IFNAMSIZ];
     if (!if_indextoname(ifaceIndex, ifname))

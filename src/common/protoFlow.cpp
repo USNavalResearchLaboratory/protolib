@@ -338,7 +338,7 @@ bool ProtoFlow::Description::InitFromText(const char* theText)
     ProtoTokenator tk(theText, ',');
     // 1) Check for presence of "->" src->dst delimiter as alternative syntax to comma delimiter
     //    (that is the format used by Description::Print(), trpr, etc, i.e., an Adamson-ism)
-    const char* text;
+    const char* text = NULL;
     char* srcText = NULL;
     bool dstOnly = false;
     const char* dptr = strstr(theText, "->");
