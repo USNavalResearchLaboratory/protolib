@@ -491,9 +491,9 @@ NetGraph::Node::Node()
 
 NetGraph::Node::~Node()
 {
-    // Delete all interfaces
+    // Each remaining listed interface removes itself from the iface_list on deletion.
     Interface* iface;
-    while (NULL != (iface = static_cast<Interface*>(iface_list.RemoveHead())))
+    while (NULL != (iface = static_cast<Interface*>(iface_list.GetHead())))
     {
         delete iface;
     }
