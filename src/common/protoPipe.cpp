@@ -430,8 +430,11 @@ bool ProtoPipe::Connect(const char* theName)
         {
             close(fd);
             unlink(pipeName);
-        } 
-        if (!Open(pipeName+5))
+        }
+        // pipeName is already absolute (/var/run/protoSocketXXXXXX, or the
+        // Android equivalent). Open() uses an absolute name as-is. Skipping
+        // a fixed 5 bytes only matched the old "/tmp/" prefix.
+        if (!Open(pipeName))
         {
             PLOG(PL_ERROR, "ProtoPipe::Connect() error opening local domain socket\n");
             return false;
