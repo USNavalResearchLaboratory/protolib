@@ -39,6 +39,8 @@
 #include "protoEvent.h"
 #include "protoQueue.h"    // for keeping track of our "streams" (channels, sockets, generic)
 
+#include <atomic>
+
 #ifdef WIN32
 
 #ifndef _WIN32_WCE
@@ -282,7 +284,7 @@ class ProtoDispatcher : public ProtoTimerMgr,
         void Stop(int exitCode = 0);
        
         bool IsRunning() const  // TBD - deprecate IsRunning() method?
-            {return run;}
+            {return run.load(std::memory_order_acquire);}
         
         /**
          * Controls whether time of day is polled for ultra-precise timing
@@ -723,7 +725,7 @@ class ProtoDispatcher : public ProtoTimerMgr,
         EventStreamPool             event_stream_pool;      // land of inactive event streams
         GenericStreamPool           generic_stream_pool;    // land of inactive generic streams
                 
-        volatile bool            run;           
+        std::atomic<bool>        run;           
         WaitStatus               wait_status;            
         int                      exit_code;  
         double                   timer_delay;  // ( timer_delay < 0.0) means INFINITY
@@ -738,7 +740,7 @@ class ProtoDispatcher : public ProtoTimerMgr,
         ThreadId                 thread_master;
         unsigned int             suspend_count;
         unsigned int             signal_count;
-        Controller*              controller;
+        std::atomic<Controller*> controller;
         
         // The "prompt" stuff here was a hack to be able to make a threaded
         // ProtoDispatcher do some "work" (prompt_callback) in its thread
