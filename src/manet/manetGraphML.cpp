@@ -463,6 +463,22 @@ bool ManetGraphMLParser::SetAttribute(NetGraph::Interface& interface, const char
     return false; //should never get here
 }
 
+const ManetGraphMLParser::Attribute* ManetGraphMLParser::GetLinkAttribute( NetGraph::Link& link, const char* name)
+{
+    PLOG(PL_INFO,"ManetGraphMLParser::GetLinkAttribute(Link): Enter\n");
+    const char* theIndex = FindAttributeIndex(name);
+    if(NULL == theIndex)
+    {
+        PLOG(PL_ERROR,"ManetGraphMLParser::GetLinkAttribute(Link): Error finding index for attribute %s\n",name);
+    }
+    char theLookup[250];
+    GetLookup(theLookup,250,link);
+
+    ManetGraphMLParser::Attribute* theAttribute = attributelist.FindAttribute(theLookup,theIndex);
+    return theAttribute;
+
+}  // end ManetGraphMLParser::GetLinkAttribute()
+
 
 bool
 ManetGraphMLParser::AddAttributeKey(const char* theName,const char* theType, const char* theDomain, const char* theOldKey,const char* theDefault)
@@ -1548,6 +1564,453 @@ bool ManetGraphMLParser::Write(NetGraph& graph, const char* path, char* buffer, 
     return true;
 }  // end ManetGraphMLParser::Write()
 
+bool ManetGraphMLParser::WriteMetrics(NetGraph& graph, const char* path, char* buffer, unsigned int* len_ptr)
+{
+    PLOG(PL_INFO,"ManetGraphMLParser::Write: Enter!\n");
+/* Create a new XmlWriter for DOM, with no compression. */
+    int returnvalue;
+    xmlTextWriter* writerPtr;
+    xmlDoc* docPtr;
+
+    writerPtr = xmlNewTextWriterDoc(&docPtr, 0);
+    if (writerPtr == NULL) {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlwriterPtrDoc: Error creating the xml writer\n");
+        return false;
+    }
+
+    /* Start the docPtrument with the xml default for the version,
+     * encoding UTF-8 and the default for the standalone
+     * declarao*/
+    returnvalue = xmlTextWriterStartDocument(writerPtr, NULL, MY_GRAPHML_ENCODING, NULL);
+    if (returnvalue < 0) {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlwriterPtrDoc: Error at xmlTextWriterStartDocument\n");
+        return false;;
+    }
+
+    /* Start an element named "graphml". Since thist is the first
+     * element, this will be the root element of the docPtrument. */
+    returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "graphml");
+    if (returnvalue < 0) {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlwriterPtrDoc: Error at xmlTextWriterStartElement\n");
+        return false;
+    }
+    returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "xmlns", BAD_CAST "http://graphml.graphdrawing.org/xmlns");
+    if (returnvalue < 0) {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error at xmlTextWriterWriteAttribute\n");
+        return false;
+    }
+    if(!UpdateKeys(graph))
+    {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error updating key elements in the header\n");
+        return false;
+    }
+    if(!WriteLocalKeys(writerPtr))
+    {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error at writing key elements in header\n");
+        return false;
+    }
+    if(!WriteLocalAttributes(writerPtr))
+    {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write::testXmlWriterDoc: Error at writing graph attributes in header\n");
+        return false;
+    }
+
+    /* We are done with the header so now we go through the actual graph and add each node and edge */
+    /* We are adding each node */
+    returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "graph");
+    if (returnvalue < 0)
+    {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error starting XML graph element\n");
+        return false;
+    }
+    returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id",BAD_CAST XMLName);
+    if (returnvalue < 0)
+    {
+        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error setting XML graph attribute id\n");
+        return false;
+    }
+    returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "edgedefault",BAD_CAST "directed");
+    if (returnvalue < 0) { PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error setting graph attribute directed\n"); return false;}
+
+    NetGraph::InterfaceIterator it(graph);
+    NetGraph::Interface* iface;
+    //adding the nodes to the xml
+    while (NULL != (iface = it.GetNextInterface()))
+    {
+        //check to see if this is a default "node" interface
+        //if(!iface->IsPort())
+        if (iface == iface->GetNode().GetDefaultInterface())
+        {
+            //Node& node = static_cast<Node&>(iface->GetNode());
+            returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "node");
+            if (returnvalue < 0)
+            {
+               PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding XML node\n");
+               return false;
+            }
+            if(iface->GetAddress().IsValid())
+            {
+                returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id", BAD_CAST iface->GetAddress().GetHostString());
+                //printf("writing node %s\n",iface->GetAddress().GetHostString());
+            }
+            else
+            {
+                returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "id", BAD_CAST iface->GetName());
+                //printf("writing node %s\n",iface->GetName());
+            }
+            if (returnvalue < 0) { PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding setting node id\n"); return false;}
+
+            //update the node attributes using the virtual function
+            if(!UpdateNodeAttributes(iface->GetNode()))
+            {
+                PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the node attributes\n");
+                return false;
+            }
+            //call the local function write the attributes out
+            if(!WriteLocalNodeAttributes(writerPtr,iface->GetNode()))
+            {
+                PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing local node attributes\n");
+                return false;
+            }
+            //call the virtual function to allow the node to fill in any attributes if there
+/*            if(!WriteNodeAttributes(writerPtr,iface->GetNode())) //this shouldn't really have to be called if we add/update the attributes correctly TBD
+            {
+                PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing node attributes\n");
+                return false;
+            }*/
+
+            //we need to iterate through the any "port" interfaces which we may have
+            NetGraph::Node *theNode = &iface->GetNode();
+            NetGraph::Node::InterfaceIterator nodeIt(*theNode);
+            NetGraph::Interface* portIface;
+            while (NULL != (portIface = static_cast<NetGraph::Interface*>(nodeIt.GetNextInterface())))
+            {
+                //we only want ports
+                if(!(portIface == portIface->GetNode().GetDefaultInterface()))
+//                if(portIface->IsPort())
+                {
+                    returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "port");
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding XML node\n");
+                        return false;
+                    }
+                    if(portIface->GetAddress().IsValid())
+                    {
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "name", BAD_CAST portIface->GetAddress().GetHostString());
+                        //printf("writing interface %s\n",iface->GetAddress().GetHostString());
+                    }
+                    else
+                    {
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "name", BAD_CAST portIface->GetName());
+                        //printf("writing node %s\n",iface->GetName());
+                    }
+                    if (returnvalue < 0)
+                    {
+                         PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error adding setting node id\n");
+                         return false;
+                    }
+                    //update attributes to the port/interface using the virutal function
+                    if(!UpdateInterfaceAttributes(*portIface))
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the interface attributes\n");
+                        return false;
+                    }
+                    //write the attributes to the port/interface
+                    if(!WriteLocalInterfaceAttributes(writerPtr,*portIface))
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing local interface attributes\n");
+                        return false;
+                    }
+                    //write any attributes to the port/interface using the virutal function
+/*                    if(!WriteInterfaceAttributes(writerPtr,*portIface))//this needn't be called if we add/update the attributes in the local list TBD
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing interface attributes\n");
+                        return false;
+                    }*/
+                    returnvalue = xmlTextWriterEndElement(writerPtr);
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error ending node element\n");
+                        return false;
+                    }
+                }
+            }
+            //close up the node node element
+            returnvalue = xmlTextWriterEndElement(writerPtr);
+            if (returnvalue < 0)
+            {
+                PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error ending node element\n");
+                return false;
+            }
+        }
+    }
+    //adding the directional links to the xml
+    it.Reset();
+    while (NULL != (iface = it.GetNextInterface()))
+    {
+        if(iface->GetAddress().IsValid())
+            DMSG(8,"WriteMetrics: iface = it.GetNextInterface() = %s.\n", iface->GetAddress().GetHostString());
+        else
+            DMSG(8,"WriteMetrics: iface = it.GetNextInterface() = %s.\n", iface->GetName());
+        if(iface == iface->GetNode().GetDefaultInterface())
+        {
+            NetGraph::AdjacencyIterator iteratorN1(*iface);
+            NetGraph::Interface* nbrIface;
+            while (NULL != (nbrIface = iteratorN1.GetNextAdjacency()))
+            {
+                NetGraph::Link* link = iface->GetLinkTo(*nbrIface);
+                if(NULL == link)
+                {
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error getting link which should always exist\n");
+                    return false;
+                }
+                if (GetLinkAttribute(*link, "bandwidth") != NULL)
+                {
+                    returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "edge");
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding edge\n"); return false;
+                    }
+                    if(iface->GetAddress().IsValid())
+                    {
+                        //printf("writing connection %s ->",iface->GetAddress().GetHostString());
+                        DMSG(8,"  iface = %s\n", iface->GetAddress().GetHostString());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetAddress().GetHostString());
+                    }
+                    else
+                    {
+                        //printf("writing connection %s ->",iface->GetName());
+                        DMSG(8,"  iface = %s\n", iface->GetName());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetName());
+                    }
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
+                        return false;
+                    }
+                    if(nbrIface->GetAddress().IsValid()) {
+                        DMSG(8,"  nbrIface->GetAddress().GetHostString() = %s\n", nbrIface->GetAddress().GetHostString());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetAddress().GetHostString());
+                        ////printf("%s\n",nbrIface->GetAddress().GetHostString());
+                    }
+                    else
+                    {
+                        DMSG(8,"  nbrIface->GetName() = %s\n", nbrIface->GetName());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetName());
+                        ////printf("%s\n",nbrIface->GetName());
+                    }
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
+                        return false;
+                    }
+                    NetGraph::Link* link = iface->GetLinkTo(*nbrIface);
+                    if(NULL == link)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error getting link which should always exist\n");
+                        return false;
+                    }
+                    //update the link attributes using the virtual function
+                    if(!UpdateLinkAttributes(*link))
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the link attributes\n");
+                        return false;
+                    }
+                    //actually write the attributes out
+                    if(!WriteLocalLinkMetricsAttributes(writerPtr,*link))
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing link attributes\n");
+                        return false;
+                    }
+                    returnvalue = xmlTextWriterEndElement(writerPtr);
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error ending node element\n");
+                        return false;
+                    }
+                }
+            }
+        }
+        else //it is a port interface so we need to find the "node" interface
+        {
+            DMSG(8,"THIS IS A PORT INTERFACE!\n");
+            //lets first find the "src" node interface
+            NetGraph::Interface* nodeIface = iface->GetNode().GetDefaultInterface();
+            // if(!(nodeIface == nodeIface->GetNode().GetDefaultInterface()))
+            // {
+            //     PLOG(PL_ERROR,"ManetGraphMLParser::Write Error the default interface was not the \"node\" interface for the src.  You should iterate over them all and find the right one\n");
+            //     return false;
+            // }
+            if(nodeIface->GetAddress().IsValid())
+                DMSG(8,"  nodeIface->GetAddress().GetHostString() = %s\n", nodeIface->GetAddress().GetHostString());
+            else
+                DMSG(8,"  nodeIface->GetName() = %s\n", nodeIface->GetName());
+            //nodeIface is 10.101.1.20
+            NetGraph::AdjacencyIterator iteratorN1(*iface); //now iteratorN1(iface is 10.101.1.20! weird) should it be iteratorN1((nodeIface))?
+            NetGraph::Interface* nbrIface, *nbrNodeIface;
+            while (NULL != (nbrIface = iteratorN1.GetNextAdjacency())) //is this 10.101 or 10.103?  hmm.. it's actually 10.102.2.20
+            {
+                NetGraph::Link* link = iface->GetLinkTo(*nbrIface);
+                if(NULL == link)
+                {
+                    PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error getting link which should always exist\n");
+                    return false;
+                }
+                if (GetLinkAttribute(*link, "bandwidth") != NULL)
+                {
+                    //lets find the "nbr" node interface
+                    nbrNodeIface = static_cast<NetGraph::Interface*>(nbrIface->GetNode().GetDefaultInterface());
+                    //if(nbrNodeIface->IsPort())
+                    if(nbrNodeIface->GetAddress().IsValid())
+                        DMSG(8,"    nbrNodeIface->GetAddress().GetHostString()  = %s\n", nbrNodeIface->GetAddress().GetHostString() );
+                    else
+                        DMSG(8,"    nbrNodeIface->GetName() = %s\n", nbrNodeIface->GetName());
+                    if(nbrIface->GetAddress().IsValid())
+                        DMSG(8,"    nbrIface->GetAddress().GetHostString()  = %s\n", nbrIface->GetAddress().GetHostString() );
+                    else
+                        DMSG(8,"    nbrIface->GetName() = %s\n", nbrIface->GetName());
+                    // if(!(nbrNodeIface == nbrNodeIface->GetNode().GetDefaultInterface())) //neighbor is not node interface
+                    // {
+                    //     PLOG(PL_ERROR,"ManetGraphMLParser::Write Error the default interface was not the \"node\" interface for the nbr.  You should iterate over them all and find the right one\n");
+                    //     return false;
+                    // }
+                    returnvalue = xmlTextWriterStartElement(writerPtr, BAD_CAST "edge"); //neighbor is node interface so write out the edge
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding edge\n");
+                        return false;
+                    }
+                    if(iface->GetAddress().IsValid())
+                    {
+                        // returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST nodeIface->GetAddress().GetHostString());
+                        // DMSG(1,"    writing out sourceport: nodeIface->GetAddress().GetHostString() = %s\n", nodeIface->GetAddress().GetHostString());
+                        DMSG(8,"    writing out sourceport: iface->GetAddress().GetHostString() = %s\n", iface->GetAddress().GetHostString());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetAddress().GetHostString());
+                    }
+                    else
+                    {
+                        // returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST nodeIface->GetName());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "source", BAD_CAST iface->GetName());
+                    }
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
+                        return false;
+                    }
+                    if(nbrIface->GetAddress().IsValid())
+                    {
+                        // DMSG(1,"    nbrNodeIface->GetAddress().GetHostString() = %s\n", nbrNodeIface->GetAddress().GetHostString());
+                        // returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrNodeIface->GetAddress().GetHostString());
+                        DMSG(8,"    nbrIface->GetAddress().GetHostString() = %s\n", nbrIface->GetAddress().GetHostString());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetAddress().GetHostString());
+                    }
+                    else
+                    {
+                        // DMSG(1,"    nbrNodeIface->GetName() = %s\n", nbrNodeIface->GetName());
+                        // returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrNodeIface->GetName());
+                        DMSG(8,"    writing out target port: nbrIface->GetName() = %s\n", nbrIface->GetName());
+                        returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "target", BAD_CAST nbrIface->GetName());
+                    }
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
+                        return false;
+                    }
+                    // if(iface->GetAddress().IsValid())
+                    // {
+                    //     DMSG(1,"    writing out sourceport: iface->GetAddress().GetHostString() = %s\n", iface->GetAddress().GetHostString());
+                    //     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "sourceport", BAD_CAST iface->GetAddress().GetHostString());
+                    // }
+                    // else
+                    // {
+                    //     DMSG(1,"    writing out sourceport: iface->GetName() = %s\n", iface->GetName());
+                    //     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "sourceport", BAD_CAST iface->GetName());
+                    // }
+                    // if (returnvalue < 0)
+                    // {
+                    //     PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
+                    //     return false;
+                    // }
+                    // if(nbrIface->GetAddress().IsValid())
+                    // {
+                    //     DMSG(1,"    writing out target port: nbrIface->GetAddress().GetHostString() = %s\n", nbrIface->GetAddress().GetHostString());
+                    //     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "targetport", BAD_CAST nbrIface->GetAddress().GetHostString());
+                    // }
+                    // else
+                    // {
+                    //     DMSG(1,"    writing out target port: nbrIface->GetName() = %s\n", nbrIface->GetName());
+                    //     returnvalue = xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "targetport", BAD_CAST nbrIface->GetName());
+                    // }
+                    // if (returnvalue < 0)
+                    // {
+                    //     PLOG(PL_ERROR,"ManetGraphMLParser::Write Error adding setting source attribute\n");
+                    //     return false;
+                    // }
+
+                    NetGraph::Link* link = iface->GetLinkTo(*nbrIface);
+                    if(NULL == link)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error getting link which should always exist\n");
+                        return false;
+                    }
+                    //update the link attributes using the virtual function
+                    if(!UpdateLinkAttributes(*link))
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error updating the link attributes\n");
+                        return false;
+                    }
+                    //actually write the attributes out
+                    if(!WriteLocalLinkMetricsAttributes(writerPtr,*link))
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write: Error writing link attributes\n");
+                        return false;
+                    }
+                    returnvalue = xmlTextWriterEndElement(writerPtr);
+                    if (returnvalue < 0)
+                    {
+                        PLOG(PL_ERROR,"ManetGraphMLParser::Write Error ending node element\n");
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    returnvalue = xmlTextWriterEndDocument(writerPtr);
+    if (returnvalue < 0) { PLOG(PL_ERROR,"ManetGraphMLParser::Write:testXmlwriterPtrDoc: Error at xmlTextWriterEndDocument\n"); return false;}
+
+    xmlFreeTextWriter(writerPtr);
+
+    if(NULL != path)
+    {
+        xmlSaveFormatFileEnc(path, docPtr, MY_GRAPHML_ENCODING,1);
+    }
+    if(NULL != buffer && NULL != len_ptr)
+    {
+        //xmlOutputBuffer xmlbuff;
+        //xmlSaveFormatFileTo(&xmlbuff,docPtr,MY_GRAPHML_ENCODING,1);
+        //if (xmlbuff.written > (int)*len_ptr){
+        //    DMSG(0,"bunny in buffer section\n");
+
+        xmlChar* tempout;
+        int size;
+        xmlDocDumpFormatMemoryEnc(docPtr,&tempout,&size,MY_GRAPHML_ENCODING,1);
+        if(size > (int)*len_ptr)
+        {
+            PLOG(PL_ERROR,"ManetGraphMLParser::Write: size of document %d is larger than the allocated space of %d\n",size, (int)*len_ptr);
+            return false;
+        }
+        *len_ptr = size;
+        memcpy(buffer,tempout,size);
+        xmlFree(tempout);
+        xmlCleanupParser();
+    }
+    xmlFreeDoc(docPtr);
+
+    return true;
+}  // end ManetGraphMLParser::Write()
+
 ManetGraphMLParser::Attribute*
 ManetGraphMLParser::AttributeList::FindAttribute(const char *theLookup,const char* theIndex)
 {
@@ -1758,6 +2221,41 @@ bool ManetGraphMLParser::WriteLocalLinkAttributes(xmlTextWriter* writerPtr,NetGr
             rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "key",BAD_CAST attr->GetIndex());
             rv += xmlTextWriterWriteString(writerPtr, BAD_CAST attr->GetValue());
             rv += xmlTextWriterEndElement(writerPtr);
+            attr = it.GetNextItem();
+        }
+    }
+    return rv;
+}
+
+bool ManetGraphMLParser::WriteLocalLinkMetricsAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLink)
+{
+    PLOG(PL_DETAIL,"ManetGraphMLParser::WriteLocalLinkAttributes()\n");
+    bool rv = true;
+    char key[255];//this should be dynamic or checkes added TBD
+    sprintf(key,"edge:source:%s",GetString(theLink.GetSrc()->GetNode()));
+    sprintf(key,"%s:%s",key,GetString(*theLink.GetSrc()));
+    sprintf(key,"%s:dest:%s",key,GetString(theLink.GetDst()->GetNode()));
+    sprintf(key,"%s:%s",key,GetString(*theLink.GetDst()));
+
+    AttributeList::Iterator it(attributelist,false,key,strlen(key)*8);
+    Attribute* attr(NULL);
+    attr = it.GetNextItem();
+    while(NULL != attr)
+    {
+        if(strcmp(attr->GetLookup(),key))
+        {
+            attr = NULL;
+        }
+        else
+        {
+            if (strcmp(attr->GetIndex(), FindAttributeIndex("bandwidth")) == 0 ||
+                strcmp(attr->GetIndex(), FindAttributeIndex("latency")) == 0)
+            {
+                rv += xmlTextWriterStartElement(writerPtr, BAD_CAST "data");
+                rv += xmlTextWriterWriteAttribute(writerPtr, BAD_CAST "key",BAD_CAST attr->GetIndex());
+                rv += xmlTextWriterWriteString(writerPtr, BAD_CAST attr->GetValue());
+                rv += xmlTextWriterEndElement(writerPtr);
+            }
             attr = it.GetNextItem();
         }
     }

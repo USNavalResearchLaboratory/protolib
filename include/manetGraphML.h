@@ -15,6 +15,20 @@ class ManetGraphMLParser
         virtual ~ManetGraphMLParser();
         const char* GetString(NetGraph::Interface& iface) const;
         const char* GetString(NetGraph::Node& node) const;
+	class Attribute : public ProtoQueue::Item
+        {
+            public:
+                char* lookupvalue; //this string defines which node/port/edge the value belongs to.
+                char* index;
+                char* value;
+                Attribute() : lookupvalue(NULL), index(NULL), value(NULL) {}
+                bool Init(const char* theLookupvalue, const char* theIndex,const char* theValue);
+                bool Set(const char* theLookupvalue, const char* theIndex, const char* theValue);
+                ~Attribute();
+                const char* GetLookup() const {return lookupvalue;}
+                const char* GetIndex() const {return index;}
+                const char* GetValue() const {return value;}
+        };
         class AttributeKey : public ProtoQueue::Item
         {
             public:
@@ -47,6 +61,7 @@ class ManetGraphMLParser
 
         bool Read(const char* path, NetGraph& graph);   // load graph from GraphML file
         bool Write(NetGraph& graph, const char* path, char* buffer=NULL, unsigned int* len_ptr = NULL);  // make GraphML file from graph
+        bool WriteMetrics(NetGraph& graph, const char* path, char* buffer=NULL, unsigned int* len_ptr = NULL);  // make GraphML file from graph
 
         bool SetXMLName(const char* theName);
 
@@ -56,6 +71,7 @@ class ManetGraphMLParser
         bool SetAttribute(NetGraph::Node& node, const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Link& link, const char* theName, const char* theValue);
         bool SetAttribute(NetGraph::Interface& interface, const char* theName, const char* theValue);
+        const Attribute* GetLinkAttribute(NetGraph::Link& link, const char* name);
 
     protected:
         bool AddAttributeKey(const char* theName,const char* theType, const char* theDomain = NULL, const char* oldIndex = NULL,const char* theDefault = NULL);
@@ -99,20 +115,7 @@ class ManetGraphMLParser
                 {return 8*strlen(static_cast<const AttributeKey&>(item).GetOldIndex());}
         } oldindexkeylist;
 
-        class Attribute : public ProtoQueue::Item
-        {
-            public:
-                char* lookupvalue; //this string defines which node/port/edge the value belongs to.
-                char* index;
-                char* value;
-                Attribute() : lookupvalue(NULL), index(NULL), value(NULL) {}
-                bool Init(const char* theLookupvalue, const char* theIndex,const char* theValue);
-                bool Set(const char* theLookupvalue, const char* theIndex, const char* theValue);
-                ~Attribute();
-                const char* GetLookup() const {return lookupvalue;}
-                const char* GetIndex() const {return index;}
-                const char* GetValue() const {return value;}
-        };
+
         class AttributeList : public ProtoSortedQueueTemplate<Attribute>
         {
             const char* GetKey(const ProtoQueue::Item& item) const
@@ -149,6 +152,7 @@ class ManetGraphMLParser
 //        virtual bool WriteLinkAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLink) = 0;
         virtual bool UpdateLinkAttributes(NetGraph::Link& theLink) = 0; //this will replace the above so keys will be stored locally
         bool WriteLocalLinkAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLInk);
+        bool WriteLocalLinkMetricsAttributes(xmlTextWriter* writerPtr,NetGraph::Link& theLInk);
 
         bool ReadXMLNode(xmlTextReader*   readerPtr,
                          NetGraph&        graph,
@@ -175,6 +179,8 @@ class ManetGraphMLTemplate : public ManetGraphMLParser, public NetGraphTemplate<
 
         bool Write(const char* path, char* buffer = NULL, unsigned int* len=NULL)  // make GraphML file from graph
             {return ManetGraphMLParser::Write(*this, path, buffer, len);}
+        bool WriteMetrics(const char* path, char* buffer = NULL, unsigned int* len=NULL)  // make GraphML file from graph
+            {return ManetGraphMLParser::WriteMetrics(*this, path,buffer,len);}
         bool Connect(NetGraph::Interface& iface1,NetGraph::Interface& iface2,NetGraph::Cost& theCost,bool isDuplex)
             {return NetGraph::Connect(iface1,iface2,theCost,isDuplex);}
         virtual bool InsertInterface(NetGraph::Interface& theIface)
