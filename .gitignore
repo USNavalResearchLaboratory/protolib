@@ -33,6 +33,7 @@ makefiles/pipeExample
 makefiles/protoCapExample
 makefiles/protoExample
 makefiles/protoFileExample
+makefiles/addressTest
 makefiles/queueExample
 makefiles/riposer
 makefiles/serialExample

@@ -41,8 +41,86 @@ const ProtoAddress PROTO_ADDR_ANY6("0:0:0:0:0:0:0:0");         // IPv6 in6addr_a
 const ProtoAddress PROTO_ADDR_BROADCAST("ff:ff:ff:ff:ff:ff");  // Ethernet broadcast address
 const ProtoAddress PROTO_ADDR_EINVALID("00:00:00:00:00:00");   // invalid Ethernet address
 
+//local helper function
+static bool
+SplitNetworkAddressString(const char*  text,
+                          char*        hostBuffer,
+                          unsigned int hostBufferLength,
+                          UINT8&       prefixMaskLength,
+                          bool&        hasPrefixMask)
+{
+    hasPrefixMask = false;
+    prefixMaskLength = ProtoAddress::PREFIX_MASK_UNSET;
+
+    if ((NULL == text) || ('\0' == text[0]))
+    {
+        return false;
+    }
+
+    const char* slashPtr = strchr(text, '/');
+
+    // Ordinary host-only address text.
+    if (NULL == slashPtr)
+    {
+        return true;
+    }
+
+    // Only one prefix delimiter is permitted.
+    if (NULL != strchr(slashPtr + 1, '/'))
+    {
+        return false;
+    }
+
+    const unsigned int hostLength =
+        static_cast<unsigned int>(slashPtr - text);
+
+    if ((0 == hostLength) || ('\0' == *(slashPtr + 1)))
+    {
+        return false;
+    }
+
+    if (hostLength >= hostBufferLength)
+    {
+        return false;
+    }
+
+    memcpy(hostBuffer, text, hostLength);
+    hostBuffer[hostLength] = '\0';
+
+    unsigned int parsedPrefixLength = 0;
+    const char* prefixPtr = slashPtr + 1;
+
+    while ('\0' != *prefixPtr)
+    {
+        if ((*prefixPtr < '0') || (*prefixPtr > '9'))
+        {
+            return false;
+        }
+
+        const unsigned int digit =
+            static_cast<unsigned int>(*prefixPtr - '0');
+
+        // Keep the intermediate result representable as UINT8.
+        if ((parsedPrefixLength > 25) ||
+            ((25 == parsedPrefixLength) && (digit > 5)))
+        {
+            return false;
+        }
+
+        parsedPrefixLength = (parsedPrefixLength * 10) + digit;
+
+        ++prefixPtr;
+    }
+
+    prefixMaskLength = static_cast<UINT8>(parsedPrefixLength);
+    hasPrefixMask = true;
+
+    return true;
+}
+
+
 ProtoAddress::ProtoAddress()
- : type(INVALID), length(0)
+ : type(INVALID), length(0), prefix_mask_length(PREFIX_MASK_UNSET)
 {
     memset(&addr, 0, sizeof(addr));
 }
@@ -62,6 +140,7 @@ ProtoAddress::ProtoAddress(const ProtoAddress* theAddr)
 }
 
 ProtoAddress::ProtoAddress(const char* theAddr)
+ : type(INVALID), length(0), prefix_mask_length(PREFIX_MASK_UNSET)
 {
     ConvertFromString(theAddr);
 }
@@ -420,6 +499,116 @@ const char* ProtoAddress::GetHostString(char* buffer, unsigned int buflen) const
             return "(invalid address)";
     }  // end switch(type)
 }  // end ProtoAddress::GetHostString()
+const char*
+ProtoAddress::GetPrintString(char*        buffer,
+                             unsigned int buflen) const
+{
+    static const unsigned int ALT_BUFFER_SIZE = 256;
+    static const unsigned int ALT_BUFFER_COUNT = 4;
+    static char altBuffer[ALT_BUFFER_SIZE * ALT_BUFFER_COUNT];
+    static unsigned int altBufferOffset = 0;
+
+    bool useAltBuffer = false;
+
+    if (NULL == buffer)
+    {
+        if (altBufferOffset >
+            (sizeof(altBuffer) - ALT_BUFFER_SIZE))
+        {
+            altBufferOffset = 0;
+        }
+
+        buffer = altBuffer + altBufferOffset;
+        buflen = ALT_BUFFER_SIZE;
+        useAltBuffer = true;
+    }
+    else if (0 == buflen)
+    {
+        return "(invalid buffer)";
+    }
+
+    buffer[buflen - 1] = '\0';
+
+    char hostBuffer[256];
+
+    if (NULL == GetHostString(hostBuffer, sizeof(hostBuffer)))
+    {
+        return "(bad address)";
+    }
+
+    const bool hasPrefixMask = HasPrefixMaskLength();
+
+    const bool hasPort =
+        (0 != GetPort()) &&
+        ((IPv4 == GetType()) ||
+         (IPv6 == GetType())
+#ifdef SIMULATE
+         || (SIM == GetType())
+#endif // SIMULATE
+        );
+
+    if ((IPv6 == GetType()) && hasPort)
+    {
+        if (hasPrefixMask)
+        {
+            snprintf(buffer,
+                     buflen,
+                     "[%s/%u]:%u",
+                     hostBuffer,
+                     GetPrefixMaskLength(),
+                     GetPort());
+        }
+        else
+        {
+            snprintf(buffer,
+                     buflen,
+                     "[%s]:%u",
+                     hostBuffer,
+                     GetPort());
+        }
+    }
+    else if (hasPrefixMask && hasPort)
+    {
+        snprintf(buffer,
+                 buflen,
+                 "%s/%u:%u",
+                 hostBuffer,
+                 GetPrefixMaskLength(),
+                 GetPort());
+    }
+    else if (hasPrefixMask)
+    {
+        snprintf(buffer,
+                 buflen,
+                 "%s/%u",
+                 hostBuffer,
+                 GetPrefixMaskLength());
+    }
+    else if (hasPort)
+    {
+        snprintf(buffer,
+                 buflen,
+                 "%s:%u",
+                 hostBuffer,
+                 GetPort());
+    }
+    else
+    {
+        snprintf(buffer, buflen, "%s", hostBuffer);
+    }
+
+    buffer[buflen - 1] = '\0';
+
+    if (useAltBuffer)
+    {
+        altBufferOffset +=
+            static_cast<unsigned int>(strlen(buffer)) + 1;
+    }
+
+    return buffer;
+}  // end ProtoAddress::GetPrintString()
+
+
 
 void ProtoAddress::PortSet(UINT16 thePort) {SetPort(thePort);}
 
@@ -468,6 +657,23 @@ UINT16 ProtoAddress::GetPort() const
             return 0;  // port 0 is an invalid port
     }
 }  // end ProtoAddress::Port()
+
+bool
+ProtoAddress::SetPrefixMaskLength(UINT8 thePrefixMaskLength)
+{
+    if (!IsValid())
+    {
+        return false;
+    }
+    if (thePrefixMaskLength > (GetLength() << 3))
+    {
+        return false;
+    }
+    prefix_mask_length = thePrefixMaskLength;
+
+    return true;
+}
+
 /**
 *
 * @brief Resets the address to zero or high values.
@@ -508,6 +714,7 @@ void ProtoAddress::Reset(ProtoAddress::Type theType, bool zero)
             break;
     }
     SetPort(0);
+    ClearPrefixMaskLength();
 }  // end ProtoAddress::Reset();
 
 /**
@@ -529,6 +736,7 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
             memcpy(&addr, &theAddr, sizeof(struct sockaddr_in));
             type = IPv4;
             length = 4;
+            ClearPrefixMaskLength();
             return true;
 #ifdef HAVE_IPV6
         case AF_INET6:
@@ -538,6 +746,7 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
             memcpy(&addr, &theAddr, sizeof(struct sockaddr_in6));
             type = IPv6;
             length = 16;
+            ClearPrefixMaskLength();
             return true;
 #endif // HAVE_IPV6
 #ifdef HAVE_IFDL
@@ -547,17 +756,18 @@ bool ProtoAddress::SetSockAddr(const struct sockaddr& theAddr)
             struct sockaddr_dl* sdl = (struct sockaddr_dl*)((void*)&theAddr);
             if (IFT_ETHER != sdl->sdl_type)
             {
-                PLOG(PL_WARN, "ProtoNet::SetSockAddr() error: non-Ethertype link address!\n");
+                PLOG(PL_WARN, "ProtoAddress::SetSockAddr() error: non-Ethertype link address!\n");
                 return false;
             }
-            SetRawHostAddress(ETH, sdl->sdl_data + sdl->sdl_nlen, sdl->sdl_alen);        
-            return true;
+            return SetRawHostAddress(ETH, sdl->sdl_data + sdl->sdl_nlen, sdl->sdl_alen);   
+            
         }
 #endif  // HAVE_IFDL
         default:
             PLOG(PL_ERROR, "ProtoAddress::SetSockAddr() warning: Invalid address type: %d\n", theAddr.sa_family);
             type = INVALID;
             length = 0;
+            ClearPrefixMaskLength();
             return false;
     }
 }  // end ProtoAddress:SetAddress()
@@ -624,6 +834,7 @@ bool ProtoAddress::SetRawHostAddress(ProtoAddress::Type theType,
             return false;
     }
     SetPort(thePort);
+    ClearPrefixMaskLength();
     return true;
 }  // end ProtoAddress::SetRawHostAddress()
         
@@ -656,11 +867,13 @@ char* ProtoAddress::AccessRawHostAddress() const
 unsigned int ProtoAddress::SetCommonHead(const ProtoAddress& theAddr)
 {
     unsigned int commonBytes = 0;
-    if((GetType() != theAddr.GetType()) && (!IsValid()))
+    if ((!IsValid()) ||
+        (!theAddr.IsValid()) ||
+        (GetType() != theAddr.GetType()))
     {
-        Reset(GetType());
         return commonBytes;
     }
+    
     const char *myRawHost = GetRawHostAddress();
     const char *theirRawHost = theAddr.GetRawHostAddress();
     for(commonBytes = 1 ; commonBytes <= GetLength() ; commonBytes++)
@@ -678,11 +891,13 @@ unsigned int ProtoAddress::SetCommonHead(const ProtoAddress& theAddr)
 unsigned int ProtoAddress::SetCommonTail(const ProtoAddress& theAddr)
 {
     unsigned int commonBytes = 0;
-    if((GetType() != theAddr.GetType()) && (!IsValid()))
+    if ((!IsValid()) ||
+        (!theAddr.IsValid()) ||
+        (GetType() != theAddr.GetType()))
     {
-        Reset(GetType());
         return commonBytes;
     }
+    
     const char *myRawHost = GetRawHostAddress();
     const char *theirRawHost = theAddr.GetRawHostAddress();
     for(commonBytes = 1 ; commonBytes <= GetLength() ; commonBytes++)
@@ -702,19 +917,19 @@ bool ProtoAddress::PrefixIsEqual(const ProtoAddress& theAddr, UINT8 prefixSize) 
 {
     // Compare address "type" and "prefixLen" bits of address
     if (!IsValid() && !theAddr.IsValid()) return true;
-    if (type == theAddr.type)
+    if ((type != theAddr.type) || (prefixSize > (GetLength() * 8))){
+        return false;
+    }
+    const char* ptr1 = GetRawHostAddress();
+    const char* ptr2 = theAddr.GetRawHostAddress();
+    size_t nbyte = prefixSize >> 3;
+    if ((0 == nbyte) || (0 == memcmp(ptr1, ptr2, nbyte)))
     {
-        const char* ptr1 = GetRawHostAddress();
-        const char* ptr2 = theAddr.GetRawHostAddress();
-        size_t nbyte = prefixSize >> 3;
-        if ((0 == nbyte) || (0 == memcmp(ptr1, ptr2, nbyte)))
-        {
-            UINT8 nbit = prefixSize & 0x07;
-            if (0 == nbit) return true;
-            char mask = 0xff << (8 - nbit);
-            if ((mask & ptr1[nbyte]) == (mask & ptr2[nbyte]))
-                return true;
-        }
+        UINT8 nbit = prefixSize & 0x07;
+        if (0 == nbit) return true;
+        char mask = 0xff << (8 - nbit);
+        if ((mask & ptr1[nbyte]) == (mask & ptr2[nbyte]))
+            return true;
     }
     return false;
 }  // end ProtoAddress::PrefixIsEqual()
@@ -795,8 +1010,9 @@ void ProtoAddress::GeneratePrefixMask(ProtoAddress::Type type, UINT8 prefixLen)
             return ;
     }
     Reset(type, true);  // init to zero
-    if (prefixLen > GetLength())
-        prefixLen = GetLength();
+    const UINT8 maximumPrefixLength = GetLength() * 8;
+    if (prefixLen > maximumPrefixLength)
+        prefixLen = maximumPrefixLength;
     while (0 != prefixLen)
     {
         if (prefixLen < 8)
@@ -1066,6 +1282,7 @@ void ProtoAddress::SetEndIdentifier(UINT32 endIdentifier)
             SetRawHostAddress(IPv4, (char*)&endIdentifier, 4);
             break;
     }
+    ClearPrefixMaskLength();
 }  // end ProtoAddress::SetEndIdentifier()
 
 UINT32 ProtoAddress::GetEndIdentifier() const
@@ -1187,22 +1404,82 @@ int ProtoAddress::CompareHostAddr(const ProtoAddress& theAddr) const
 
 bool ProtoAddress::ResolveEthFromString(const char* text)
 {
+    char hostText[256];
+    UINT8 prefixMaskLength;
+    bool hasPrefixMask;
+
+    if (!SplitNetworkAddressString(text,
+                                   hostText,
+                                   sizeof(hostText),
+                                   prefixMaskLength,
+                                   hasPrefixMask))
+    {
+        return false;
+    }
+
+    const char* ethText = hasPrefixMask ? hostText : text;
+
     unsigned int a[6];
     char b[6];
-    if (6 != sscanf(text, "%x:%x:%x:%x:%x:%x", &a[0], &a[1], &a[2], &a[3], &a[4], &a[5]))
+    if (6 != sscanf(ethText, "%x:%x:%x:%x:%x:%x", &a[0], &a[1], &a[2], &a[3], &a[4], &a[5]))
     {
-        PLOG(PL_DEBUG, "ProtoAddress: ResolveEthFromString(%s): Invalid ETH address type!\n", text);
+        PLOG(PL_DEBUG, "ProtoAddress: ResolveEthFromString(%s): Invalid ETH address type!\n", ethText);
         return false;
     }
     for (int i=0;i<=5;i++)
-        b[i] = (char) a[i];
-    SetRawHostAddress(ETH, b, 6); 
+    {
+        if (a[i] > 0xff)
+        {
+            PLOG(PL_DEBUG, "ProtoAddress::ResolveEthFromString(%s): invalid Ethernet octet\n", ethText);
+            return false;
+        }
+        b[i] = static_cast<char>(a[i]);
+    }
+    if(!SetRawHostAddress(ETH, b, 6))
+    {
+        return false;
+    }
+    if (hasPrefixMask &&
+        !SetPrefixMaskLength(prefixMaskLength))
+    {
+        Invalidate();
+        return false;
+    }
     return true;
 }  // end ProtoAddress::ResolveEthFromString()
 
 // non-DNS (i.e numeric address notation)
 bool ProtoAddress::ConvertFromString(const char* text)
 {
+    char hostText[256];
+    UINT8 prefixMaskLength;
+    bool hasPrefixMask;
+
+    if (!SplitNetworkAddressString(text,
+                                   hostText,
+                                   sizeof(hostText),
+                                   prefixMaskLength,
+                                   hasPrefixMask))
+    {
+        return false;
+    }
+    if (hasPrefixMask)
+    {
+        // hostText contains no slash, so this enters the normal
+        // existing host-only parse path below.
+        if (!ConvertFromString(hostText))
+        {
+            return false;
+        }
+
+        if (!SetPrefixMaskLength(prefixMaskLength))
+        {
+            Invalidate();
+            return false;
+        }
+
+        return true;
+    }
 #ifdef SIMULATE
     return ResolveFromString(text);
 #else
@@ -1212,12 +1489,12 @@ bool ProtoAddress::ConvertFromString(const char* text)
     // Startup WinSock for name lookup
     if (!Win32Startup())
     {
-        PLOG(PL_ERROR, "ProtoAddress: GetHostString(): Error initializing WinSock!\n");
+        PLOG(PL_ERROR, "ProtoAddress: ConvertFromString(): Error initializing WinSock!\n");
         return NULL;
     }
 	struct sockaddr_in sa = (struct sockaddr_in&)addr;	
 	sa.sin_family = AF_INET;
-	int addrSize = sizeof(struct sockaddr_storage);
+	int addrSize = sizeof(sa);
 
 #ifdef _UNICODE
 	WCHAR theString[256];
@@ -1228,42 +1505,54 @@ bool ProtoAddress::ConvertFromString(const char* text)
 
 	if (0 == WSAStringToAddress((LPTSTR)theString, AF_INET, NULL,(LPSOCKADDR)&sa,&addrSize))
 	{
-		addr = (struct sockaddr_storage&)sa;
-		length = 4;
-		Win32Cleanup();
-		return true;
+		bool result = SetSockAddr((struct sockaddr&) sa);
+        Win32Cleanup();
+		return result;
 	}
 
 	// See if it's an ipv6 address
 	struct sockaddr_in6 sa6 = (struct sockaddr_in6&)addr;
     sa6.sin6_family = AF_INET6;
-	addrSize = sizeof(struct sockaddr_storage);
+	addrSize = sizeof(sa6);
 
 	if (0 == WSAStringToAddress((LPTSTR)theString, AF_INET6, NULL,(LPSOCKADDR)&sa6,&addrSize))
 	{
-		addr = (struct sockaddr_storage&)sa6;
-		type = IPv6;
-		length = 16;
-		Win32Cleanup();
-		return true;
+		bool result = SetSockAddr((struct sockaddr&)sa6);
+        Win32Cleanup();
+		return result;
 	}
 	Win32Cleanup();
 	// Finally, see if it's an Ethertype addr string
     return ResolveEthFromString(text);
 #else
+    UINT16 thePort = GetPort();
     // First try for IPv4 addr
     struct sockaddr_in sa;
+    memset(&sa,0,sizeof(sa));
+
     if (1 == inet_pton(AF_INET, text, &sa.sin_addr))
     {
         sa.sin_family = AF_INET;
-        return SetSockAddr((struct sockaddr&)sa);
+        if(!SetSockAddr((struct sockaddr&)sa))
+        {
+            return false;
+        }
+        SetPort(thePort);
+        return true;
     }  
     // Next try for an IPv6 addr 
     struct sockaddr_in6 sa6; 
+    memset(&sa6, 0, sizeof(sa6));
+
     if (1 == inet_pton(AF_INET6, text, &sa6.sin6_addr))
     {
         sa6.sin6_family = AF_INET6;
-        return SetSockAddr((struct sockaddr&)sa6);
+        if(!SetSockAddr((struct sockaddr&)sa6))
+        {
+            return false;
+        }
+        SetPort(thePort);
+        return true;
     }  
     // Finally, see if it's an Ethertype addr string
     return ResolveEthFromString(text);
@@ -1274,6 +1563,36 @@ bool ProtoAddress::ConvertFromString(const char* text)
 // (TBD) Provide a mechanism for async lookup with optional user interaction
 bool ProtoAddress::ResolveFromString(const char* text)
 {
+    char hostText[256];
+    UINT8 prefixMaskLength;
+    bool hasPrefixMask;
+
+    if (!SplitNetworkAddressString(text,
+                                   hostText,
+                                   sizeof(hostText),
+                                   prefixMaskLength,
+                                   hasPrefixMask))
+    {
+        return false;
+    }
+    if (hasPrefixMask)
+    {
+        // This preserves DNS resolution for names such as:
+        // router-a.example.mil/24
+        if (!ResolveFromString(hostText))
+        {
+            return false;
+        }
+
+        if (!SetPrefixMaskLength(prefixMaskLength))
+        {
+            Invalidate();
+            return false;
+        }
+
+        return true;
+    }
+
     UINT16 thePort = GetPort();
 #ifdef SIMULATE
     // Assume no DNS for simulations
@@ -1288,6 +1607,7 @@ bool ProtoAddress::ResolveFromString(const char* text)
         type = SIM;
         length = sizeof(SIMADDR);
         SetPort(thePort);  // restore port number
+        ClearPrefixMaskLength();
         return true;
     }
     else

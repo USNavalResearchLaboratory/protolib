@@ -31,7 +31,7 @@ TARGETS = libprotokit.a libprotokit
 allExamples: arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample \
 jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample pcapReplay \
 protoCapExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample \
-threadExample timerTest ting treeTest vifExample vifLan protoExample eventExample tokenatorExample unitTests
+threadExample timerTest ting treeTest vifExample vifLan protoExample eventExample tokenatorExample unitTests addressTest
 
 KIT_SRC = $(COMMON)/protoAddress.cpp  $(COMMON)/protoApp.cpp $(COMMON)/protoBase64.cpp \
           $(COMMON)/protoBitmask.cpp $(COMMON)/protoCap.cpp $(COMMON)/protoChannel.cpp \
@@ -95,6 +95,15 @@ unitTests:    $(UNITTESTS_OBJ) libprotokit.a
 	mkdir -p ../bin
 	cp $@ ../bin/$@
 
+# Functional tests for ProtoAddress and ProtoAddressList
+
+ADDRESS_TEST_SRC = $(EXAMPLES)/addressTest.cpp
+ADDRESS_TEST_OBJ = $(ADDRESS_TEST_SRC:.cpp=.o)
+
+addressTest: $(ADDRESS_TEST_OBJ) libprotokit.a
+	$(CC) $(CFLAGS) -o $@ $(ADDRESS_TEST_OBJ) $(LDFLAGS) $(LIBS) libprotokit.a
+	mkdir -p ../bin
+	cp $@ ../bin/$@
 
 # Simple example command-line tcp client or server application
 
@@ -400,7 +409,7 @@ stree:    $(STREE_OBJ) libprotokit.a
 clean:	
 	rm -f *.o $(COMMON)/*.o $(MANET)/*.o $(NS)/*.o ../src/*/*.o ../examples/*.o \
         *.a *.$(SYSTEM_SOEXT) ../lib/*.a ../lib/* ../bin/* $(SYSTEM_SOEXT) \
-        arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample protoCapExample protoApp protoExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample threadExample timerTest ting vifExample vifLan gr
+        arposer averageExample base64Example detourExample graphExample graphRider graphXMLExample jsonExample lfsrExample msg2MsgExample msgExample netExample pcmd pipe2SockExample pipeExample protoCapExample protoApp protoExample protoFileExample queueExample riposer serialExample simpleTcpExample sock2PipeExample threadExample timerTest ting vifExample vifLan gr addressTest
 	rm -rf ../build/* ../protokit.egg-info
     
 

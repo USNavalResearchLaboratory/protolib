@@ -88,6 +88,7 @@ class ProtoAddress
             ETH,
             SIM
         };
+        static const UINT8 PREFIX_MASK_UNSET = 0xff;
         // Construction/initialization
         ProtoAddress();
         ProtoAddress(const ProtoAddress& theAddr);
@@ -99,6 +100,7 @@ class ProtoAddress
         {
             type = INVALID;
             length = 0;
+            prefix_mask_length = PREFIX_MASK_UNSET;
         }
         void Reset(ProtoAddress::Type theType, bool zero = true);
         
@@ -136,6 +138,8 @@ class ProtoAddress
         
         const char* GetHostString(char*         buffer = NULL, 
                                   unsigned int  buflen = 0) const;
+        const char* GetPrintString(char*        buffer = NULL,
+                                   unsigned int bufflen = 0) const;
         
         // This infers the ProtoAddress::Type from length (in bytes)
         static ProtoAddress::Type GetType(UINT8 addrLength);
@@ -158,6 +162,14 @@ class ProtoAddress
         void SetPort(UINT16 thePort);
         void PortSet(UINT16 thePort);
         
+        bool HasPrefixMaskLength() const
+            {return (PREFIX_MASK_UNSET!= prefix_mask_length);}
+        bool SetPrefixMaskLength(UINT8 maskLength);
+        UINT8 GetPrefixMaskLength() const
+            {return prefix_mask_length;}
+        void ClearPrefixMaskLength()
+            {prefix_mask_length = PREFIX_MASK_UNSET;}
+
         // Address comparison
         bool IsEqual(const ProtoAddress& theAddr) const
             {return (HostIsEqual(theAddr) && (GetPort() == theAddr.GetPort()));}
@@ -247,7 +259,8 @@ class ProtoAddress
         char* AccessRawHostAddress() const;
             
         Type                    type; 
-        UINT8                   length;        
+        UINT8                   length;
+        UINT8                   prefix_mask_length;
 #ifdef SIMULATE
         struct sockaddr_sim	    addr;   // for OPNET and NS2 builds
 #else         
@@ -258,7 +271,6 @@ class ProtoAddress
 #endif // if/else _WIN32_WCE               
 #endif // if/else SIMULATE
 };  // end class ProtoAddress
-
 
 /**
  * @class ProtoAddressList
